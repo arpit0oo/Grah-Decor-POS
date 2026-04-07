@@ -632,6 +632,45 @@ body {
 /* ── Hidden Utility ────────────────────────────────────────── */
 .hidden { display: none !important; }
 
+/* ── Bulk Actions Bar ──────────────────────────────────────── */
+.bulk-action-bar {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-sidebar);
+    color: #fff;
+    padding: 0.75rem 1.5rem;
+    border-radius: 50px;
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+    z-index: 1000;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.bulk-action-bar.hidden {
+    opacity: 0 !important;
+    transform: translate(-50%, 200%);
+    pointer-events: none;
+    display: flex !important; /* Overrides .hidden utility so it slides down instead of instantly disappearing */
+}
+
+.bulk-select {
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 6px;
+    padding: 0.4rem 0.75rem;
+    outline: none;
+    font-size: 0.85rem;
+}
+.bulk-select option {
+    background: var(--bg-sidebar);
+    color: #fff;
+}
+
 /* ── Responsive ────────────────────────────────────────────── */
 @media (max-width: 768px) {
     .sidebar { transform: translateX(-100%); }
