@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Purchase Book — Grah Decor POS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Purchase Book</h1>
+    <button class="btn btn-primary" onclick="toggleForm('purchaseForm')">+ Log Purchase</button>
+</div>
+
+<!-- Add Purchase Form -->
+<div class="form-card hidden" id="purchaseForm">
+    <h3>Log New Purchase</h3>
+    <form method="POST" action="{{ url_for('purchase.purchase_add') }}">
+        <div class="form-grid form-grid-4">
+            <div class="form-group">
+                <label for="p-vendor">Vendor Name *</label>
+                <input type="text" id="p-vendor" name="vendor_name" required placeholder="Supplier name">
+            </div>
+            <div class="form-group">
+                <label for="p-item">Item / Material *</label>
+                <input type="text" id="p-item" name="item" required placeholder="e.g. MDF Sheet">
+            </div>
+            <div class="form-group">
+                <label for="p-qty">Quantity *</label>
+                <input type="number" id="p-qty" name="quantity" step="0.01" required min="0.01" placeholder="0"
+                       oninput="calcTotal()">
+            </div>
+            <div class="form-group">
+                <label for="p-cost">Unit Cost ₹ *</label>
+                <input type="number" id="p-cost" name="unit_cost" step="0.01" required min="0.01" placeholder="0"
+                       oninput="calcTotal()">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="settlement-display">
+                Total Cost: <strong id="purchase-total-display">₹ 0.00</strong>
+            </div>
+            <div class="form-group" style="flex:1">
+                <label for="p-notes">Notes</label>
+                <input type="text" id="p-notes" name="notes" placeholder="Optional notes">
+            </div>
+        </div>
+        <p class="text-muted" style="margin-top:0.5rem">
+            💡 Submitting will automatically add to <strong>Raw Inventory</strong> and log a <strong>Cash Outflow</strong>.
+        </p>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Purchase</button>
+            <button type="button" class="btn btn-ghost" onclick="toggleForm('purchaseForm')">Cancel</button>
+        </div>
+    </form>
+</div>
+
+<!-- Filters -->
+<div class="filter-bar">
+    <form method="GET" action="{{ url_for('purchase.purchase_list') }}" class="filter-form">
+        <input type="date" name="date_from" value="{{ date_from }}" placeholder="From">
+        <input type="date" name="date_to" value="{{ date_to }}" placeholder="To">
+        <button type="submit" class="btn btn-sm">Filter</button>
+        <a href="{{ url_for('purchase.purchase_list') }}" class="btn btn-sm btn-ghost">Clear</a>
+    </form>
+</div>
+
+<!-- Summary -->
+<div class="summary-row">
+    <div class="summary-item">
+        <span class="summary-label">Total Purchases</span>
+        <span class="summary-value">{{ purchases|length }}</span>
+    </div>
+    <div class="summary-item summary-danger">
+        <span class="summary-label">Total Spent</span>
+        <span class="summary-value">₹ {{ "%.2f"|format(total_spent) }}</span>
+    </div>
+</div>
+
+<!-- Purchases Table -->
+<div class="table-wrapper">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Vendor</th>
+                <th>Item</th>
+                <th>Qty</th>
+                <th>Unit Cost ₹</th>
+                <th>Total Cost ₹</th>
+                <th>Notes</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in purchases %}
+            <tr>
+                <td>{{ p.date.strftime('%d/%m/%Y') if p.date and p.date.strftime else '-' }}</td>
+                <td>{{ p.vendor_name }}</td>
+                <td>{{ p.item }}</td>
+                <td class="text-right">{{ p.quantity }}</td>
+                <td class="text-right">{{ "%.2f"|format(p.unit_cost) }}</td>
+                <td class="text-right text-bold">{{ "%.2f"|format(p.total_cost) }}</td>
+                <td class="text-muted">{{ p.notes or '-' }}</td>
+                <td class="actions-cell">
+                    <form method="POST" action="{{ url_for('purchase.purchase_delete', doc_id=p.id) }}"
+                          onsubmit="return confirm('Delete this purchase? This will reverse inventory and cashbook entries.')">
+                        <button type="submit" class="btn btn-xs btn-danger">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+            {% if not purchases %}
+            <tr><td colspan="8" class="empty-state">No purchases recorded. Click "+ Log Purchase" to add one.</td></tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function calcTotal() {
+    const qty = parseFloat(document.getElementById('p-qty').value || 0);
+    const cost = parseFloat(document.getElementById('p-cost').value || 0);
+    document.getElementById('purchase-total-display').textContent = '₹ ' + (qty * cost).toFixed(2);
+}
+</script>
+{% endblock %}

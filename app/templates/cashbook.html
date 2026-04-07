@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Cash Book — Grah Decor POS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Cash Book</h1>
+</div>
+
+<!-- Today's Summary Cards -->
+<div class="dashboard-cards">
+    <div class="dash-card card-inflow">
+        <div class="dash-card-label">Today's Inflow</div>
+        <div class="dash-card-value">₹ {{ "%.2f"|format(today_inflow) }}</div>
+        <div class="dash-card-icon">↗</div>
+    </div>
+    <div class="dash-card card-outflow">
+        <div class="dash-card-label">Today's Outflow</div>
+        <div class="dash-card-value">₹ {{ "%.2f"|format(today_outflow) }}</div>
+        <div class="dash-card-icon">↘</div>
+    </div>
+    <div class="dash-card card-net">
+        <div class="dash-card-label">Today's Net</div>
+        <div class="dash-card-value">₹ {{ "%.2f"|format(today_net) }}</div>
+        <div class="dash-card-icon">⇄</div>
+    </div>
+    <div class="dash-card card-balance">
+        <div class="dash-card-label">Running Balance</div>
+        <div class="dash-card-value">₹ {{ "%.2f"|format(balance) }}</div>
+        <div class="dash-card-icon">💰</div>
+    </div>
+</div>
+
+<!-- Date Filter -->
+<div class="filter-bar">
+    <form method="GET" action="{{ url_for('cashbook.dashboard') }}" class="filter-form">
+        <input type="date" name="date_from" value="{{ date_from }}" placeholder="From">
+        <input type="date" name="date_to" value="{{ date_to }}" placeholder="To">
+        <button type="submit" class="btn btn-sm">Filter</button>
+        <a href="{{ url_for('cashbook.dashboard') }}" class="btn btn-sm btn-ghost">Clear</a>
+    </form>
+</div>
+
+<!-- Transaction Log -->
+<div class="table-wrapper">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Category</th>
+                <th>Description</th>
+                <th>Amount ₹</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for t in transactions %}
+            <tr>
+                <td>{{ t.date.strftime('%d/%m/%Y %H:%M') if t.date and t.date.strftime else '-' }}</td>
+                <td>
+                    {% if t.type == 'inflow' %}
+                    <span class="badge badge-delivered">↗ Inflow</span>
+                    {% else %}
+                    <span class="badge badge-rto">↘ Outflow</span>
+                    {% endif %}
+                </td>
+                <td>{{ t.category }}</td>
+                <td>{{ t.description }}</td>
+                <td class="text-right text-bold {% if t.type == 'inflow' %}text-green{% else %}text-red{% endif %}">
+                    {% if t.type == 'inflow' %}+{% else %}-{% endif %}{{ "%.2f"|format(t.amount) }}
+                </td>
+            </tr>
+            {% endfor %}
+            {% if not transactions %}
+            <tr><td colspan="5" class="empty-state">No transactions yet. They appear automatically when you log orders or purchases.</td></tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
