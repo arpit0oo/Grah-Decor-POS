@@ -245,10 +245,38 @@ body {
     margin-bottom: 0.75rem;
 }
 
-.form-grid-2 { grid-template-columns: repeat(2, 1fr); }
-.form-grid-3 { grid-template-columns: repeat(3, 1fr); }
 .form-grid-4 { grid-template-columns: repeat(4, 1fr); }
 .form-grid-5 { grid-template-columns: repeat(5, 1fr); }
+.form-grid-6 { grid-template-columns: repeat(6, 1fr); }
+
+.form-section {
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.form-section:last-of-type {
+    border-bottom: none;
+}
+
+.form-section-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--primary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.form-section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+    opacity: 0.5;
+}
 
 .form-group {
     display: flex;
@@ -298,10 +326,24 @@ body {
 }
 
 .settlement-display {
-    font-size: 1rem;
+    background: var(--primary-light);
+    border: 1px solid var(--primary);
+    padding: 0.75rem 1.25rem;
+    border-radius: var(--radius);
     color: var(--primary);
-    white-space: nowrap;
-    min-width: 200px;
+    font-weight: 700;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 250px;
+}
+
+.settlement-display span {
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    opacity: 0.8;
 }
 
 /* ── Inline Edit ───────────────────────────────────────────── */
@@ -644,10 +686,48 @@ body {
     border-radius: 50px;
     display: flex;
     align-items: center;
-    gap: 1.5rem;
+    gap: 1rem;
     box-shadow: 0 10px 25px rgba(0,0,0,0.25);
     z-index: 1000;
     transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.bulk-content {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    overflow: hidden;
+    transition: max-width 0.3s ease, opacity 0.2s ease;
+    max-width: 600px;
+}
+
+.bulk-action-bar.minimized .bulk-content {
+    max-width: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.bulk-action-bar.minimized {
+    padding: 0.5rem;
+}
+
+.btn-minimize {
+    background: rgba(255,255,255,0.1);
+    border: none;
+    color: #fff;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1.2rem;
+    transition: background 0.2s;
+}
+
+.btn-minimize:hover {
+    background: rgba(255,255,255,0.2);
 }
 
 .bulk-action-bar.hidden {

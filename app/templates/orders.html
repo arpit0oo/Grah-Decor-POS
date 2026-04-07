@@ -28,98 +28,125 @@
 <div class="form-card hidden" id="orderForm">
     <h3>Log New Order</h3>
     <form method="POST" action="{{ url_for('orders.order_add') }}">
-        <div class="form-grid form-grid-4">
-            <div class="form-group">
-                <label for="add-date">Date</label>
-                <input type="date" id="add-date" name="date" value="{{ today }}" required>
-            </div>
-            <div class="form-group">
-                <label for="add-order-id">Order ID</label>
-                <input type="text" id="add-order-id" name="order_id" placeholder="Platform order ID">
-            </div>
-            <div class="form-group">
-                <label for="add-customer">Customer *</label>
-                <input type="text" id="add-customer" name="customer" required placeholder="Customer name">
-            </div>
-            <div class="form-group">
-                <label for="add-number">Phone / Number</label>
-                <input type="text" id="add-number" name="number" placeholder="Contact number">
-            </div>
-        </div>
-        <div class="form-grid form-grid-4">
-            <div class="form-group">
-                <label for="add-product">Product *</label>
-                <select id="add-product-select" name="product" required onchange="handleDropdownOther(this, 'add-product-custom')">
-                    <option value="" disabled selected>Select Product</option>
-                    {% for p in products %}
-                    <option value="{{ p }}">{{ p }}</option>
-                    {% endfor %}
-                    <option value="__other__">Other (Custom)...</option>
-                </select>
-                <input type="text" id="add-product-custom" class="hidden" placeholder="Enter custom product name" style="margin-top:0.5rem">
-            </div>
-            <div class="form-group">
-                <label for="add-color">Color</label>
-                <select id="add-color-select" name="color" onchange="handleDropdownOther(this, 'add-color-custom')">
-                    <option value="">No Color</option>
-                    {% for c in colors %}
-                    <option value="{{ c }}">{{ c }}</option>
-                    {% endfor %}
-                    <option value="__other__">Other (Custom)...</option>
-                </select>
-                <input type="text" id="add-color-custom" class="hidden" placeholder="Enter custom color" style="margin-top:0.5rem">
-            </div>
-            <div class="form-group">
-                <label for="add-platform">Platform</label>
-                <select id="add-platform" name="platform">
-                    {% for p in platforms %}
-                    <option value="{{ p }}">{{ p }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="add-status">Status</label>
-                <select id="add-status" name="status">
-                    {% for s in statuses %}
-                    <option value="{{ s }}">{{ s }}</option>
-                    {% endfor %}
-                </select>
+        <!-- Section 1: Order Identity -->
+        <div class="form-section">
+            <div class="form-section-title">Order Identity</div>
+            <div class="form-grid form-grid-3">
+                <div class="form-group">
+                    <label for="add-date">Date</label>
+                    <input type="date" id="add-date" name="date" value="{{ today }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="add-order-id">Order ID</label>
+                    <input type="text" id="add-order-id" name="order_id" placeholder="Platform order ID">
+                </div>
+                <div class="form-group">
+                    <label for="add-platform">Platform</label>
+                    <select id="add-platform" name="platform">
+                        {% for p in platforms %}
+                        <option value="{{ p }}">{{ p }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
         </div>
-        <div class="form-grid form-grid-5">
-            <div class="form-group">
-                <label for="add-selling-price">Selling Price ₹</label>
-                <input type="number" id="add-selling-price" name="selling_price" step="0.01" value="0" oninput="calcSettlement('add')">
-            </div>
-            <div class="form-group">
-                <label for="add-shipping">Shipping ₹</label>
-                <input type="number" id="add-shipping" name="shipping" step="0.01" value="0" oninput="calcSettlement('add')">
-            </div>
-            <div class="form-group">
-                <label for="add-refund">Refund ₹</label>
-                <input type="number" id="add-refund" name="refund" step="0.01" value="0" oninput="calcSettlement('add')">
-            </div>
-            <div class="form-group">
-                <label for="add-tax">Tax ₹</label>
-                <input type="number" id="add-tax" name="tax" step="0.01" value="0" oninput="calcSettlement('add')">
-            </div>
-            <div class="form-group">
-                <label for="add-marketplace-fee">Marketplace Fee ₹</label>
-                <input type="number" id="add-marketplace-fee" name="marketplace_fee" step="0.01" value="0" oninput="calcSettlement('add')">
+
+        <!-- Section 2: Customer & Fulfillment -->
+        <div class="form-section">
+            <div class="form-section-title">Customer & Fulfillment</div>
+            <div class="form-grid form-grid-4">
+                <div class="form-group">
+                    <label for="add-customer">Customer Name *</label>
+                    <input type="text" id="add-customer" name="customer" required placeholder="Customer name">
+                </div>
+                <div class="form-group">
+                    <label for="add-number">Phone / Number</label>
+                    <input type="text" id="add-number" name="number" placeholder="Contact number">
+                </div>
+                <div class="form-group">
+                    <label for="add-status">Order Status</label>
+                    <select id="add-status" name="status">
+                        {% for s in statuses %}
+                        <option value="{{ s }}">{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="add-reviews">Review Status</label>
+                    <select id="add-reviews" name="reviews">
+                        {% for r in reviews %}
+                        <option value="{{ r }}">{{ r }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
         </div>
-        <div class="form-row">
-            <div class="settlement-display">
-                Bank Settlement: <strong id="add-settlement-display">₹ 0.00</strong>
-            </div>
-            <div class="form-group" style="flex:1">
-                <label for="add-reviews">Reviews / Notes</label>
-                <input type="text" id="add-reviews" name="reviews" placeholder="Optional notes" list="reviewsList" autocomplete="off">
+
+        <!-- Section 3: Product Choice -->
+        <div class="form-section">
+            <div class="form-section-title">Product Details</div>
+            <div class="form-grid form-grid-2">
+                <div class="form-group">
+                    <label for="add-product">Product *</label>
+                    <select id="add-product-select" name="product" required onchange="handleDropdownOther(this, 'add-product-custom')">
+                        <option value="" disabled selected>Select Product</option>
+                        {% for p in products %}
+                        <option value="{{ p }}">{{ p }}</option>
+                        {% endfor %}
+                        <option value="__other__">Other (Custom)...</option>
+                    </select>
+                    <input type="text" id="add-product-custom" class="hidden" placeholder="Enter custom product name" style="margin-top:0.5rem">
+                </div>
+                <div class="form-group">
+                    <label for="add-color">Color</label>
+                    <select id="add-color-select" name="color" onchange="handleDropdownOther(this, 'add-color-custom')">
+                        <option value="">No Color</option>
+                        {% for c in colors %}
+                        <option value="{{ c }}">{{ c }}</option>
+                        {% endfor %}
+                        <option value="__other__">Other (Custom)...</option>
+                    </select>
+                    <input type="text" id="add-color-custom" class="hidden" placeholder="Enter custom color" style="margin-top:0.5rem">
+                </div>
             </div>
         </div>
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Save Order</button>
-            <button type="button" class="btn btn-ghost" onclick="toggleForm('orderForm')">Cancel</button>
+
+        <!-- Section 4: Financials -->
+        <div class="form-section">
+            <div class="form-section-title">Financial Breakdown</div>
+            <div class="form-grid form-grid-5">
+                <div class="form-group">
+                    <label for="add-selling-price">Selling Price ₹</label>
+                    <input type="number" id="add-selling-price" name="selling_price" step="0.01" min="0" value="0" oninput="calcSettlement('add')">
+                </div>
+                <div class="form-group">
+                    <label for="add-shipping">Shipping ₹</label>
+                    <input type="number" id="add-shipping" name="shipping" step="0.01" min="0" value="0" oninput="calcSettlement('add')">
+                </div>
+                <div class="form-group">
+                    <label for="add-refund">Refund ₹</label>
+                    <input type="number" id="add-refund" name="refund" step="0.01" min="0" value="0" oninput="calcSettlement('add')">
+                </div>
+                <div class="form-group">
+                    <label for="add-tax">Tax ₹</label>
+                    <input type="number" id="add-tax" name="tax" step="0.01" min="0" value="0" oninput="calcSettlement('add')">
+                </div>
+                <div class="form-group">
+                    <label for="add-marketplace-fee">Mkt Fee ₹</label>
+                    <input type="number" id="add-marketplace-fee" name="marketplace_fee" step="0.01" min="0" value="0" oninput="calcSettlement('add')">
+                </div>
+            </div>
+        </div>
+
+        <div class="form-footer" style="display:flex; justify-content:space-between; align-items:center; margin-top:1.5rem; padding-top:1.5rem; border-top: 1px solid var(--border)">
+            <div class="settlement-display" id="add-settlement-card">
+                <span>Net Settlement</span>
+                <strong id="add-settlement-display">₹ 0.00</strong>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-ghost" onclick="toggleForm('orderForm')">Discard</button>
+                <button type="submit" class="btn btn-primary">Save Order</button>
+            </div>
         </div>
     </form>
 </div>
@@ -184,6 +211,7 @@
                 <th>Mkt Fee</th>
                 <th>Settlement ₹</th>
                 <th>Status</th>
+                <th>Review</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -207,6 +235,7 @@
                 <td>
                     <span class="badge badge-{{ order.status|lower|replace(' ', '-') }}">{{ order.status }}</span>
                 </td>
+                <td>{{ order.reviews or '-' }}</td>
                 <td class="actions-cell">
                     <button type="button" class="btn btn-xs btn-ghost" data-id="{{ order.id }}" data-order="{{ order|tojson|forceescape }}" onclick="openEditModalFromBtn(this)">Edit</button>
                     <form method="POST" action="{{ url_for('orders.orders_delete', doc_id=order.id) }}" style="display:inline"
@@ -217,7 +246,7 @@
             </tr>
             {% endfor %}
             {% if not orders %}
-            <tr><td colspan="14" class="empty-state">No orders found. Click "+ New Order" to add one.</td></tr>
+            <tr><td colspan="15" class="empty-state">No orders found. Click "+ New Order" to add one.</td></tr>
             {% endif %}
         </tbody>
     </table>
@@ -226,18 +255,23 @@
 
 <!-- Floating Bulk Actions Bar -->
 <div id="bulkActionBar" class="bulk-action-bar hidden">
-    <span id="bulkCount">0 orders selected</span>
-    <select id="bulkActionSelect" class="bulk-select">
-        <option value="" disabled selected>Choose action...</option>
-        <option value="status_Pending">Mark Pending</option>
-        <option value="status_Shipped">Mark Shipped</option>
-        <option value="status_Delivered">Mark Delivered</option>
-        <option value="status_RTO">Mark RTO</option>
-        <option value="status_Customer Return">Mark Return</option>
-        <option value="status_Exchange">Mark Exchange</option>
-        <option value="delete">Delete Selected</option>
-    </select>
-    <button type="button" class="btn btn-primary btn-sm" onclick="submitBulk()">Apply to Selected</button>
+    <div class="bulk-content" id="bulkContent">
+        <span id="bulkCount">0 orders selected</span>
+        <select id="bulkActionSelect" class="bulk-select">
+            <option value="" disabled selected>Choose action...</option>
+            <option value="status_Pending">Mark Pending</option>
+            <option value="status_Shipped">Mark Shipped</option>
+            <option value="status_Delivered">Mark Delivered</option>
+            <option value="status_RTO">Mark RTO</option>
+            <option value="status_Customer Return">Mark Return</option>
+            <option value="status_Exchange">Mark Exchange</option>
+            <option value="delete">Delete Selected</option>
+        </select>
+        <button type="button" class="btn btn-primary btn-sm" onclick="submitBulk()">Apply</button>
+    </div>
+    <button type="button" class="btn-minimize" onclick="toggleBulkMinimize()" id="bulkMinBtn">
+        <span id="minIcon">▾</span>
+    </button>
 </div>
 
 <!-- Edit Modal -->
@@ -248,98 +282,125 @@
             <button class="modal-close" onclick="closeModal('editModal')">×</button>
         </div>
         <form method="POST" id="editForm">
-            <div class="form-grid form-grid-4">
-                <div class="form-group">
-                    <label>Date</label>
-                    <input type="date" name="date" id="edit-date">
-                </div>
-                <div class="form-group">
-                    <label>Order ID</label>
-                    <input type="text" name="order_id" id="edit-order_id">
-                </div>
-                <div class="form-group">
-                    <label>Customer</label>
-                    <input type="text" name="customer" id="edit-customer">
-                </div>
-                <div class="form-group">
-                    <label>Phone</label>
-                    <input type="text" name="number" id="edit-number">
-                </div>
-            </div>
-            <div class="form-grid form-grid-4">
-                <div class="form-group">
-                    <label>Product</label>
-                    <select id="edit-product-select" name="product" onchange="handleDropdownOther(this, 'edit-product-custom')">
-                        <option value="">Select Product</option>
-                        {% for p in products %}
-                        <option value="{{ p }}">{{ p }}</option>
-                        {% endfor %}
-                        <option value="__other__">Other (Custom)...</option>
-                    </select>
-                    <input type="text" id="edit-product-custom" class="hidden" placeholder="Enter custom product" style="margin-top:0.5rem">
-                </div>
-                <div class="form-group">
-                    <label>Color</label>
-                    <select id="edit-color-select" name="color" onchange="handleDropdownOther(this, 'edit-color-custom')">
-                        <option value="">No Color</option>
-                        {% for c in colors %}
-                        <option value="{{ c }}">{{ c }}</option>
-                        {% endfor %}
-                        <option value="__other__">Other (Custom)...</option>
-                    </select>
-                    <input type="text" id="edit-color-custom" class="hidden" placeholder="Enter custom color" style="margin-top:0.5rem">
-                </div>
-                <div class="form-group">
-                    <label>Platform</label>
-                    <select name="platform" id="edit-platform">
-                        {% for p in platforms %}
-                        <option value="{{ p }}">{{ p }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Status</label>
-                    <select name="status" id="edit-status">
-                        {% for s in statuses %}
-                        <option value="{{ s }}">{{ s }}</option>
-                        {% endfor %}
-                    </select>
+            <!-- Section 1: Order Identity -->
+            <div class="form-section">
+                <div class="form-section-title">Order Identity</div>
+                <div class="form-grid form-grid-3">
+                    <div class="form-group">
+                        <label>Date</label>
+                        <input type="date" name="date" id="edit-date">
+                    </div>
+                    <div class="form-group">
+                        <label>Order ID</label>
+                        <input type="text" name="order_id" id="edit-order_id">
+                    </div>
+                    <div class="form-group">
+                        <label>Platform</label>
+                        <select name="platform" id="edit-platform">
+                            {% for p in platforms %}
+                            <option value="{{ p }}">{{ p }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                 </div>
             </div>
-            <div class="form-grid form-grid-5">
-                <div class="form-group">
-                    <label>Selling Price ₹</label>
-                    <input type="number" name="selling_price" id="edit-selling_price" step="0.01" oninput="calcSettlement('edit')">
-                </div>
-                <div class="form-group">
-                    <label>Shipping ₹</label>
-                    <input type="number" name="shipping" id="edit-shipping" step="0.01" oninput="calcSettlement('edit')">
-                </div>
-                <div class="form-group">
-                    <label>Refund ₹</label>
-                    <input type="number" name="refund" id="edit-refund" step="0.01" oninput="calcSettlement('edit')">
-                </div>
-                <div class="form-group">
-                    <label>Tax ₹</label>
-                    <input type="number" name="tax" id="edit-tax" step="0.01" oninput="calcSettlement('edit')">
-                </div>
-                <div class="form-group">
-                    <label>Marketplace Fee ₹</label>
-                    <input type="number" name="marketplace_fee" id="edit-marketplace_fee" step="0.01" oninput="calcSettlement('edit')">
+
+            <!-- Section 2: Customer & Fulfillment -->
+            <div class="form-section">
+                <div class="form-section-title">Customer & Fulfillment</div>
+                <div class="form-grid form-grid-4">
+                    <div class="form-group">
+                        <label>Customer Name</label>
+                        <input type="text" name="customer" id="edit-customer">
+                    </div>
+                    <div class="form-group">
+                        <label>Phone</label>
+                        <input type="text" name="number" id="edit-number">
+                    </div>
+                    <div class="form-group">
+                        <label>Order Status</label>
+                        <select name="status" id="edit-status">
+                            {% for s in statuses %}
+                            <option value="{{ s }}">{{ s }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Review Status</label>
+                        <select id="edit-reviews" name="reviews">
+                            <option value="">Select Review</option>
+                            {% for r in reviews %}
+                            <option value="{{ r }}">{{ r }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                 </div>
             </div>
-            <div class="form-row">
-                <div class="settlement-display">
-                    Bank Settlement: <strong id="edit-settlement-display">₹ 0.00</strong>
-                </div>
-                <div class="form-group" style="flex:1">
-                    <label>Reviews / Notes</label>
-                    <input type="text" name="reviews" id="edit-reviews" list="reviewsList" autocomplete="off">
+
+            <!-- Section 3: Product Details -->
+            <div class="form-section">
+                <div class="form-section-title">Product Details</div>
+                <div class="form-grid form-grid-2">
+                    <div class="form-group">
+                        <label>Product</label>
+                        <select id="edit-product-select" name="product" onchange="handleDropdownOther(this, 'edit-product-custom')">
+                            <option value="">Select Product</option>
+                            {% for p in products %}
+                            <option value="{{ p }}">{{ p }}</option>
+                            {% endfor %}
+                            <option value="__other__">Other (Custom)...</option>
+                        </select>
+                        <input type="text" id="edit-product-custom" class="hidden" placeholder="Enter custom product" style="margin-top:0.5rem">
+                    </div>
+                    <div class="form-group">
+                        <label>Color</label>
+                        <select id="edit-color-select" name="color" onchange="handleDropdownOther(this, 'edit-color-custom')">
+                            <option value="">No Color</option>
+                            {% for c in colors %}
+                            <option value="{{ c }}">{{ c }}</option>
+                            {% endfor %}
+                            <option value="__other__">Other (Custom)...</option>
+                        </select>
+                        <input type="text" id="edit-color-custom" class="hidden" placeholder="Enter custom color" style="margin-top:0.5rem">
+                    </div>
                 </div>
             </div>
-            <div class="form-actions">
-                <button type="submit" class="btn btn-primary">Update Order</button>
-                <button type="button" class="btn btn-ghost" onclick="closeModal('editModal')">Cancel</button>
+            <!-- Section 4: Financials -->
+            <div class="form-section">
+                <div class="form-section-title">Financial Breakdown</div>
+                <div class="form-grid form-grid-5">
+                    <div class="form-group">
+                        <label>Selling Price ₹</label>
+                        <input type="number" name="selling_price" id="edit-selling_price" step="0.01" min="0" oninput="calcSettlement('edit')">
+                    </div>
+                    <div class="form-group">
+                        <label>Shipping ₹</label>
+                        <input type="number" name="shipping" id="edit-shipping" step="0.01" min="0" oninput="calcSettlement('edit')">
+                    </div>
+                    <div class="form-group">
+                        <label>Refund ₹</label>
+                        <input type="number" name="refund" id="edit-refund" step="0.01" min="0" oninput="calcSettlement('edit')">
+                    </div>
+                    <div class="form-group">
+                        <label>Tax ₹</label>
+                        <input type="number" name="tax" id="edit-tax" step="0.01" min="0" oninput="calcSettlement('edit')">
+                    </div>
+                    <div class="form-group">
+                        <label>Mkt Fee ₹</label>
+                        <input type="number" name="marketplace_fee" id="edit-marketplace_fee" step="0.01" min="0" oninput="calcSettlement('edit')">
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-footer" style="display:flex; justify-content:space-between; align-items:center; margin-top:1.5rem; padding-top:1.5rem;">
+                <div class="settlement-display card-variant" id="edit-settlement-card">
+                    <span>Net Settlement</span>
+                    <strong id="edit-settlement-display">₹ 0.00</strong>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-ghost" onclick="closeModal('editModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Order</button>
+                </div>
             </div>
         </form>
     </div>
@@ -363,7 +424,16 @@ function updateBulkBar() {
         span.textContent = `${checkedCount} order${checkedCount > 1 ? 's' : ''} selected`;
     } else {
         bar.classList.add('hidden');
+        bar.classList.remove('minimized');
+        document.getElementById('minIcon').textContent = '▾';
     }
+}
+
+function toggleBulkMinimize() {
+    const bar = document.getElementById('bulkActionBar');
+    const icon = document.getElementById('minIcon');
+    bar.classList.toggle('minimized');
+    icon.textContent = bar.classList.contains('minimized') ? '▴' : '▾';
 }
 
 function submitBulk() {

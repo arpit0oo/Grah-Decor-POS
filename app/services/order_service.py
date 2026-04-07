@@ -6,7 +6,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 
 PLATFORMS = ['Amazon', 'Flipkart', 'Meesho', 'Instagram', 'Personal Reference', 'Website']
-REVIEWS = ['DONE', 'Pending', 'Not esponding']
+REVIEWS = ['Done', 'Pending', 'Not Responding']
 STATUSES = ['Pending', 'Shipped', 'Delivered', 'RTO', 'Customer Return', 'Exchange']
 DISPATCHED_STATUSES = ['Shipped', 'Delivered']
 RETURNED_STATUSES = ['RTO', 'Customer Return']
@@ -16,7 +16,7 @@ def get_stock_deltas(status):
     if status in DISPATCHED_STATUSES:
         return (-1, 0) # physical stock leaves
     if status in RETURNED_STATUSES:
-        return (0, 0) # no effect relative to baseline (returns to basic stock)
+        return (-1, 0) # physical stock stays deducted (due to potential damages)
     return (0, 1) # pending, reserved
 
 
@@ -49,11 +49,11 @@ def add_order(data):
     db = get_db()
     now = datetime.now(timezone.utc)
 
-    selling_price = float(data.get('selling_price', 0))
-    shipping = float(data.get('shipping', 0))
-    refund = float(data.get('refund', 0))
-    tax = float(data.get('tax', 0))
-    marketplace_fee = float(data.get('marketplace_fee', 0))
+    selling_price = max(0, float(data.get('selling_price', 0)))
+    shipping = max(0, float(data.get('shipping', 0)))
+    refund = max(0, float(data.get('refund', 0)))
+    tax = max(0, float(data.get('tax', 0)))
+    marketplace_fee = max(0, float(data.get('marketplace_fee', 0)))
     bank_settlement = selling_price - shipping - refund - tax - marketplace_fee
 
     order_date = data.get('date')
@@ -126,7 +126,7 @@ def update_order(doc_id, data):
 
     for field in ['selling_price', 'shipping', 'refund', 'tax', 'marketplace_fee']:
         if field in data:
-            update_data[field] = float(data[field]) if data[field] else 0
+            update_data[field] = max(0, float(data[field])) if data[field] else 0
 
     # Recalculate bank settlement if price fields changed
     if any(f in data for f in ['selling_price', 'shipping', 'refund', 'tax', 'marketplace_fee']):
@@ -164,19 +164,26 @@ def update_order(doc_id, data):
     new_color = update_data.get('color', old_color)
     new_status = update_data.get('status', old_status)
     
-    # Reverse old stock logic
-    if old_product:
-        old_qty_delta, old_res_delta = get_stock_deltas(old_status)
-        if old_qty_delta != 0 or old_res_delta != 0:
-            reason = f"Order state transition (reversing {old_status})"
-            adjust_ready_stock_qty(old_product, old_color, -old_qty_delta, -old_res_delta, reason=reason, ref_id=doc_id)
-            
-    # Apply new stock logic
-    if new_product:
-        new_qty_delta, new_res_delta = get_stock_deltas(new_status)
-        if new_qty_delta != 0 or new_res_delta != 0:
-            reason = f"Order state transition (applying {new_status})"
-            adjust_ready_stock_qty(new_product, new_color, new_qty_delta, new_res_delta, reason=reason, ref_id=doc_id)
+    # Calculate net stock adjustments
+    old_qty_d, old_res_d = get_stock_deltas(old_status)
+    new_qty_d, new_res_d = get_stock_deltas(new_status)
+    
+    # Net Deltas = New - Old (to find what actually changed)
+    net_qty_delta = (new_qty_d if new_product else 0) - (old_qty_d if old_product else 0)
+    net_res_delta = (new_res_d if new_product else 0) - (old_res_d if old_product else 0)
+
+    if net_qty_delta != 0 or net_res_delta != 0:
+        reason = f"Order state update ({old_status} → {new_status})"
+        if old_product == new_product:
+            adjust_ready_stock_qty(new_product, new_color, net_qty_delta, net_res_delta, reason=reason, ref_id=doc_id)
+        else:
+            # If product changed, we MUST do two steps: reverse old, apply new
+            if old_product:
+                reverse_reason = f"Order product change (reversing {old_status})"
+                adjust_ready_stock_qty(old_product, old_color, -old_qty_d, -old_res_d, reason=reverse_reason, ref_id=doc_id)
+            if new_product:
+                apply_reason = f"Order product change (applying {new_status})"
+                adjust_ready_stock_qty(new_product, new_color, new_qty_d, new_res_d, reason=apply_reason, ref_id=doc_id)
 
 
 def delete_order(doc_id):
