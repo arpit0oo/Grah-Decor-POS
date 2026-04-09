@@ -238,10 +238,6 @@
                 <td>{{ order.reviews or '-' }}</td>
                 <td class="actions-cell">
                     <button type="button" class="btn btn-xs btn-ghost" data-id="{{ order.id }}" data-order="{{ order|tojson|forceescape }}" onclick="openEditModalFromBtn(this)">Edit</button>
-                    <form method="POST" action="{{ url_for('orders.orders_delete', doc_id=order.id) }}" style="display:inline"
-                          onsubmit="return confirm('Delete this order?')">
-                        <button type="submit" class="btn btn-xs btn-danger">Del</button>
-                    </form>
                 </td>
             </tr>
             {% endfor %}
@@ -265,7 +261,7 @@
             <option value="status_RTO">Mark RTO</option>
             <option value="status_Customer Return">Mark Return</option>
             <option value="status_Exchange">Mark Exchange</option>
-            <option value="delete">Delete Selected</option>
+            <option value="status_Cancelled">Mark Cancelled</option>
         </select>
         <button type="button" class="btn btn-primary btn-sm" onclick="submitBulk()">Apply</button>
     </div>
@@ -443,11 +439,7 @@ function submitBulk() {
         alert("Please choose an action first.");
         return;
     }
-    if (action === 'delete') {
-        if (!confirm("Are you sure you want to permanently delete all selected orders?")) return;
-    } else {
-        if (!confirm(`Are you sure you want to apply this status to all selected orders?`)) return;
-    }
+    if (!confirm(`Are you sure you want to apply this status to all selected orders?`)) return;
     
     document.getElementById('bulkActionInput').value = action;
     document.getElementById('bulkForm').submit();

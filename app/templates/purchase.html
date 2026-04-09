@@ -84,7 +84,6 @@
                 <th>Unit Cost ₹</th>
                 <th>Total Cost ₹</th>
                 <th>Notes</th>
-                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -97,16 +96,10 @@
                 <td class="text-right">{{ "%.2f"|format(p.unit_cost) }}</td>
                 <td class="text-right text-bold">{{ "%.2f"|format(p.total_cost) }}</td>
                 <td class="text-muted">{{ p.notes or '-' }}</td>
-                <td class="actions-cell">
-                    <form method="POST" action="{{ url_for('purchase.purchase_delete', doc_id=p.id) }}"
-                          onsubmit="return confirm('Delete this purchase? This will reverse inventory and cashbook entries.')">
-                        <button type="submit" class="btn btn-xs btn-danger">Delete</button>
-                    </form>
-                </td>
             </tr>
             {% endfor %}
             {% if not purchases %}
-            <tr><td colspan="8" class="empty-state">No purchases recorded. Click "+ Log Purchase" to add one.</td></tr>
+            <tr><td colspan="7" class="empty-state">No purchases recorded. Click "+ Log Purchase" to add one.</td></tr>
             {% endif %}
         </tbody>
     </table>

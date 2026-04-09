@@ -98,11 +98,7 @@
                     </td>
                     <td class="text-muted">{{ m.updated_at.strftime('%d/%m/%Y %H:%M') if m.updated_at and m.updated_at.strftime else '-' }}</td>
                     <td class="actions-cell">
-                            <button type="submit" class="btn btn-xs">Save</button>
-                        </form>
-                        <form method="POST" action="{{ url_for('inventory.raw_delete', doc_id=m.id) }}" style="display:inline"
-                              onsubmit="return confirm('Delete this material?')">
-                            <button type="submit" class="btn btn-xs btn-danger">Del</button>
+                        <button type="submit" class="btn btn-xs">Save</button>
                         </form>
                     </td>
                 </tr>
@@ -186,11 +182,7 @@
                     </td>
                     <td class="text-muted">{{ s.updated_at.strftime('%d/%m/%Y %H:%M') if s.updated_at and s.updated_at.strftime else '-' }}</td>
                     <td class="actions-cell">
-                            <button type="submit" class="btn btn-xs">Save</button>
-                        </form>
-                        <form method="POST" action="{{ url_for('inventory.ready_delete', doc_id=s.id) }}" style="display:inline"
-                              onsubmit="return confirm('Delete this item?')">
-                            <button type="submit" class="btn btn-xs btn-danger">Del</button>
+                        <button type="submit" class="btn btn-xs">Save</button>
                         </form>
                     </td>
                 </tr>

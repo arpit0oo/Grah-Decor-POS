@@ -7,9 +7,10 @@ from google.cloud.firestore_v1 import FieldFilter
 
 PLATFORMS = ['Amazon', 'Flipkart', 'Meesho', 'Instagram', 'Personal Reference', 'Website']
 REVIEWS = ['Done', 'Pending', 'Not Responding']
-STATUSES = ['Pending', 'Shipped', 'Delivered', 'RTO', 'Customer Return', 'Exchange']
+STATUSES = ['Pending', 'Shipped', 'Delivered', 'RTO', 'Customer Return', 'Exchange', 'Cancelled']
 DISPATCHED_STATUSES = ['Shipped', 'Delivered']
 RETURNED_STATUSES = ['RTO', 'Customer Return']
+CANCELLED_STATUSES = ['Cancelled']
 
 def get_stock_deltas(status):
     """Returns (qty_delta, reserved_delta) based on order status."""
@@ -17,6 +18,8 @@ def get_stock_deltas(status):
         return (-1, 0) # physical stock leaves
     if status in RETURNED_STATUSES:
         return (-1, 0) # physical stock stays deducted (due to potential damages)
+    if status in CANCELLED_STATUSES:
+        return (0, 0) # neither physical nor reserved
     return (0, 1) # pending, reserved
 
 
@@ -54,7 +57,12 @@ def add_order(data):
     refund = max(0, float(data.get('refund', 0)))
     tax = max(0, float(data.get('tax', 0)))
     marketplace_fee = max(0, float(data.get('marketplace_fee', 0)))
-    bank_settlement = selling_price - shipping - refund - tax - marketplace_fee
+    
+    status = data.get('status', 'Pending')
+    if status in CANCELLED_STATUSES:
+        bank_settlement = 0.0
+    else:
+        bank_settlement = selling_price - shipping - refund - tax - marketplace_fee
 
     order_date = data.get('date')
     if order_date:
@@ -128,14 +136,18 @@ def update_order(doc_id, data):
         if field in data:
             update_data[field] = max(0, float(data[field])) if data[field] else 0
 
-    # Recalculate bank settlement if price fields changed
-    if any(f in data for f in ['selling_price', 'shipping', 'refund', 'tax', 'marketplace_fee']):
-        sp = update_data.get('selling_price', old_data.get('selling_price', 0))
-        sh = update_data.get('shipping', old_data.get('shipping', 0))
-        rf = update_data.get('refund', old_data.get('refund', 0))
-        tx = update_data.get('tax', old_data.get('tax', 0))
-        mf = update_data.get('marketplace_fee', old_data.get('marketplace_fee', 0))
-        update_data['bank_settlement'] = sp - sh - rf - tx - mf
+    # Recalculate bank settlement if price fields changed or status changed
+    if any(f in data for f in ['selling_price', 'shipping', 'refund', 'tax', 'marketplace_fee', 'status']):
+        new_status = update_data.get('status', old_data.get('status', 'Pending'))
+        if new_status in CANCELLED_STATUSES:
+            update_data['bank_settlement'] = 0.0
+        else:
+            sp = update_data.get('selling_price', old_data.get('selling_price', 0))
+            sh = update_data.get('shipping', old_data.get('shipping', 0))
+            rf = update_data.get('refund', old_data.get('refund', 0))
+            tx = update_data.get('tax', old_data.get('tax', 0))
+            mf = update_data.get('marketplace_fee', old_data.get('marketplace_fee', 0))
+            update_data['bank_settlement'] = sp - sh - rf - tx - mf
 
     if 'date' in data and data['date']:
         try:
