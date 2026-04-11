@@ -101,7 +101,9 @@ def add_order(data):
     if product:
         qty_delta, res_delta = get_stock_deltas(status)
         if qty_delta != 0 or res_delta != 0:
-            reason = f"Order logged ({status})"
+            o_id = data.get('order_id')
+            label = f"Order {o_id} " if o_id else "Order "
+            reason = f"{label}logged ({status})"
             adjust_ready_stock_qty(product, color, qty_delta, res_delta, reason=reason, ref_id=doc_ref.id)
 
     # Log cash inflow (use bank_settlement as the actual money received)
@@ -185,16 +187,19 @@ def update_order(doc_id, data):
     net_res_delta = (new_res_d if new_product else 0) - (old_res_d if old_product else 0)
 
     if net_qty_delta != 0 or net_res_delta != 0:
-        reason = f"Order state update ({old_status} → {new_status})"
+        o_id = update_data.get('order_id', old_data.get('order_id', ''))
+        label = f"Order {o_id} " if o_id else "Order "
+        
+        reason = f"{label}state update ({old_status} → {new_status})"
         if old_product == new_product:
             adjust_ready_stock_qty(new_product, new_color, net_qty_delta, net_res_delta, reason=reason, ref_id=doc_id)
         else:
             # If product changed, we MUST do two steps: reverse old, apply new
             if old_product:
-                reverse_reason = f"Order product change (reversing {old_status})"
+                reverse_reason = f"{label}product change (reversing {old_status})"
                 adjust_ready_stock_qty(old_product, old_color, -old_qty_d, -old_res_d, reason=reverse_reason, ref_id=doc_id)
             if new_product:
-                apply_reason = f"Order product change (applying {new_status})"
+                apply_reason = f"{label}product change (applying {new_status})"
                 adjust_ready_stock_qty(new_product, new_color, new_qty_d, new_res_d, reason=apply_reason, ref_id=doc_id)
 
 
@@ -208,7 +213,9 @@ def delete_order(doc_id):
     if data.get('product'):
         old_qty_delta, old_res_delta = get_stock_deltas(data.get('status', 'Pending'))
         if old_qty_delta != 0 or old_res_delta != 0:
-            reason = f"Order deleted (reversed {data.get('status', 'Pending')})"
+            o_id = data.get('order_id')
+            label = f"Order {o_id} " if o_id else "Order "
+            reason = f"{label}deleted (reversed {data.get('status', 'Pending')})"
             adjust_ready_stock_qty(data['product'], data.get('color', ''), -old_qty_delta, -old_res_delta, reason=reason, ref_id=doc_id)
     # Delete linked cashbook
     _delete_cashbook_by_ref(doc_id)

@@ -25,6 +25,15 @@ def get_inventory_logs(limit=100):
     docs = db.collection('inventory_log').order_by('date', direction='DESCENDING').limit(limit).stream()
     return [{'id': d.id, **d.to_dict()} for d in docs]
 
+def get_product_inventory_logs(name, color=None, limit=100):
+    db = get_db()
+    query = db.collection('inventory_log').where(filter=FieldFilter('item_name', '==', name))
+    if color:
+        query = query.where(filter=FieldFilter('color', '==', color))
+    
+    docs = query.order_by('date', direction='DESCENDING').limit(limit).stream()
+    return [{'id': d.id, **d.to_dict()} for d in docs]
+
 # ── Raw Materials ──────────────────────────────────────────────
 
 def get_all_raw_materials():

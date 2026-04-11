@@ -184,6 +184,7 @@
                     <td class="actions-cell">
                         <button type="submit" class="btn btn-xs">Save</button>
                         </form>
+                        <button type="button" class="btn btn-xs btn-ghost" onclick="openHistoryModal('{{ s.name|escape }}', '{{ s.color|escape }}')">History</button>
                     </td>
                 </tr>
                 {% endfor %}
@@ -307,6 +308,34 @@
         </form>
     </div>
 </div>
+
+<!-- ── HISTORY MODAL ───────────────────────────────────── -->
+<div class="modal-overlay hidden" id="historyModal">
+    <div class="modal" style="max-width: 600px;">
+        <div class="modal-header">
+            <h3>Stock Ledger</h3>
+            <button class="modal-close" onclick="closeModal('historyModal')">×</button>
+        </div>
+        <div style="margin-bottom: 1rem;">
+            <strong id="historyItemTitle"></strong>
+            <div id="historyItemTotals" class="text-muted" style="margin-top: 0.5rem; font-size: 0.9em;"></div>
+        </div>
+        <div class="table-wrapper" style="max-height: 350px; overflow-y: auto;">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Movement</th>
+                        <th>Reason</th>
+                    </tr>
+                </thead>
+                <tbody id="historyTableBody">
+                    <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -337,6 +366,64 @@ function switchTab(tab) {
     document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
     event.target.classList.add('active');
     document.getElementById('tab-' + tab).classList.remove('hidden');
+}
+
+async function openHistoryModal(name, color) {
+    const title = name + (color && color !== 'None' ? ` (${color})` : '');
+    document.getElementById('historyItemTitle').textContent = title;
+    
+    const tbody = document.getElementById('historyTableBody');
+    const totalsDiv = document.getElementById('historyItemTotals');
+    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted" style="padding: 2rem;">Loading ledger data...</td></tr>';
+    totalsDiv.textContent = 'Calculating...';
+    
+    document.getElementById('historyModal').classList.remove('hidden');
+
+    try {
+        const url = `/inventory/api/product-logs?name=${encodeURIComponent(name)}&color=${encodeURIComponent(color || '')}`;
+        const response = await fetch(url);
+        const logs = await response.json();
+        
+        let inTotal = 0;
+        let outTotal = 0;
+        tbody.innerHTML = '';
+        
+        if (logs.error) {
+            tbody.innerHTML = `<tr><td colspan="3" class="empty-state text-danger">${logs.error}</td></tr>`;
+            totalsDiv.textContent = '';
+            return;
+        }
+
+        if (logs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No transaction history found.</td></tr>';
+        } else {
+            logs.forEach(log => {
+                if (log.delta > 0) inTotal += log.delta;
+                if (log.delta < 0) outTotal += Math.abs(log.delta);
+                
+                const d = new Date(log.date);
+                const isNaN_date = isNaN(d);
+                const dateStr = !isNaN_date ? d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-';
+                
+                const badgeHtml = log.delta > 0 
+                    ? `<span class="badge bg-success" style="padding:2px 6px;">+${log.delta} IN</span>`
+                    : `<span class="badge bg-danger" style="padding:2px 6px;">${log.delta} OUT</span>`;
+                
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="text-muted" style="white-space: nowrap;">${dateStr}</td>
+                    <td class="text-bold">${badgeHtml}</td>
+                    <td>${log.reason || '-'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+        totalsDiv.innerHTML = `Total Lifetime IN: <strong class="text-success">+${inTotal}</strong> &nbsp;|&nbsp; Total Lifetime OUT: <strong class="text-danger">-${outTotal}</strong>`;
+    } catch (err) {
+        console.error(err);
+        tbody.innerHTML = '<tr><td colspan="3" class="empty-state text-danger">Failed to load history. Check your connection.</td></tr>';
+        totalsDiv.textContent = '';
+    }
 }
 </script>
 {% endblock %}
