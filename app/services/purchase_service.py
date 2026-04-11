@@ -4,6 +4,23 @@ from app.services.inventory_service import adjust_raw_material_qty, add_raw_mate
 from google.cloud.firestore_v1 import FieldFilter
 
 
+def generate_purchase_id():
+    db = get_db()
+    docs = list(db.collection('purchases').order_by('created_at', direction='DESCENDING').limit(1).stream())
+    if not docs:
+        return "PUR-001"
+    
+    last_doc = docs[0].to_dict()
+    last_id = last_doc.get('purchase_id', '')
+    if last_id.startswith('PUR-'):
+        try:
+            num = int(last_id.replace('PUR-', ''))
+            return f"PUR-{num + 1:03d}"
+        except:
+            pass
+    count = len(list(db.collection('purchases').stream()))
+    return f"PUR-{count + 1:03d}"
+
 def get_all_purchases(date_from=None, date_to=None):
     db = get_db()
     query = db.collection('purchases').order_by('date', direction='DESCENDING')
@@ -32,8 +49,11 @@ def add_purchase(vendor_name, item, quantity, unit_cost, notes=''):
     total_cost = quantity * unit_cost
     now = datetime.now(timezone.utc)
 
+    purchase_id = generate_purchase_id()
+
     # 1. Create purchase record
     _, doc_ref = db.collection('purchases').add({
+        'purchase_id': purchase_id,
         'date': now,
         'vendor_name': vendor_name,
         'item': item,
@@ -45,7 +65,7 @@ def add_purchase(vendor_name, item, quantity, unit_cost, notes=''):
     })
 
     # 2. Increase raw material inventory
-    reason = f"Purchased from {vendor_name}"
+    reason = f"Purchase {purchase_id} from {vendor_name}"
     if not adjust_raw_material_qty(item, quantity, reason=reason):
         add_raw_material(item, quantity, 'pcs', unit_cost, reason=reason)
 
@@ -53,7 +73,7 @@ def add_purchase(vendor_name, item, quantity, unit_cost, notes=''):
     add_cashbook_entry(
         entry_type='outflow',
         category='Purchase',
-        description=f'Purchase from {vendor_name} — {item} x{quantity}',
+        description=f'Purchase {purchase_id} from {vendor_name} — {item} x{quantity}',
         amount=total_cost,
         reference_id=doc_ref.id,
     )
@@ -67,7 +87,8 @@ def delete_purchase(doc_id):
         return False
     data = doc.to_dict()
     # Reverse inventory increase
-    reason = "Reversed Purchase (deleted)"
+    p_id = data.get('purchase_id', doc_id)
+    reason = f"Reversed Purchase {p_id} (deleted)"
     adjust_raw_material_qty(data['item'], -data['quantity'], reason=reason)
     # Delete linked cashbook entry
     _delete_cashbook_by_ref(doc_id)
