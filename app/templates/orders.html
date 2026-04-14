@@ -82,47 +82,24 @@
             </div>
         </div>
 
-        <!-- Section 3: Product Choice -->
+        <!-- Section 3: Order Items -->
         <div class="form-section">
-            <div class="form-section-title">Product Details</div>
-            <div class="form-grid form-grid-2">
-                <div class="form-group">
-                    <label for="add-product">Product *</label>
-                    <select id="add-product-select" name="product" required
-                        onchange="handleDropdownOther(this, 'add-product-custom')">
-                        <option value="" disabled selected>Select Product</option>
-                        {% for p in products %}
-                        <option value="{{ p }}">{{ p }}</option>
-                        {% endfor %}
-                        <option value="__other__">Other (Custom)...</option>
-                    </select>
-                    <input type="text" id="add-product-custom" class="hidden" placeholder="Enter custom product name"
-                        style="margin-top:0.5rem">
-                </div>
-                <div class="form-group">
-                    <label for="add-color">Color</label>
-                    <select id="add-color-select" name="color" onchange="handleDropdownOther(this, 'add-color-custom')">
-                        <option value="">No Color</option>
-                        {% for c in colors %}
-                        <option value="{{ c }}">{{ c }}</option>
-                        {% endfor %}
-                        <option value="__other__">Other (Custom)...</option>
-                    </select>
-                    <input type="text" id="add-color-custom" class="hidden" placeholder="Enter custom color"
-                        style="margin-top:0.5rem">
-                </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                <div class="form-section-title" style="margin-bottom:0;">Order Items</div>
+                <button type="button" class="btn btn-xs btn-ghost" onclick="addOrderItemRow('add-order-items', 'add')">+ Add Item</button>
+            </div>
+            <div id="add-order-items">
+                <!-- Javascript will populate rows here -->
+            </div>
+            <div style="text-align: right; margin-top: 1rem; font-weight: bold; font-size: 1.1em;">
+                Selling Price (Items Total): <span id="add-selling-price-display">₹ 0.00</span>
             </div>
         </div>
 
         <!-- Section 4: Financials -->
         <div class="form-section">
             <div class="form-section-title">Financial Breakdown</div>
-            <div class="form-grid form-grid-5">
-                <div class="form-group">
-                    <label for="add-selling-price">Selling Price ₹</label>
-                    <input type="number" id="add-selling-price" name="selling_price" step="0.01" min="0" value="0"
-                        oninput="calcSettlement('add')">
-                </div>
+            <div class="form-grid form-grid-4">
                 <div class="form-group">
                     <label for="add-shipping">Shipping ₹</label>
                     <input type="number" id="add-shipping" name="shipping" step="0.01" min="0" value="0"
@@ -211,8 +188,7 @@
                     <th>Date</th>
                     <th>Order ID</th>
                     <th>Customer</th>
-                    <th>Product</th>
-                    <th>Color</th>
+                    <th>Items</th>
                     <th>Platform</th>
                     <th>Selling ₹</th>
                     <th>Shipping</th>
@@ -234,8 +210,7 @@
                     <td>{{ order.date.strftime('%d/%m/%Y') if order.date and order.date.strftime else '-' }}</td>
                     <td class="text-mono">{{ order.order_id or '-' }}</td>
                     <td>{{ order.customer }}</td>
-                    <td>{{ order.product }}</td>
-                    <td>{{ order.color or '-' }}</td>
+                    <td>{{ order.order_items|length if order.order_items else 0 }} Items</td>
                     <td><span class="badge badge-platform">{{ order.platform }}</span></td>
                     <td class="text-right">{{ "%.2f"|format(order.selling_price) }}</td>
                     <td class="text-right">{{ "%.2f"|format(order.shipping) }}</td>
@@ -247,6 +222,8 @@
                     </td>
                     <td>{{ order.reviews or '-' }}</td>
                     <td class="actions-cell">
+                        <button type="button" class="btn btn-xs btn-ghost" style="color:var(--primary); border-color:var(--bg); background:var(--bg);" data-order="{{ order|tojson|forceescape }}"
+                            onclick="openViewModalFromBtn(this)">View</button>
                         <button type="button" class="btn btn-xs btn-ghost" data-id="{{ order.id }}"
                             data-order="{{ order|tojson|forceescape }}"
                             onclick="openEditModalFromBtn(this)">Edit</button>
@@ -282,6 +259,55 @@
     <button type="button" class="btn-minimize" onclick="toggleBulkMinimize()" id="bulkMinBtn">
         <span id="minIcon">▾</span>
     </button>
+</div>
+
+<!-- View Modal -->
+<div class="modal-overlay hidden" id="viewModal">
+    <div class="modal" style="max-width: 600px;">
+        <div class="modal-header">
+            <h3>Order Details <span id="view-order-id" class="text-muted" style="font-size: 0.9em; margin-left: 0.5rem;"></span></h3>
+            <button class="modal-close" onclick="closeModal('viewModal')">×</button>
+        </div>
+        
+        <div style="margin-bottom: 1.5rem;" class="form-grid form-grid-3 text-muted">
+            <div>
+                <small style="font-size:0.75em; letter-spacing:0.05em; text-transform:uppercase;">Customer</small><br>
+                <strong id="view-customer" style="color:var(--text); font-size:1.1em;"></strong>
+            </div>
+            <div>
+                <small style="font-size:0.75em; letter-spacing:0.05em; text-transform:uppercase;">Date</small><br>
+                <strong id="view-date" style="color:var(--text); font-size:1.1em;"></strong>
+            </div>
+            <div>
+                <small style="font-size:0.75em; letter-spacing:0.05em; text-transform:uppercase;">Platform</small><br>
+                <strong id="view-platform" style="color:var(--text); font-size:1.1em;"></strong>
+            </div>
+        </div>
+
+        <div class="table-wrapper" style="margin-bottom: 1.5rem; max-height:300px; overflow-y:auto; box-shadow:none; border-color:#eee;">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th style="background:#f5f6f8;">Product</th>
+                        <th style="background:#f5f6f8;">Color</th>
+                        <th class="text-right" style="background:#f5f6f8;">Qty</th>
+                        <th class="text-right" style="background:#f5f6f8;">Price</th>
+                        <th class="text-right" style="background:#f5f6f8;">Total</th>
+                    </tr>
+                </thead>
+                <tbody id="view-order-items-body">
+                    <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </div>
+        
+        <div style="display: flex; justify-content: flex-end;">
+            <div class="settlement-display" style="min-width: 220px; padding: 0.6rem 1rem;">
+                <span style="font-size:0.75em;">Items Total</span>
+                <strong id="view-total-display" style="font-size:1.15em;">₹ 0.00</strong>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Edit Modal -->
@@ -347,47 +373,24 @@
                 </div>
             </div>
 
-            <!-- Section 3: Product Details -->
+            <!-- Section 3: Order Items -->
             <div class="form-section">
-                <div class="form-section-title">Product Details</div>
-                <div class="form-grid form-grid-2">
-                    <div class="form-group">
-                        <label>Product</label>
-                        <select id="edit-product-select" name="product"
-                            onchange="handleDropdownOther(this, 'edit-product-custom')">
-                            <option value="">Select Product</option>
-                            {% for p in products %}
-                            <option value="{{ p }}">{{ p }}</option>
-                            {% endfor %}
-                            <option value="__other__">Other (Custom)...</option>
-                        </select>
-                        <input type="text" id="edit-product-custom" class="hidden" placeholder="Enter custom product"
-                            style="margin-top:0.5rem">
-                    </div>
-                    <div class="form-group">
-                        <label>Color</label>
-                        <select id="edit-color-select" name="color"
-                            onchange="handleDropdownOther(this, 'edit-color-custom')">
-                            <option value="">No Color</option>
-                            {% for c in colors %}
-                            <option value="{{ c }}">{{ c }}</option>
-                            {% endfor %}
-                            <option value="__other__">Other (Custom)...</option>
-                        </select>
-                        <input type="text" id="edit-color-custom" class="hidden" placeholder="Enter custom color"
-                            style="margin-top:0.5rem">
-                    </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                    <div class="form-section-title" style="margin-bottom:0;">Order Items</div>
+                    <button type="button" class="btn btn-xs btn-ghost" onclick="addOrderItemRow('edit-order-items', 'edit')">+ Add Item</button>
+                </div>
+                <div id="edit-order-items">
+                    <!-- Javascript will populate rows here -->
+                </div>
+                <div style="text-align: right; margin-top: 1rem; font-weight: bold; font-size: 1.1em;">
+                    Selling Price (Items Total): <span id="edit-selling-price-display">₹ 0.00</span>
                 </div>
             </div>
+
             <!-- Section 4: Financials -->
             <div class="form-section">
                 <div class="form-section-title">Financial Breakdown</div>
-                <div class="form-grid form-grid-5">
-                    <div class="form-group">
-                        <label>Selling Price ₹</label>
-                        <input type="number" name="selling_price" id="edit-selling_price" step="0.01" min="0"
-                            oninput="calcSettlement('edit')">
-                    </div>
+                <div class="form-grid form-grid-4">
                     <div class="form-group">
                         <label>Shipping ₹</label>
                         <input type="number" name="shipping" id="edit-shipping" step="0.01" min="0"
@@ -469,20 +472,113 @@
         document.getElementById('bulkForm').submit();
     }
 
-    function handleDropdownOther(selectElem, customInputId) {
-        const customInput = document.getElementById(customInputId);
+    function handleDropdownOther(selectElem) {
+        let container = selectElem.parentElement;
+        let customInput = container.querySelector('input[type="text"]');
+        if(!customInput) return;
+        
         if (selectElem.value === '__other__') {
             customInput.classList.remove('hidden');
-            customInput.name = selectElem.name;  // Transfer 'name' attribute to text input
-            selectElem.name = '';               // Remove 'name' from select so backend gets text input
+            customInput.name = selectElem.name;
+            selectElem.name = '';               
             if (selectElem.required) customInput.required = true;
         } else {
             customInput.classList.add('hidden');
-            selectElem.name = customInput.name || selectElem.name || customInputId.split('-')[1]; // Restore name
+            selectElem.name = customInput.name || selectElem.name; 
             customInput.name = '';
             customInput.required = false;
             customInput.value = '';
         }
+    }
+
+    function getOrderItemRowHtml(prefix) {
+        return `
+            <div class="order-item-row" style="border: 1px dashed var(--border); padding: 1rem; position: relative; margin-bottom: 0.5rem; background: #fafafa; border-radius: 4px;">
+                <button type="button" style="position:absolute; top:8px; right:8px; background:var(--danger); color:white; border:none; border-radius:4px; padding:2px 6px; cursor:pointer;" onclick="this.parentElement.remove(); calcSettlement('${prefix}');">Remove</button>
+                <div class="form-grid form-grid-4">
+                    <div class="form-group">
+                        <label>Product *</label>
+                        <select name="product[]" class="item-product" required onchange="handleDropdownOther(this); calcSettlement('${prefix}');">
+                            <option value="" disabled selected>Select Product</option>
+                            {% for p in products %}
+                            <option value="{{ p }}">{{ p }}</option>
+                            {% endfor %}
+                            <option value="__other__">Other (Custom)...</option>
+                        </select>
+                        <input type="text" class="item-product-custom hidden" placeholder="Custom product" style="margin-top:0.5rem" oninput="calcSettlement('${prefix}')">
+                    </div>
+                    <div class="form-group">
+                        <label>Color</label>
+                        <select name="color[]" class="item-color" onchange="handleDropdownOther(this)">
+                            <option value="">No Color</option>
+                            {% for c in colors %}
+                            <option value="{{ c }}">{{ c }}</option>
+                            {% endfor %}
+                            <option value="__other__">Other (Custom)...</option>
+                        </select>
+                        <input type="text" class="item-color-custom hidden" placeholder="Custom color" style="margin-top:0.5rem">
+                    </div>
+                    <div class="form-group">
+                        <label>Quantity</label>
+                        <input type="number" name="quantity[]" class="item-qty" value="1" min="1" step="1" oninput="calcSettlement('${prefix}')">
+                    </div>
+                    <div class="form-group">
+                        <label>Unit Price ₹</label>
+                        <input type="number" name="price[]" class="item-price" value="0" min="0" step="0.01" oninput="calcSettlement('${prefix}')">
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function addOrderItemRow(containerId, prefix) {
+        document.getElementById(containerId).insertAdjacentHTML('beforeend', getOrderItemRowHtml(prefix));
+    }
+
+    function openViewModalFromBtn(btn) {
+        const data = JSON.parse(btn.getAttribute('data-order'));
+        
+        let dateStr = '-';
+        if (data.date) {
+            try {
+                let d = new Date(data.date);
+                if (!isNaN(d)) dateStr = d.toLocaleDateString('en-GB');
+            } catch (e) { }
+        }
+        
+        document.getElementById('view-date').textContent = dateStr;
+        document.getElementById('view-order-id').textContent = data.order_id ? `#${data.order_id}` : '';
+        document.getElementById('view-customer').textContent = data.customer || '-';
+        document.getElementById('view-platform').textContent = data.platform || '-';
+        
+        const tbody = document.getElementById('view-order-items-body');
+        tbody.innerHTML = '';
+        
+        let grandTotal = 0;
+        
+        if (data.order_items && data.order_items.length > 0) {
+            data.order_items.forEach(item => {
+                const qty = item.quantity || 1;
+                const price = item.price || 0;
+                const lineTotal = qty * price;
+                grandTotal += lineTotal;
+                
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${item.product || '-'}</td>
+                    <td>${item.color || '-'}</td>
+                    <td class="text-right">${qty}</td>
+                    <td class="text-right">₹ ${parseFloat(price).toFixed(2)}</td>
+                    <td class="text-right text-bold">₹ ${lineTotal.toFixed(2)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } else {
+            tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No items logged.</td></tr>';
+        }
+        
+        document.getElementById('view-total-display').textContent = '₹ ' + grandTotal.toFixed(2);
+        document.getElementById('viewModal').classList.remove('hidden');
     }
 
     function openEditModalFromBtn(btn) {
@@ -495,7 +591,6 @@
         const form = document.getElementById('editForm');
         form.action = '/orders/edit/' + docId;
 
-        // Parse date
         if (data.date) {
             try {
                 let d = new Date(data.date);
@@ -508,59 +603,81 @@
         document.getElementById('edit-order_id').value = data.order_id || '';
         document.getElementById('edit-customer').value = data.customer || '';
         document.getElementById('edit-number').value = data.number || '';
-        // Reset dropdown logic for product
-        document.getElementById('edit-product-custom').classList.add('hidden');
-        document.getElementById('edit-product-select').name = 'product';
-        document.getElementById('edit-product-custom').name = '';
-
-        // Check if current product is in the dropdown list
-        let prodSelect = document.getElementById('edit-product-select');
-        let prodOptions = Array.from(prodSelect.options).map(o => o.value);
-        if (data.product && !prodOptions.includes(data.product)) {
-            prodSelect.value = '__other__';
-            handleDropdownOther(prodSelect, 'edit-product-custom');
-            document.getElementById('edit-product-custom').value = data.product;
+        
+        const itemsContainer = document.getElementById('edit-order-items');
+        itemsContainer.innerHTML = '';
+        if(data.order_items && data.order_items.length > 0) {
+            data.order_items.forEach(item => {
+                addOrderItemRow('edit-order-items', 'edit');
+                let lastRow = itemsContainer.lastElementChild;
+                
+                let prodSelect = lastRow.querySelector('.item-product');
+                let prodOptions = Array.from(prodSelect.options).map(o => o.value);
+                if (item.product && !prodOptions.includes(item.product)) {
+                    prodSelect.value = '__other__';
+                    handleDropdownOther(prodSelect);
+                    lastRow.querySelector('.item-product-custom').value = item.product;
+                } else {
+                    prodSelect.value = item.product || '';
+                }
+                
+                let colorSelect = lastRow.querySelector('.item-color');
+                let colorOptions = Array.from(colorSelect.options).map(o => o.value);
+                if (item.color && !colorOptions.includes(item.color)) {
+                    colorSelect.value = '__other__';
+                    handleDropdownOther(colorSelect);
+                    lastRow.querySelector('.item-color-custom').value = item.color;
+                } else {
+                    colorSelect.value = item.color || '';
+                }
+                
+                lastRow.querySelector('.item-qty').value = item.quantity || 1;
+                lastRow.querySelector('.item-price').value = item.price || 0;
+            });
         } else {
-            prodSelect.value = data.product || '';
+            addOrderItemRow('edit-order-items', 'edit');
         }
 
-        // Reset dropdown logic for color
-        document.getElementById('edit-color-custom').classList.add('hidden');
-        document.getElementById('edit-color-select').name = 'color';
-        document.getElementById('edit-color-custom').name = '';
-
-        // Check if current color is in the dropdown list
-        let colorSelect = document.getElementById('edit-color-select');
-        let colorOptions = Array.from(colorSelect.options).map(o => o.value);
-        if (data.color && !colorOptions.includes(data.color)) {
-            colorSelect.value = '__other__';
-            handleDropdownOther(colorSelect, 'edit-color-custom');
-            document.getElementById('edit-color-custom').value = data.color;
-        } else {
-            colorSelect.value = data.color || '';
-        }
         document.getElementById('edit-platform').value = data.platform || '';
         document.getElementById('edit-status').value = data.status || 'Pending';
-        document.getElementById('edit-selling_price').value = data.selling_price || 0;
         document.getElementById('edit-shipping').value = data.shipping || 0;
         document.getElementById('edit-refund').value = data.refund || 0;
         document.getElementById('edit-tax').value = data.tax || 0;
         document.getElementById('edit-marketplace_fee').value = data.marketplace_fee || 0;
         document.getElementById('edit-reviews').value = data.reviews || '';
+        
         calcSettlement('edit');
-
         document.getElementById('editModal').classList.remove('hidden');
     }
 
     function calcSettlement(prefix) {
-        const sp = parseFloat(document.getElementById(prefix + '-selling_price')?.value || document.getElementById(prefix + '-selling-price')?.value || 0);
-        const sh = parseFloat(document.getElementById(prefix + '-shipping').value || 0);
-        const rf = parseFloat(document.getElementById(prefix + '-refund').value || 0);
-        const tx = parseFloat(document.getElementById(prefix + '-tax').value || 0);
+        let totalItemsPrice = 0;
+        let form = document.querySelector(prefix === 'add' ? '#orderForm form' : '#editForm');
+        if (form) {
+            let prices = form.querySelectorAll('.item-price');
+            let qtys = form.querySelectorAll('.item-qty');
+            for(let i=0; i<prices.length; i++) {
+                totalItemsPrice += (parseFloat(prices[i].value) || 0) * (parseInt(qtys[i].value) || 1);
+            }
+            let spDisplay = document.getElementById(prefix + '-selling-price-display');
+            if(spDisplay) {
+                spDisplay.textContent = '₹ ' + totalItemsPrice.toFixed(2);
+            }
+        }
+        
+        const sp = totalItemsPrice;
+        const sh = parseFloat(document.getElementById(prefix + '-shipping')?.value || 0);
+        const rf = parseFloat(document.getElementById(prefix + '-refund')?.value || 0);
+        const tx = parseFloat(document.getElementById(prefix + '-tax')?.value || 0);
         const mf = parseFloat(document.getElementById(prefix + '-marketplace_fee')?.value || document.getElementById(prefix + '-marketplace-fee')?.value || 0);
+        
         const settlement = sp - sh - rf - tx - mf;
         const el = document.getElementById(prefix + '-settlement-display');
         if (el) el.textContent = '₹ ' + settlement.toFixed(2);
     }
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        addOrderItemRow('add-order-items', 'add');
+    });
 </script>
 {% endblock %}
