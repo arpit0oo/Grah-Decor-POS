@@ -1,15 +1,15 @@
 {% extends "base.html" %}
-{% block title %}Purchase Book — Grah Decor POS{% endblock %}
+{% block title %}Procurement — Grah Decor POS{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1>Purchase Book</h1>
-    <button class="btn btn-primary" onclick="toggleForm('purchaseForm')">+ Log Purchase</button>
+    <h1>Procurement Lifecycle</h1>
+    <button class="btn btn-primary" onclick="toggleForm('purchaseForm')">+ New PO</button>
 </div>
 
 <!-- Add Purchase Form -->
 <div class="form-card hidden" id="purchaseForm">
-    <h3>Log New Purchase</h3>
+    <h3>Draft Purchase Order</h3>
     <form method="POST" action="{{ url_for('purchase.purchase_add') }}">
         <div class="form-grid form-grid-4">
             <div class="form-group">
@@ -35,16 +35,12 @@
             <div class="settlement-display">
                 Total Cost: <strong id="purchase-total-display">₹ 0.00</strong>
             </div>
-            <div class="form-group" style="flex:1">
-                <label for="p-notes">Notes</label>
-                <input type="text" id="p-notes" name="notes" placeholder="Optional notes">
-            </div>
         </div>
         <p class="text-muted" style="margin-top:0.5rem">
-            💡 Submitting will automatically add to <strong>Raw Inventory</strong> and log a <strong>Cash Outflow</strong>.
+            💡 Creating a PO puts it in <strong>Draft</strong> state. No inventory or cash changes occur yet.
         </p>
         <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Save Purchase</button>
+            <button type="submit" class="btn btn-primary">Create Draft PO</button>
             <button type="button" class="btn btn-ghost" onclick="toggleForm('purchaseForm')">Cancel</button>
         </div>
     </form>
@@ -63,11 +59,11 @@
 <!-- Summary -->
 <div class="summary-row">
     <div class="summary-item">
-        <span class="summary-label">Total Purchases</span>
+        <span class="summary-label">Total Valid POs</span>
         <span class="summary-value">{{ purchases|length }}</span>
     </div>
     <div class="summary-item summary-danger">
-        <span class="summary-label">Total Spent</span>
+        <span class="summary-label">Gross Value</span>
         <span class="summary-value">₹ {{ "%.2f"|format(total_spent) }}</span>
     </div>
 </div>
@@ -77,35 +73,107 @@
     <table class="data-table">
         <thead>
             <tr>
-                <th>Purchase ID</th>
+                <th>PO Number</th>
                 <th>Date</th>
+                <th>Status</th>
                 <th>Vendor</th>
                 <th>Item</th>
                 <th>Qty</th>
-                <th>Unit Cost ₹</th>
                 <th>Total Cost ₹</th>
-                <th>Notes</th>
+                <th>Invoice / Txn</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
             {% for p in purchases %}
             <tr>
-                <td><span class="text-mono">{{ p.purchase_id or '-' }}</span></td>
-                <td>{{ p.date.strftime('%d/%m/%Y') if p.date and p.date.strftime else '-' }}</td>
+                <td><span class="text-mono">{{ p.po_number or '-' }}</span></td>
+                <td>{{ p.created_at.strftime('%d/%m/%Y') if p.created_at and p.created_at.strftime else '-' }}</td>
+                <td>
+                    <span class="badge badge-platform">{{ p.status }}</span>
+                </td>
                 <td>{{ p.vendor_name }}</td>
                 <td>{{ p.item }}</td>
                 <td class="text-right">{{ p.quantity }}</td>
-                <td class="text-right">{{ "%.2f"|format(p.unit_cost) }}</td>
                 <td class="text-right text-bold">{{ "%.2f"|format(p.total_cost) }}</td>
-                <td class="text-muted">{{ p.notes or '-' }}</td>
+                <td>
+                    {% if p.payment_id %}<small class="text-muted">Txn: {{ p.payment_id }}</small>{% endif %}
+                </td>
+                <td class="actions-cell">
+                    {% if p.status == 'Draft' %}
+                    <form method="POST" action="{{ url_for('purchase.purchase_sent', po_id=p.id) }}" style="display:inline;">
+                        <button type="submit" class="btn btn-xs btn-primary">Mark Sent</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="display:inline;">
+                        <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--danger)">Cancel</button>
+                    </form>
+                    {% elif p.status == 'Sent' %}
+                    <form method="POST" action="{{ url_for('purchase.purchase_received', po_id=p.id) }}" style="display:inline;">
+                        <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--success); border-color:var(--success);" onclick="return confirm('Receive items and increment inventory?')">Receive It</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="display:inline;">
+                        <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--danger)">Cancel</button>
+                    </form>
+                    {% elif p.status == 'Received' %}
+                    <button type="button" class="btn btn-xs btn-ghost" style="color:var(--primary); border-color:var(--primary);" onclick="openPayModal('{{ p.id }}', '{{ p.po_number }}')">Pay Vendor</button>
+                    <form method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="display:inline;">
+                        <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--danger)">Cancel</button>
+                    </form>
+                    {% elif p.status == 'Cancelled' %}
+                    <span class="text-danger text-bold" style="font-size: 0.8em; margin-left:1rem; display:block; margin-bottom:0.5rem;">CANCELLED</span>
+                    <button type="button" class="btn btn-xs btn-ghost" style="color:var(--primary); border-color:var(--primary); width: 100%;" onclick="openRevertModal('{{ p.id }}', '{{ p.po_number }}')">Revert to Paid</button>
+                    {% endif %}
+                </td>
             </tr>
             {% endfor %}
             {% if not purchases %}
-            <tr><td colspan="7" class="empty-state">No purchases recorded. Click "+ Log Purchase" to add one.</td></tr>
+            <tr><td colspan="9" class="empty-state">No Purchase Orders recorded. Click "+ New PO" to add one.</td></tr>
             {% endif %}
         </tbody>
     </table>
 </div>
+
+
+<!-- Modal: Mark Paid -->
+<div class="modal-overlay hidden" id="payModal">
+    <div class="modal" style="max-width:400px;">
+        <div class="modal-header">
+            <h3>Pay Vendor</h3>
+            <button class="modal-close" onclick="closeModal('payModal')">×</button>
+        </div>
+        <p class="text-muted mb-4" style="font-size:0.85em; margin-bottom:1rem;">Marking this PO as Paid will log a cash outflow.</p>
+        <form id="payForm" method="POST" action="">
+            <div class="form-group" style="margin-bottom:1.5rem;">
+                <label>Payment ID / UTR *</label>
+                <input type="text" name="payment_id" required placeholder="e.g. HDFC-1002">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Settle Payment</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Revert to Paid -->
+<div class="modal-overlay hidden" id="revertModal">
+    <div class="modal" style="max-width:400px;">
+        <div class="modal-header">
+            <h3>Revert to Paid</h3>
+            <button class="modal-close" onclick="closeModal('revertModal')">×</button>
+        </div>
+        <p class="text-muted mb-4" style="font-size:0.85em; margin-bottom:1rem;">Forcefully restore this cancelled PO. This will recreate the inventory and log the cash outflow.</p>
+        <form id="revertForm" method="POST" action="">
+            <div class="form-group" style="margin-bottom:1.5rem;">
+                <label>Payment ID / Cash Payment *</label>
+                <input type="text" name="payment_id" required placeholder="e.g. HDFC-1002">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Force Settle & Revert</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -114,6 +182,17 @@ function calcTotal() {
     const qty = parseFloat(document.getElementById('p-qty').value || 0);
     const cost = parseFloat(document.getElementById('p-cost').value || 0);
     document.getElementById('purchase-total-display').textContent = '₹ ' + (qty * cost).toFixed(2);
+}
+
+
+function openPayModal(id, poId) {
+    document.getElementById('payForm').action = "/purchases/paid/" + id;
+    document.getElementById('payModal').classList.remove('hidden');
+}
+
+function openRevertModal(id, poId) {
+    document.getElementById('revertForm').action = "/purchases/revert_to_paid/" + id;
+    document.getElementById('revertModal').classList.remove('hidden');
 }
 </script>
 {% endblock %}
