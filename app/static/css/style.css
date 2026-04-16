@@ -617,7 +617,10 @@ body {
 .badge-delivered { background: #ecfdf5; color: #065f46; }
 .badge-rto { background: #fef2f2; color: #991b1b; }
 .badge-customer-return { background: #fef2f2; color: #991b1b; }
+.badge-returned { background: #fef2f2; color: #991b1b; }
 .badge-exchange { background: #f5f3ff; color: #6d28d9; }
+.badge-cancelled { background: #f3f4f6; color: #6b7280; }
+.badge-settled { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
 
 /* ── Modal ─────────────────────────────────────────────────── */
 .modal-overlay {

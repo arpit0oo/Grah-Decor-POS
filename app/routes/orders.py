@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from datetime import datetime
 from app.services.order_service import (
     get_all_orders, add_order, update_order, delete_order,
-    PLATFORMS, STATUSES, REVIEWS
+    PLATFORMS, STATUSES, REVIEWS, TERMINAL_STATUSES
 )
 from app.services.inventory_service import get_all_ready_stock
 
@@ -106,6 +106,16 @@ def order_add():
 
 @orders_bp.route('/edit/<doc_id>', methods=['POST'])
 def order_edit(doc_id):
+    # Guard: block edits on terminal orders
+    from app import get_db
+    db = get_db()
+    doc = db.collection('orders').document(doc_id).get()
+    if doc.exists:
+        current_status = doc.to_dict().get('status', '')
+        if current_status in TERMINAL_STATUSES:
+            flash(f'Cannot edit a {current_status} order. It is locked.', 'error')
+            return redirect(url_for('orders.orders_list'))
+
     order_items = parse_order_items(request.form)
     
     data = {
