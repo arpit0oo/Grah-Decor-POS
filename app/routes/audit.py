@@ -27,13 +27,13 @@ def audit_new():
 @audit_bp.route('/finalize', methods=['POST'])
 def audit_finalize():
     """Process and save a completed audit."""
-    doc_ids     = request.form.getlist('doc_id[]')
-    names       = request.form.getlist('name[]')
-    units       = request.form.getlist('unit[]')
-    prices      = request.form.getlist('price[]')
-    system_qtys = request.form.getlist('system_qty[]')
-    actual_qtys = request.form.getlist('actual_qty[]')
-    notes       = request.form.get('notes', '').strip()
+    doc_ids        = request.form.getlist('doc_id[]')
+    names          = request.form.getlist('name[]')
+    units          = request.form.getlist('unit[]')
+    prices         = request.form.getlist('price[]')
+    opening_stocks = request.form.getlist('opening_stock[]')
+    purchased_qtys = request.form.getlist('purchased[]')
+    notes          = request.form.get('notes', '').strip()
 
     if not doc_ids:
         flash('No items to audit.', 'error')
@@ -42,16 +42,16 @@ def audit_finalize():
     items_data = []
     for i, doc_id in enumerate(doc_ids):
         try:
-            actual = float(actual_qtys[i])
+            purchased_val = float(purchased_qtys[i])
         except (ValueError, IndexError):
-            actual = 0.0
+            purchased_val = 0.0
         items_data.append({
-            'doc_id':     doc_id,
-            'name':       names[i] if i < len(names) else '',
-            'unit':       units[i] if i < len(units) else 'pcs',
-            'price':      float(prices[i]) if i < len(prices) else 0,
-            'system_qty': float(system_qtys[i]) if i < len(system_qtys) else 0,
-            'actual_qty': actual,
+            'doc_id':        doc_id,
+            'name':          names[i] if i < len(names) else '',
+            'unit':          units[i] if i < len(units) else 'pcs',
+            'price':         float(prices[i]) if i < len(prices) else 0,
+            'opening_stock': float(opening_stocks[i]) if i < len(opening_stocks) else 0,
+            'purchased':     purchased_val,
         })
 
     finalize_audit(items_data, notes=notes)

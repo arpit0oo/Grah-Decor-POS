@@ -50,23 +50,23 @@ def finalize_audit(items_data, notes=''):
     total_utilized_value = 0.0
 
     for item in items_data:
-        system_qty  = float(item.get('system_qty', 0))
-        actual_qty  = float(item.get('actual_qty', 0))
-        unit_cost   = float(item.get('price', 0))
-        utilized    = system_qty - actual_qty          # material consumed since last audit
-        variance    = actual_qty - system_qty          # raw difference (neg = consumed)
+        opening_stock = float(item.get('opening_stock', 0))
+        purchased     = float(item.get('purchased', 0))
+        unit_cost     = float(item.get('price', 0))
+        utilized      = opening_stock - purchased          # material consumed
+        closing_stock = purchased - opening_stock          # difference (variance) 
         utilized_cost = utilized * unit_cost
 
-        total_utilized_value += max(0, utilized_cost)  # only count positive consumption
+        total_utilized_value += max(0, utilized_cost)
 
         audit_items.append({
             'name':          item.get('name', ''),
             'unit':          item.get('unit', 'pcs'),
             'unit_cost':     unit_cost,
-            'system_qty':    system_qty,
-            'actual_qty':    actual_qty,
+            'opening_stock': opening_stock,
+            'purchased':     purchased,
+            'closing_stock': closing_stock,
             'utilized':      utilized,
-            'variance':      variance,
             'utilized_cost': utilized_cost,
         })
 
@@ -75,10 +75,10 @@ def finalize_audit(items_data, notes=''):
         if doc_id:
             from app.services.inventory_service import log_inventory_transaction
             db.collection('raw_materials').document(doc_id).update({
-                'quantity':   int(actual_qty),
+                'quantity':   int(purchased),
                 'updated_at': now,
             })
-            delta = actual_qty - system_qty
+            delta = purchased - opening_stock
             if delta != 0:
                 name = item.get('name', '')
                 reason = f"Stock Audit adjustment"

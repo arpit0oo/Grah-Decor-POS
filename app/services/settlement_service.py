@@ -23,7 +23,7 @@ def get_unsettled_orders(platform=None):
     return results
 
 
-def create_payment_settlement(platform, utr_number, amount_received, order_ids, settlement_date, notes):
+def create_payment_settlement(platform, utr_number, amount_received, order_ids, settlement_date, notes, platform_deductions=0):
     """Batch-settle selected orders: save snapshot to settlement_batches, mark orders as Settled, log cashbook inflow."""
     if not order_ids:
         return None
@@ -54,16 +54,20 @@ def create_payment_settlement(platform, utr_number, amount_received, order_ids, 
                 'bank_settlement': data.get('bank_settlement', 0),
             })
 
+    gross_amount = float(amount_received)
+    deductions   = float(platform_deductions) if platform_deductions else 0.0
+
     batch_doc = {
-        'platform':         platform,
-        'utr_number':       utr_number,
-        'amount_received':  float(amount_received),
-        'order_count':      len(order_ids),
-        'order_ids':        order_ids,
-        'orders_snapshot':  orders_snapshot,
-        'settlement_date':  settlement_dt,
-        'notes':            notes,
-        'created_at':       now,
+        'platform':            platform,
+        'utr_number':          utr_number,
+        'amount_received':     gross_amount,
+        'platform_deductions': deductions,
+        'order_count':         len(order_ids),
+        'order_ids':           order_ids,
+        'orders_snapshot':     orders_snapshot,
+        'settlement_date':     settlement_dt,
+        'notes':               notes,
+        'created_at':          now,
     }
     
     _, doc_ref = db.collection('settlement_batches').add(batch_doc)
@@ -72,20 +76,25 @@ def create_payment_settlement(platform, utr_number, amount_received, order_ids, 
     batch = db.batch()
     for o_id in order_ids:
         order_ref = db.collection('orders').document(o_id)
+        # Read existing history for this order
+        snap = order_ref.get()
+        history = snap.to_dict().get('status_history', []) if snap.exists else []
+        history.append({'status': 'Settled', 'timestamp': now.isoformat()})
         batch.update(order_ref, {
             'payment_settled': True,
             'settlement_batch_id': utr_number,
             'status': 'Settled',
+            'status_history': history,
             'updated_at': now,
         })
     batch.commit()
     
-    # Single cashbook inflow entry
+    # Cashbook entry — log the actual received amount as-is (source of truth)
     add_cashbook_entry(
         entry_type='inflow',
         category='Settlement',
-        description=f"Platform Payout ({platform}) - UTR: {utr_number}",
-        amount=float(amount_received),
+        description=f"Platform Payout ({platform}) - UTR: {utr_number}" + (f" | Penalty tracked: ₹{deductions:.0f}" if deductions else ""),
+        amount=gross_amount,
         reference_id=doc_ref.id
     )
     
@@ -136,7 +145,12 @@ def process_order_return(order_id, return_type, penalty_amount, item_condition):
     
     if return_type == 'customer_return' and penalty_amount:
         update['penalty_amount'] = float(penalty_amount)
-    
+
+    # Append to status_history
+    existing_history = order_data.get('status_history', [])
+    existing_history.append({'status': new_status, 'timestamp': now.isoformat()})
+    update['status_history'] = existing_history
+
     db.collection('orders').document(order_id).update(update)
     
     # Restock items if good condition
@@ -153,3 +167,20 @@ def process_order_return(order_id, return_type, penalty_amount, item_condition):
                 adjust_ready_stock_qty(product, color, qty, 0, reason=reason, ref_id=order_id)
     
     return True
+
+
+def get_returned_orders():
+    """Fetch all orders with status RTO or Returned, newest first."""
+    db = get_db()
+    docs = db.collection('orders').where(
+        filter=FieldFilter("status", "in", ["RTO", "Returned"])
+    ).stream()
+    results = []
+    for d in docs:
+        entry = {'id': d.id, **d.to_dict()}
+        results.append(entry)
+    results.sort(
+        key=lambda x: x.get('updated_at') or x.get('created_at') or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True
+    )
+    return results

@@ -89,6 +89,7 @@ def add_order(data):
         'status': status,
         'reviews': data.get('reviews', ''),
         'created_at': now,
+        'status_history': [{'status': status, 'timestamp': now.isoformat()}],
     }
 
     _, doc_ref = db.collection('orders').add(order)
@@ -152,6 +153,14 @@ def update_order(doc_id, data):
             pass
 
     update_data['updated_at'] = datetime.now(timezone.utc)
+
+    # Append to status_history if status changed
+    new_status_val = update_data.get('status')
+    if new_status_val and new_status_val != old_data.get('status'):
+        existing_history = old_data.get('status_history', [])
+        existing_history.append({'status': new_status_val, 'timestamp': update_data['updated_at'].isoformat()})
+        update_data['status_history'] = existing_history
+
     db.collection('orders').document(doc_id).update(update_data)
 
 

@@ -8,16 +8,18 @@
 
 <!-- Tabs -->
 <div class="tabs">
-    <button class="tab {% if active_tab != 'logs' %}active{% endif %}" id="btn-tab-unsettled"
+    <button class="tab {% if active_tab not in ['logs','returns'] %}active{% endif %}" id="btn-tab-unsettled"
         onclick="switchSettlementTab('unsettled')">Payment Pending ({{ orders|length }})</button>
     <button class="tab {% if active_tab == 'logs' %}active{% endif %}" id="btn-tab-logs"
         onclick="switchSettlementTab('logs')">Settlement Logs ({{ batches|length }})</button>
+    <button class="tab {% if active_tab == 'returns' %}active{% endif %}" id="btn-tab-returns"
+        onclick="switchSettlementTab('returns')">Returns &amp; RTOs ({{ returned_orders|length }})</button>
 </div>
 
 {# ═══════════════════════════════════════════════════════════
 TAB 1: UNSETTLED ORDERS
 ═══════════════════════════════════════════════════════════ #}
-<div id="tab-unsettled" class="tab-content {% if active_tab == 'logs' %}hidden{% endif %}">
+<div id="tab-unsettled" class="tab-content {% if active_tab not in ['logs','returns'] %}{% else %}hidden{% endif %}">
 
     <div class="filter-bar">
         <form method="get" action="{{ url_for('settlements.settlements_list') }}" class="filter-form">
@@ -127,6 +129,19 @@ TAB 1: UNSETTLED ORDERS
                     <input type="number" name="amount_received" step="0.01" min="0" required id="amountReceivedInput">
                 </div>
 
+                <!-- Optional Deductions (tracking only) -->
+                <div style="margin-bottom: 0.75rem;">
+                    <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-size:0.85rem; color:var(--text-secondary);">
+                        <input type="checkbox" id="deductionsToggle" onchange="toggleDeductions(this)" style="margin:0;">
+                        Apply Platform Deductions / Penalties
+                    </label>
+                    <div id="deductionsPanel" class="hidden" style="margin-top:0.5rem; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:0.65rem 0.75rem;">
+                        <small class="text-muted" style="display:block; margin-bottom:0.4rem;">Saved for records only — does not affect cashbook amount.</small>
+                        <input type="number" name="platform_deductions" step="0.01" min="0" value="0" id="deductionsInput"
+                            placeholder="₹ Penalty / TDS amount" style="width:100%;">
+                    </div>
+                </div>
+
                 <div class="form-group" style="margin-bottom: 1.5rem;">
                     <label>Notes (Optional)</label>
                     <input type="text" name="notes" placeholder="Any deductions/remarks?">
@@ -219,6 +234,72 @@ TAB 2: SETTLEMENT LOGS (ACCORDION)
 
 
 {# ═══════════════════════════════════════════════════════════
+   TAB 3: RETURNS & RTOs
+═══════════════════════════════════════════════════════════ #}
+<div id="tab-returns" class="tab-content {% if active_tab != 'returns' %}hidden{% endif %}">
+
+    <!-- Summary Metric Cards -->
+    <div class="summary-row" style="margin-bottom:1.5rem;">
+        <div class="summary-item" style="border-left:4px solid var(--danger);">
+            <span class="summary-label">Total Inventory Lost (Damaged)</span>
+            <span class="summary-value text-danger">{{ total_damaged }} item{{ 's' if total_damaged != 1 else '' }}</span>
+        </div>
+        <div class="summary-item" style="border-left:4px solid var(--warning);">
+            <span class="summary-label">Total Platform Penalties</span>
+            <span class="summary-value" style="color:var(--warning);">₹ {{ "%.2f"|format(total_penalties) }}</span>
+        </div>
+    </div>
+
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Order ID</th>
+                    <th>Platform</th>
+                    <th>Return Type</th>
+                    <th>Condition</th>
+                    <th class="text-right">Penalty ₹</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in returned_orders %}
+                {% set ret_date = order.updated_at or order.date %}
+                <tr>
+                    <td>{{ ret_date.strftime('%d/%m/%Y') if ret_date and ret_date.strftime else '-' }}</td>
+                    <td class="text-mono">{{ order.order_id or '-' }}</td>
+                    <td><span class="badge badge-platform">{{ order.platform }}</span></td>
+                    <td>
+                        {% if order.status == 'RTO' %}
+                        <span class="badge badge-rto">RTO</span>
+                        {% else %}
+                        <span class="badge badge-returned">Customer Return</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if order.item_condition == 'restock' %}
+                        <span style="color:var(--success); font-weight:500;">✓ Restocked</span>
+                        {% elif order.item_condition == 'damaged' %}
+                        <span style="color:var(--danger); font-weight:500;">✗ Damaged</span>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right text-bold">{{ "%.2f"|format(order.penalty_amount|default(0)) }}</td>
+                </tr>
+                {% endfor %}
+                {% if not returned_orders %}
+                <tr>
+                    <td colspan="6" class="empty-state">No returns or RTOs recorded yet.</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+{# ═══════════════════════════════════════════════════════════
 PROCESS RETURN MODAL
 ═══════════════════════════════════════════════════════════ #}
 <div class="modal-overlay hidden" id="returnModal">
@@ -272,10 +353,10 @@ PROCESS RETURN MODAL
 
     // ── Tab Switching ──
     function switchSettlementTab(tab) {
-        document.getElementById('tab-unsettled').classList.toggle('hidden', tab !== 'unsettled');
-        document.getElementById('tab-logs').classList.toggle('hidden', tab !== 'logs');
-        document.getElementById('btn-tab-unsettled').classList.toggle('active', tab === 'unsettled');
-        document.getElementById('btn-tab-logs').classList.toggle('active', tab === 'logs');
+        ['unsettled', 'logs', 'returns'].forEach(t => {
+            document.getElementById('tab-' + t)?.classList.toggle('hidden', t !== tab);
+            document.getElementById('btn-tab-' + t)?.classList.toggle('active', t === tab);
+        });
     }
 
     // ── Settlement Selection ──
@@ -305,6 +386,13 @@ PROCESS RETURN MODAL
         }
 
         document.getElementById('submitBtn').disabled = checkedBoxes.length === 0;
+    }
+
+    function toggleDeductions(cb) {
+        document.getElementById('deductionsPanel').classList.toggle('hidden', !cb.checked);
+        if (!cb.checked) {
+            document.getElementById('deductionsInput').value = '0';
+        }
     }
 
     // ── Process Return Modal ──
