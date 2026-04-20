@@ -27,7 +27,7 @@
 <!-- Add Order Form -->
 <div class="form-card hidden" id="orderForm">
     <h3>Log New Order</h3>
-    <form method="POST" action="{{ url_for('orders.order_add') }}">
+    <form autocomplete="off" method="POST" action="{{ url_for('orders.order_add') }}">
         <!-- Section 1: Order Identity -->
         <div class="form-section">
             <div class="form-section-title">Order Identity</div>
@@ -134,7 +134,7 @@
 
 <!-- Filters -->
 <div class="filter-bar">
-    <form method="GET" action="{{ url_for('orders.orders_list') }}" class="filter-form">
+    <form autocomplete="off" method="GET" action="{{ url_for('orders.orders_list') }}" class="filter-form">
         <input type="date" name="date_from" value="{{ filter_date_from }}" placeholder="From">
         <input type="date" name="date_to" value="{{ filter_date_to }}" placeholder="To">
         <select name="platform">
@@ -171,7 +171,7 @@
 </div>
 
 <!-- Orders Table -->
-<form id="bulkForm" method="POST" action="{{ url_for('orders.orders_bulk_action') }}">
+<form autocomplete="off" id="bulkForm" method="POST" action="{{ url_for('orders.orders_bulk_action') }}">
     <input type="hidden" name="action" id="bulkActionInput" value="">
     <div class="table-wrapper">
         <table class="data-table" id="ordersTable">
@@ -333,7 +333,7 @@
             <h3>Edit Order</h3>
             <button class="modal-close" onclick="closeModal('editModal')">×</button>
         </div>
-        <form method="POST" id="editForm">
+        <form autocomplete="off" method="POST" id="editForm">
             <!-- Section 1: Order Identity -->
             <div class="form-section">
                 <div class="form-section-title">Order Identity</div>

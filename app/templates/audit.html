@@ -78,7 +78,7 @@
     The system will calculate what was consumed since the last checkpoint and update live quantities automatically.
 </div>
 
-<form method="POST" action="{{ url_for('audit.audit_finalize') }}">
+<form autocomplete="off" method="POST" action="{{ url_for('audit.audit_finalize') }}">
     <div class="table-wrapper">
         <table class="data-table">
             <thead>

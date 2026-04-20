@@ -10,8 +10,8 @@
 <!-- Add Purchase Form -->
 <div class="form-card hidden" id="purchaseForm">
     <h3>Draft Purchase Order</h3>
-    <form method="POST" action="{{ url_for('purchase.purchase_add') }}">
-        <div class="form-grid form-grid-4">
+    <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_add') }}">
+        <div class="form-grid form-grid-2">
             <div class="form-group">
                 <label for="p-vendor">Vendor Name *</label>
                 <input type="text" id="p-vendor" name="vendor_name" required placeholder="Supplier name">
@@ -53,7 +53,7 @@
 
 <!-- Filters -->
 <div class="filter-bar">
-    <form method="GET" action="{{ url_for('purchase.purchase_list') }}" class="filter-form">
+    <form autocomplete="off" method="GET" action="{{ url_for('purchase.purchase_list') }}" class="filter-form">
         <input type="date" name="date_from" value="{{ date_from }}" placeholder="From">
         <input type="date" name="date_to" value="{{ date_to }}" placeholder="To">
         <button type="submit" class="btn btn-sm">Filter</button>
@@ -67,9 +67,9 @@
         <span class="summary-label">Total Valid POs</span>
         <span class="summary-value">{{ purchases|length }}</span>
     </div>
-    <div class="summary-item summary-danger">
+    <div class="summary-item">
         <span class="summary-label">Gross Value</span>
-        <span class="summary-value">₹ {{ "%.2f"|format(total_spent) }}</span>
+        <span class="summary-value text-primary">₹ {{ "%.2f"|format(total_spent) }}</span>
     </div>
 </div>
 
@@ -95,7 +95,19 @@
                 <td><span class="text-mono">{{ p.po_number or '-' }}</span></td>
                 <td>{{ p.created_at.strftime('%d/%m/%Y') if p.created_at and p.created_at.strftime else '-' }}</td>
                 <td>
-                    <span class="badge badge-platform">{{ p.status }}</span>
+                    {% if p.status == 'Draft' %}
+                        <span class="badge" style="background:#fef3c7; color:#92400e; border:1px solid #fde68a;">{{ p.status }}</span>
+                    {% elif p.status == 'Sent' %}
+                        <span class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">{{ p.status }}</span>
+                    {% elif p.status == 'Received' %}
+                        <span class="badge bg-success">{{ p.status }}</span>
+                    {% elif p.status == 'Paid' %}
+                        <span class="badge bg-primary">{{ p.status }}</span>
+                    {% elif p.status == 'Cancelled' %}
+                        <span class="badge bg-danger">{{ p.status }}</span>
+                    {% else %}
+                        <span class="badge">{{ p.status }}</span>
+                    {% endif %}
                 </td>
                 <td>{{ p.vendor_name }}</td>
                 <td>{{ p.item }}</td>
@@ -107,22 +119,22 @@
                 <td class="actions-cell">
                     <div style="display:flex; gap:0.5rem; justify-content:flex-end;">
                         {% if p.status == 'Draft' %}
-                        <form method="POST" action="{{ url_for('purchase.purchase_sent', po_id=p.id) }}" style="margin:0;">
+                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_sent', po_id=p.id) }}" style="margin:0;">
                             <button type="submit" class="btn btn-xs btn-primary">Mark Sent</button>
                         </form>
-                        <form method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0;">
+                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0;">
                             <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--danger)">Cancel</button>
                         </form>
                         {% elif p.status == 'Sent' %}
-                        <form method="POST" action="{{ url_for('purchase.purchase_received', po_id=p.id) }}" style="margin:0;">
+                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_received', po_id=p.id) }}" style="margin:0;">
                             <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--success); border-color:var(--success);" onclick="return confirm('Receive items and increment inventory?')">Receive</button>
                         </form>
-                        <form method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0;">
+                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0;">
                             <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--danger)">Cancel</button>
                         </form>
                         {% elif p.status == 'Received' %}
                         <button type="button" class="btn btn-xs btn-ghost" style="color:var(--primary); border-color:var(--primary);" onclick="openPayModal('{{ p.id }}', '{{ p.po_number }}')">Pay</button>
-                        <form method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0;">
+                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0;">
                             <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--danger)">Cancel</button>
                         </form>
                         {% elif p.status == 'Cancelled' %}
@@ -148,7 +160,7 @@
             <button class="modal-close" onclick="closeModal('payModal')">×</button>
         </div>
         <p class="text-muted mb-4" style="font-size:0.85em; margin-bottom:1rem;">Marking this PO as Paid will log a cash outflow.</p>
-        <form id="payForm" method="POST" action="">
+        <form autocomplete="off" id="payForm" method="POST" action="">
             <div class="form-group" style="margin-bottom:1.5rem;">
                 <label>Payment ID / UTR *</label>
                 <input type="text" name="payment_id" required placeholder="e.g. HDFC-1002">
