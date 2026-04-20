@@ -34,7 +34,7 @@
             <div class="form-grid form-grid-3">
                 <div class="form-group">
                     <label for="add-date">Date</label>
-                    <input type="date" id="add-date" name="date" value="{{ today }}" required>
+                    <input type="date" id="add-date" name="date" required>
                 </div>
                 <div class="form-group">
                     <label for="add-order-id">Order ID</label>
@@ -296,10 +296,25 @@
             </table>
         </div>
         
-        <div style="display: flex; justify-content: flex-end;">
-            <div class="settlement-display" style="min-width: 220px; padding: 0.6rem 1rem;">
-                <span style="font-size:0.75em;">Items Total</span>
-                <strong id="view-total-display" style="font-size:1.15em;">₹ 0.00</strong>
+        <!-- Financial Summary -->
+        <div style="margin-top:0.5rem; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;">
+            <div style="background:#f8f9fa; padding:0.5rem 1rem; font-size:0.72em; text-transform:uppercase; letter-spacing:0.06em; font-weight:600; color:var(--text-secondary); border-bottom:1px solid var(--border);">Financial Summary</div>
+            <div style="padding:0.75rem 1rem;">
+                <div id="view-fin-rows" style="display:grid; grid-template-columns:1fr auto; gap:0.3rem 1.5rem; font-size:0.9em;">
+                    <!-- populated by JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Return Details (conditional) -->
+        <div id="view-return-section" class="hidden" style="margin-top:0.75rem; border:1px solid #fecaca; border-radius:var(--radius); overflow:hidden;">
+            <div style="background:#fef2f2; padding:0.5rem 1rem; font-size:0.72em; text-transform:uppercase; letter-spacing:0.06em; font-weight:600; color:#991b1b; border-bottom:1px solid #fecaca;">Return Details</div>
+            <div style="padding:0.75rem 1rem;">
+                <div style="display:grid; grid-template-columns:1fr auto; gap:0.3rem 1.5rem; font-size:0.9em;">
+                    <span style="color:var(--text-secondary);">Return Type</span>     <span id="view-return-type" style="font-weight:600;"></span>
+                    <span style="color:var(--text-secondary);">Item Condition</span>  <span id="view-return-condition" style="font-weight:600;"></span>
+                    <span style="color:#991b1b;">Penalty Amount</span>               <span id="view-return-penalty" style="font-weight:700; color:#991b1b;"></span>
+                </div>
             </div>
         </div>
 
@@ -560,34 +575,35 @@
         }
     }
 
+    /* ── helpers ── */
+    function fmt(n) { return '₹\u00a0' + (parseFloat(n) || 0).toFixed(2); }
+    function finRow(label, value, style='') {
+        return `<span style="color:var(--text-secondary);">${label}</span><span style="${style}">${value}</span>`;
+    }
+
     function openViewModalFromBtn(btn) {
         const data = JSON.parse(btn.getAttribute('data-order'));
-        
+
+        // ── Header fields ──
         let dateStr = '-';
         if (data.date) {
-            try {
-                let d = new Date(data.date);
-                if (!isNaN(d)) dateStr = d.toLocaleDateString('en-GB');
-            } catch (e) { }
+            try { const d = new Date(data.date); if (!isNaN(d)) dateStr = d.toLocaleDateString('en-GB'); } catch(e){}
         }
-        
-        document.getElementById('view-date').textContent = dateStr;
-        document.getElementById('view-order-id').textContent = data.order_id ? `#${data.order_id}` : '';
-        document.getElementById('view-customer').textContent = data.customer || '-';
-        document.getElementById('view-platform').textContent = data.platform || '-';
-        
+        document.getElementById('view-date').textContent      = dateStr;
+        document.getElementById('view-order-id').textContent  = data.order_id ? `#${data.order_id}` : '';
+        document.getElementById('view-customer').textContent  = data.customer || '-';
+        document.getElementById('view-platform').textContent  = data.platform || '-';
+
+        // ── Items table ──
         const tbody = document.getElementById('view-order-items-body');
         tbody.innerHTML = '';
-        
-        let grandTotal = 0;
-        
+        let sellingPrice = 0;
         if (data.order_items && data.order_items.length > 0) {
             data.order_items.forEach(item => {
                 const qty = item.quantity || 1;
                 const price = item.price || 0;
                 const lineTotal = qty * price;
-                grandTotal += lineTotal;
-                
+                sellingPrice += lineTotal;
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${item.product || '-'}</td>
@@ -601,24 +617,46 @@
         } else {
             tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No items logged.</td></tr>';
         }
-        
-        document.getElementById('view-total-display').textContent = '₹ ' + grandTotal.toFixed(2);
 
-        // ── Build Timeline ──
+        // ── Financial Summary ──
+        const shipping       = parseFloat(data.shipping || 0);
+        const tax            = parseFloat(data.tax || 0);
+        const mktFee         = parseFloat(data.marketplace_fee || data.mkt_fee || 0);
+        const netSettlement  = parseFloat(data.bank_settlement || data.settlement_amount || (sellingPrice - shipping - tax - mktFee));
+        const isTerminalPaid = ['Settled'].includes(data.status);
+
+        const finContainer = document.getElementById('view-fin-rows');
+        finContainer.innerHTML = [
+            finRow('Selling Price',  fmt(sellingPrice)),
+            shipping  ? finRow('− Shipping',       fmt(shipping),  'color:#ef4444;') : '',
+            tax       ? finRow('− Tax / GST',       fmt(tax),       'color:#ef4444;') : '',
+            mktFee    ? finRow('− Marketplace Fee', fmt(mktFee),    'color:#ef4444;') : '',
+            `<span style="color:var(--text-secondary); border-top:1px solid var(--border); padding-top:0.4rem; margin-top:0.2rem;">Net Settlement</span>
+             <span style="font-weight:800; font-size:1.05em; border-top:1px solid var(--border); padding-top:0.4rem; margin-top:0.2rem; color:${netSettlement >= 0 ? '#059669' : '#ef4444'};">${fmt(netSettlement)}</span>`,
+            isTerminalPaid ? finRow('Status', '<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:999px;font-size:0.82em;font-weight:600;">Settled ✓</span>') : '',
+        ].filter(Boolean).join('');
+
+        // ── Return Details (conditional) ──
+        const returnSection = document.getElementById('view-return-section');
+        if (['Returned', 'RTO'].includes(data.status)) {
+            returnSection.classList.remove('hidden');
+            const rtMap = { rto: 'RTO (Return to Origin)', customer_return: 'Customer Return' };
+            const condMap = { restock: '✓ Restocked to Inventory', damaged: '✗ Damaged — Not Restocked' };
+            document.getElementById('view-return-type').textContent      = rtMap[data.return_type] || data.status;
+            document.getElementById('view-return-condition').textContent  = condMap[data.item_condition] || '—';
+            document.getElementById('view-return-penalty').textContent    = data.penalty_amount ? fmt(data.penalty_amount) : '₹ 0.00 (None)';
+        } else {
+            returnSection.classList.add('hidden');
+        }
+
+        // ── Timeline ──
         const history = data.status_history || [];
         const timeline = document.getElementById('view-timeline');
         timeline.innerHTML = '';
-
         const statusColors = {
-            'Pending':   '#f59e0b',
-            'Shipped':   '#3b82f6',
-            'Delivered': '#10b981',
-            'RTO':       '#ef4444',
-            'Returned':  '#ef4444',
-            'Cancelled': '#6b7280',
-            'Settled':   '#059669',
+            'Pending':'#f59e0b','Shipped':'#3b82f6','Delivered':'#10b981',
+            'RTO':'#ef4444','Returned':'#ef4444','Cancelled':'#6b7280','Settled':'#059669',
         };
-
         if (history.length === 0) {
             timeline.innerHTML = '<span class="text-muted" style="font-size:0.85em;">No status history available.</span>';
         } else {
@@ -631,8 +669,7 @@
                         dateLabel = d.toLocaleDateString('en-GB', {day:'2-digit',month:'short'}) + ' ' +
                                     d.toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit'});
                     }
-                } catch(e) {}
-
+                } catch(e){}
                 const node = document.createElement('div');
                 node.style.cssText = 'display:flex;align-items:center;flex-shrink:0;';
                 node.innerHTML = `
@@ -744,6 +781,9 @@
     
     document.addEventListener('DOMContentLoaded', () => {
         addOrderItemRow('add-order-items', 'add');
+        // Set default date to today
+        const addDate = document.getElementById('add-date');
+        if (addDate) addDate.valueAsDate = new Date();
     });
 </script>
 {% endblock %}

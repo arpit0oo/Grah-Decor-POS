@@ -30,19 +30,25 @@ def get_all_orders(date_from=None, date_to=None, platform=None, status=None):
     results = []
     for d in docs:
         entry = {'id': d.id, **d.to_dict()}
-        if date_from and entry.get('date'):
-            dt = entry['date']
-            if hasattr(dt, 'date') and dt.date() < date_from:
-                continue
-        if date_to and entry.get('date'):
-            dt = entry['date']
-            if hasattr(dt, 'date') and dt.date() > date_to:
-                continue
+        # Date filtering (simplified for performance)
+        if date_from or date_to:
+            dt = entry.get('date')
+            if dt and hasattr(dt, 'date'):
+                order_dt = dt.date()
+                if date_from and order_dt < date_from: continue
+                if date_to and order_dt > date_to: continue
+        
         if platform and entry.get('platform') != platform:
             continue
         if status and entry.get('status') != status:
             continue
         results.append(entry)
+
+    # Secondary sort in memory (Python's sort is stable)
+    # This keeps 'date' as primary (from Firestore) but sorts ties by 'created_at'
+    results.sort(key=lambda x: x.get('created_at').isoformat() if hasattr(x.get('created_at'), 'isoformat') else str(x.get('created_at', '')), reverse=True)
+    results.sort(key=lambda x: x.get('date').isoformat() if hasattr(x.get('date'), 'isoformat') else str(x.get('date', '')), reverse=True)
+    
     return results
 
 
@@ -168,24 +174,62 @@ def update_order(doc_id, data):
     old_items = old_data.get('order_items', [])
     new_status = update_data.get('status', old_status)
     new_items = update_data.get('order_items', old_items)
-    
-    old_items_sig = [(i.get('product'), i.get('color'), i.get('quantity')) for i in old_items]
-    new_items_sig = [(i.get('product'), i.get('color'), i.get('quantity')) for i in new_items]
-    
-    if old_status != new_status or old_items_sig != new_items_sig:
+
+    def get_zone(status, data_dict):
+        """
+        Zone 1 (Stock is Out): Pending, Shipped, Delivered, Settled, Returned (Damaged)
+        Zone 2 (Stock is In/Restocked): Cancelled, RTO, Returned (Restock)
+        """
+        if status in ['Cancelled', 'RTO']:
+            return 2
+        if status in ['Returned', 'Customer Return']:
+            condition = data_dict.get('item_condition', 'damaged')
+            return 2 if condition == 'restock' else 1
+        return 1
+
+    old_zone = get_zone(old_status, old_data)
+    new_zone = get_zone(new_status, {**old_data, **update_data})
+
+    old_items_sig = [(i.get('product'), i.get('color'), float(i.get('quantity', 1))) for i in old_items]
+    new_items_sig = [(i.get('product'), i.get('color'), float(i.get('quantity', 1))) for i in new_items]
+
+    # CASE A: Items changed. We must do a full reversal & re-apply to ensure numbers are strictly accurate.
+    # This is a rare administrative edit, so detailed logs are acceptable.
+    if old_items_sig != new_items_sig:
         old_qty_d, old_res_d = get_stock_deltas(old_status)
         for item in old_items:
             prod = item.get('product')
             qty = float(item.get('quantity', 1))
             if prod and (old_qty_d != 0 or old_res_d != 0):
-                adjust_ready_stock_qty(prod, item.get('color', ''), -old_qty_d * qty, -old_res_d * qty, reason=f"Update reversal ({old_status})", ref_id=doc_id)
+                adjust_ready_stock_qty(prod, item.get('color', ''), -old_qty_d * qty, -old_res_d * qty, reason=f"Order Edit Reversal", ref_id=doc_id)
 
         new_qty_d, new_res_d = get_stock_deltas(new_status)
         for item in new_items:
             prod = item.get('product')
             qty = float(item.get('quantity', 1))
             if prod and (new_qty_d != 0 or new_res_d != 0):
-                adjust_ready_stock_qty(prod, item.get('color', ''), new_qty_d * qty, new_res_d * qty, reason=f"Update apply ({new_status})", ref_id=doc_id)
+                adjust_ready_stock_qty(prod, item.get('color', ''), new_qty_d * qty, new_res_d * qty, reason=f"Order Edit Re-apply", ref_id=doc_id)
+
+    # CASE B: Items are exactly the same. Only status changed.
+    elif old_status != new_status:
+        if old_zone == new_zone:
+            # SAME ZONE: Do absolutely ZERO inventory math. (De-spamming)
+            # Example: Pending(Z1) -> Shipped(Z1) -> Delivered(Z1)
+            pass 
+        elif old_zone == 1 and new_zone == 2:
+            # ZONE 1 -> ZONE 2: Out -> In (Restocked)
+            for item in new_items:
+                prod = item.get('product')
+                qty = float(item.get('quantity', 1))
+                if prod:
+                    adjust_ready_stock_qty(prod, item.get('color', ''), qty, 0, reason=f"Restocked due to {new_status}", ref_id=doc_id)
+        elif old_zone == 2 and new_zone == 1:
+            # ZONE 2 -> ZONE 1: In -> Out (Reactivated)
+            for item in new_items:
+                prod = item.get('product')
+                qty = float(item.get('quantity', 1))
+                if prod:
+                    adjust_ready_stock_qty(prod, item.get('color', ''), -qty, 0, reason=f"Order Reactivated to {new_status}", ref_id=doc_id)
 
 
 def delete_order(doc_id):

@@ -7,7 +7,12 @@ from app import get_db
 
 def log_inventory_transaction(item_type, item_name, color, delta, reason, reference_id=''):
     """Log an IN/OUT movement. delta > 0 is IN, delta < 0 is OUT."""
-    if delta == 0:
+    try:
+        f_delta = float(delta or 0)
+    except (ValueError, TypeError):
+        f_delta = 0.0
+        
+    if f_delta == 0:
         return
     db = get_db()
     db.collection('inventory_log').add({
@@ -15,7 +20,7 @@ def log_inventory_transaction(item_type, item_name, color, delta, reason, refere
         'item_type': item_type,  # 'Raw Material' or 'Ready Stock'
         'item_name': item_name,
         'color': color,
-        'delta': float(delta),
+        'delta': f_delta,
         'reason': reason,
         'reference_id': reference_id
     })
@@ -44,12 +49,12 @@ def get_all_raw_materials():
 
 def add_raw_material(name, quantity, unit, price=0, reason='Manual Add'):
     db = get_db()
-    qty = int(float(quantity))
+    qty = int(float(quantity or 0))
     db.collection('raw_materials').add({
         'name': name,
         'quantity': qty,
         'unit': unit,
-        'price': float(price),
+        'price': float(price or 0),
         'updated_at': datetime.now(timezone.utc),
     })
     log_inventory_transaction('Raw Material', name, '', qty, reason)
@@ -58,7 +63,7 @@ def add_raw_material(name, quantity, unit, price=0, reason='Manual Add'):
 def update_raw_material(doc_id, data):
     db = get_db()
     if 'quantity' in data:
-        data['quantity'] = int(float(data['quantity']))
+        data['quantity'] = int(float(data['quantity'] or 0))
     data['updated_at'] = datetime.now(timezone.utc)
     db.collection('raw_materials').document(doc_id).update(data)
 
@@ -142,9 +147,9 @@ def add_ready_stock(name, color, quantity, cost_price, reason='Manual Add'):
     db.collection('ready_stock').add({
         'name': name,
         'color': color,
-        'quantity': float(quantity),
+        'quantity': float(quantity or 0),
         'reserved_quantity': 0,
-        'cost_price': float(cost_price),
+        'cost_price': float(cost_price or 0),
         'updated_at': datetime.now(timezone.utc),
     })
     log_inventory_transaction('Ready Stock', name, color, quantity, reason)
@@ -159,7 +164,8 @@ def update_ready_stock(doc_id, data):
 
     if 'quantity' in data:
         current_quantity = float(doc.to_dict().get('quantity', 0))
-        new_quantity = float(data['quantity'])
+        new_quantity = float(data['quantity'] or 0)
+        data['quantity'] = new_quantity
         if new_quantity < current_quantity:
             raise ValueError("Manual decrement of ready stock is not allowed.")
 
@@ -176,7 +182,7 @@ def delete_ready_stock(doc_id):
 def add_ready_stock_variant(parent_id, parent_name, variant_name, quantity):
     """Add a colour/variant child under an existing parent product."""
     db = get_db()
-    qty = int(float(quantity))
+    qty = int(float(quantity or 0))
     db.collection('ready_stock').add({
         'parent_id': parent_id,
         'name': parent_name,

@@ -7,7 +7,7 @@ from app.services.inventory_service import adjust_ready_stock_qty
 
 def get_unsettled_orders(platform=None):
     db = get_db()
-    query = db.collection('orders').where(filter=FieldFilter("status", "in", ["Shipped", "Delivered"]))
+    query = db.collection('orders').where(filter=FieldFilter("status", "==", "Delivered"))
     if platform:
         query = query.where(filter=FieldFilter("platform", "==", platform))
         
