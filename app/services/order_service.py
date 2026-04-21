@@ -128,6 +128,29 @@ def update_order(doc_id, data):
     old_data = doc.to_dict()
     
     update_data = {}
+
+    # ── Status State Machine: enforce forward-only transitions ──────────────────
+    ALLOWED_TRANSITIONS = {
+        'Pending':   ['Pending', 'Shipped', 'Cancelled'],
+        'Shipped':   ['Shipped', 'Delivered', 'Returned', 'RTO', 'Cancelled'],
+        'Delivered': ['Delivered', 'Settled', 'Returned'],
+        # Terminal states — locked forever
+        'Settled':   ['Settled'],
+        'Cancelled': ['Cancelled'],
+        'RTO':       ['RTO'],
+        'Returned':  ['Returned'],
+        'Customer Return': ['Customer Return'],
+    }
+
+    incoming_status = data.get('status')
+    if incoming_status:
+        current_status = old_data.get('status', 'Pending')
+        allowed = ALLOWED_TRANSITIONS.get(current_status, [current_status])
+        if incoming_status not in allowed:
+            # Silently ignore the illegal transition — just strip the status field
+            # so the rest of the edit (financials, customer info) still saves.
+            data = {k: v for k, v in data.items() if k != 'status'}
+
     for field in ['order_id', 'customer', 'number', 'platform', 'status', 'reviews']:
         if field in data:
             update_data[field] = data[field]
@@ -177,15 +200,22 @@ def update_order(doc_id, data):
 
     def get_zone(status, data_dict):
         """
-        Zone 1 (Stock is Out): Pending, Shipped, Delivered, Settled, Returned (Damaged)
-        Zone 2 (Stock is In/Restocked): Cancelled, RTO, Returned (Restock)
+        Zone A (Reserved):   Pending
+                             - Stock is on shelf, but reserved_qty is +1.
+        Zone B (Dispatched): Shipped, Delivered, Settled, Returned (Damaged)
+                             - Stock has physically left the warehouse.
+        Zone C (Restocked):  Cancelled, RTO, Returned (Restock)
+                             - Stock is back and fully available.
         """
+        if status == 'Pending':
+            return 'A'
         if status in ['Cancelled', 'RTO']:
-            return 2
+            return 'C'
         if status in ['Returned', 'Customer Return']:
             condition = data_dict.get('item_condition', 'damaged')
-            return 2 if condition == 'restock' else 1
-        return 1
+            return 'C' if condition == 'restock' else 'B'
+        # Shipped, Delivered, Settled → dispatched
+        return 'B'
 
     old_zone = get_zone(old_status, old_data)
     new_zone = get_zone(new_status, {**old_data, **update_data})
@@ -193,43 +223,93 @@ def update_order(doc_id, data):
     old_items_sig = [(i.get('product'), i.get('color'), float(i.get('quantity', 1))) for i in old_items]
     new_items_sig = [(i.get('product'), i.get('color'), float(i.get('quantity', 1))) for i in new_items]
 
-    # CASE A: Items changed. We must do a full reversal & re-apply to ensure numbers are strictly accurate.
-    # This is a rare administrative edit, so detailed logs are acceptable.
+    # CASE A: Items themselves changed → full reversal & re-apply (rare admin edit)
     if old_items_sig != new_items_sig:
         old_qty_d, old_res_d = get_stock_deltas(old_status)
         for item in old_items:
             prod = item.get('product')
             qty = float(item.get('quantity', 1))
             if prod and (old_qty_d != 0 or old_res_d != 0):
-                adjust_ready_stock_qty(prod, item.get('color', ''), -old_qty_d * qty, -old_res_d * qty, reason=f"Order Edit Reversal", ref_id=doc_id)
+                adjust_ready_stock_qty(prod, item.get('color', ''), -old_qty_d * qty, -old_res_d * qty, reason="Order Edit Reversal", ref_id=doc_id)
 
         new_qty_d, new_res_d = get_stock_deltas(new_status)
         for item in new_items:
             prod = item.get('product')
             qty = float(item.get('quantity', 1))
             if prod and (new_qty_d != 0 or new_res_d != 0):
-                adjust_ready_stock_qty(prod, item.get('color', ''), new_qty_d * qty, new_res_d * qty, reason=f"Order Edit Re-apply", ref_id=doc_id)
+                adjust_ready_stock_qty(prod, item.get('color', ''), new_qty_d * qty, new_res_d * qty, reason="Order Edit Re-apply", ref_id=doc_id)
 
-    # CASE B: Items are exactly the same. Only status changed.
+    # CASE B: Only status changed — apply precise zone-transition delta
     elif old_status != new_status:
         if old_zone == new_zone:
-            # SAME ZONE: Do absolutely ZERO inventory math. (De-spamming)
-            # Example: Pending(Z1) -> Shipped(Z1) -> Delivered(Z1)
-            pass 
-        elif old_zone == 1 and new_zone == 2:
-            # ZONE 1 -> ZONE 2: Out -> In (Restocked)
+            # Same zone → no inventory change (e.g. Shipped → Delivered)
+            pass
+
+        elif old_zone == 'A' and new_zone == 'B':
+            # Pending → Shipped/Delivered: release reservation AND deduct physical stock
+            o_id = update_data.get('order_id', old_data.get('order_id'))
+            prefix = f"Order {o_id} " if o_id else ""
             for item in new_items:
                 prod = item.get('product')
                 qty = float(item.get('quantity', 1))
                 if prod:
-                    adjust_ready_stock_qty(prod, item.get('color', ''), qty, 0, reason=f"Restocked due to {new_status}", ref_id=doc_id)
-        elif old_zone == 2 and new_zone == 1:
-            # ZONE 2 -> ZONE 1: In -> Out (Reactivated)
+                    adjust_ready_stock_qty(prod, item.get('color', ''), -qty, -qty,
+                                          reason=f"{prefix}Dispatched — {new_status}", ref_id=doc_id)
+
+        elif old_zone == 'A' and new_zone == 'C':
+            # Pending → Cancelled: only release the reservation, stock stays on shelf
+            o_id = update_data.get('order_id', old_data.get('order_id'))
+            prefix = f"Order {o_id} " if o_id else ""
             for item in new_items:
                 prod = item.get('product')
                 qty = float(item.get('quantity', 1))
                 if prod:
-                    adjust_ready_stock_qty(prod, item.get('color', ''), -qty, 0, reason=f"Order Reactivated to {new_status}", ref_id=doc_id)
+                    adjust_ready_stock_qty(prod, item.get('color', ''), 0, -qty,
+                                          reason=f"{prefix}Reservation Released — {new_status}", ref_id=doc_id)
+
+        elif old_zone == 'B' and new_zone == 'C':
+            # Shipped → Cancelled/RTO/Returned: stock physically returns
+            o_id = update_data.get('order_id', old_data.get('order_id'))
+            prefix = f"Order {o_id} " if o_id else ""
+            for item in new_items:
+                prod = item.get('product')
+                qty = float(item.get('quantity', 1))
+                if prod:
+                    adjust_ready_stock_qty(prod, item.get('color', ''), qty, 0,
+                                          reason=f"{prefix}Restocked — {new_status}", ref_id=doc_id)
+
+        elif old_zone == 'C' and new_zone == 'B':
+            # Cancelled → re-shipped (defensive): deduct stock again
+            o_id = update_data.get('order_id', old_data.get('order_id'))
+            prefix = f"Order {o_id} " if o_id else ""
+            for item in new_items:
+                prod = item.get('product')
+                qty = float(item.get('quantity', 1))
+                if prod:
+                    adjust_ready_stock_qty(prod, item.get('color', ''), -qty, 0,
+                                          reason=f"{prefix}Order Reactivated — {new_status}", ref_id=doc_id)
+
+        elif old_zone == 'C' and new_zone == 'A':
+            # Cancelled → Pending (defensive): re-reserve the stock
+            o_id = update_data.get('order_id', old_data.get('order_id'))
+            prefix = f"Order {o_id} " if o_id else ""
+            for item in new_items:
+                prod = item.get('product')
+                qty = float(item.get('quantity', 1))
+                if prod:
+                    adjust_ready_stock_qty(prod, item.get('color', ''), 0, qty,
+                                          reason=f"{prefix}Re-Reserved — {new_status}", ref_id=doc_id)
+
+        elif old_zone == 'B' and new_zone == 'A':
+            # Shipped → Pending (defensive): undo dispatch, re-reserve
+            o_id = update_data.get('order_id', old_data.get('order_id'))
+            prefix = f"Order {o_id} " if o_id else ""
+            for item in new_items:
+                prod = item.get('product')
+                qty = float(item.get('quantity', 1))
+                if prod:
+                    adjust_ready_stock_qty(prod, item.get('color', ''), qty, qty,
+                                          reason=f"{prefix}Dispatch Reversed — {new_status}", ref_id=doc_id)
 
 
 def delete_order(doc_id):
