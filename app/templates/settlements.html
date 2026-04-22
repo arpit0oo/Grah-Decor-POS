@@ -9,13 +9,13 @@
 <!-- Tabs -->
 <div class="tabs">
     <button class="tab {% if active_tab != 'logs' %}active{% endif %}" id="btn-tab-unsettled"
-            onclick="switchSettlementTab('unsettled')">Unsettled Orders ({{ orders|length }})</button>
+        onclick="switchSettlementTab('unsettled')">Payment Pending ({{ orders|length }})</button>
     <button class="tab {% if active_tab == 'logs' %}active{% endif %}" id="btn-tab-logs"
-            onclick="switchSettlementTab('logs')">Settlement Logs ({{ batches|length }})</button>
+        onclick="switchSettlementTab('logs')">Settlement Logs ({{ batches|length }})</button>
 </div>
 
 {# ═══════════════════════════════════════════════════════════
-   TAB 1: UNSETTLED ORDERS
+TAB 1: UNSETTLED ORDERS
 ═══════════════════════════════════════════════════════════ #}
 <div id="tab-unsettled" class="tab-content {% if active_tab == 'logs' %}hidden{% endif %}">
 
@@ -24,7 +24,7 @@
             <select name="platform" onchange="this.form.submit()">
                 <option value="">All Platforms</option>
                 {% for p in platforms %}
-                <option value="{{ p }}" {% if filter_platform == p %}selected{% endif %}>{{ p }}</option>
+                <option value="{{ p }}" {% if filter_platform==p %}selected{% endif %}>{{ p }}</option>
                 {% endfor %}
             </select>
             <div style="flex:1"></div>
@@ -36,10 +36,10 @@
     </div>
 
     <form id="settlementForm" method="post" action="{{ url_for('settlements.add_settlement') }}">
-    <div style="display:flex; gap: 1.5rem; align-items: flex-start; flex-wrap: wrap;">
-        <!-- Orders Table -->
-        <div style="flex: 1; min-width: 600px;">
-            <div class="table-wrapper" style="max-height: 600px; overflow-y: auto;">
+        <div style="display:flex; gap: 1.5rem; align-items: flex-start; flex-wrap: wrap;">
+            <!-- Orders Table -->
+            <div style="flex: 1; min-width: 600px;">
+                <div class="table-wrapper" style="max-height: 600px; overflow-y: auto;">
                     <table class="data-table">
                         <thead style="position: sticky; top: 0; z-index: 10;">
                             <tr>
@@ -58,14 +58,17 @@
                             {% for order in orders %}
                             <tr>
                                 <td style="text-align: center;">
-                                    <input type="checkbox" name="order_ids" value="{{ order.id }}" class="order-checkbox" 
-                                        data-expected="{{ order.bank_settlement|default(0) }}" onchange="updateSelectedTotal()">
+                                    <input type="checkbox" name="order_ids" value="{{ order.id }}"
+                                        class="order-checkbox" data-expected="{{ order.bank_settlement|default(0) }}"
+                                        onchange="updateSelectedTotal()">
                                 </td>
-                                <td>{{ order.date.strftime('%d/%m/%Y') if order.date and order.date.strftime else '-' }}</td>
+                                <td>{{ order.date.strftime('%d/%m/%Y') if order.date and order.date.strftime else '-' }}
+                                </td>
                                 <td class="text-mono">{{ order.order_id or '-' }}</td>
                                 <td><span class="badge badge-platform">{{ order.platform }}</span></td>
                                 <td>{{ order.order_items|length if order.order_items else 0 }} Items</td>
-                                <td class="text-right text-bold text-green">₹ {{ "%.2f"|format(order.bank_settlement|default(0)) }}</td>
+                                <td class="text-right text-bold text-green">₹ {{
+                                    "%.2f"|format(order.bank_settlement|default(0)) }}</td>
                                 <td style="text-align:center;">
                                     <button type="button" class="btn btn-xs"
                                         style="background:var(--danger); color:#fff; border:none; font-size:0.7em;"
@@ -82,58 +85,63 @@
                             {% endif %}
                         </tbody>
                     </table>
-            </div>
-        </div>
-        
-        <!-- Settlement Actions Box -->
-        <div class="form-card" style="width: 320px; position: sticky; top: 1.5rem;">
-            <h3 style="margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Process Settlement</h3>
-            
-            <div style="margin-bottom: 1rem;">
-                <small class="text-muted" style="text-transform: uppercase; font-size: 0.7em;">Selected Expected</small>
-                <div id="selectedTotalDisplay" style="font-size: 1.5rem; font-weight: bold; color: var(--text);">₹ 0.00</div>
-                <div id="selectedCountDisplay" style="font-size: 0.8em; color: var(--text-secondary);">0 orders selected</div>
+                </div>
             </div>
 
-            <div class="form-group" style="margin-bottom: 0.75rem;">
-                <label>Confirm Platform *</label>
-                <select name="platform" required>
-                    <option value="">Select Platform</option>
-                    {% for p in platforms %}
-                    <option value="{{ p }}" {% if filter_platform == p %}selected{% endif %}>{{ p }}</option>
-                    {% endfor %}
-                </select>
+            <!-- Settlement Actions Box -->
+            <div class="form-card" style="width: 320px; position: sticky; top: 1.5rem;">
+                <h3 style="margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+                    Process Settlement</h3>
+
+                <div style="margin-bottom: 1rem;">
+                    <small class="text-muted" style="text-transform: uppercase; font-size: 0.7em;">Selected
+                        Expected</small>
+                    <div id="selectedTotalDisplay" style="font-size: 1.5rem; font-weight: bold; color: var(--text);">₹
+                        0.00</div>
+                    <div id="selectedCountDisplay" style="font-size: 0.8em; color: var(--text-secondary);">0 orders
+                        selected</div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0.75rem;">
+                    <label>Confirm Platform *</label>
+                    <select name="platform" required>
+                        <option value="">Select Platform</option>
+                        {% for p in platforms %}
+                        <option value="{{ p }}" {% if filter_platform==p %}selected{% endif %}>{{ p }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0.75rem;">
+                    <label>Date *</label>
+                    <input type="date" name="settlement_date" id="settlement_date" required>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0.75rem;">
+                    <label>UTR Number (Txn ID) *</label>
+                    <input type="text" name="utr_number" placeholder="Enter bank reference" required>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0.75rem;">
+                    <label>Actual Amount Received ₹ *</label>
+                    <input type="number" name="amount_received" step="0.01" min="0" required id="amountReceivedInput">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label>Notes (Optional)</label>
+                    <input type="text" name="notes" placeholder="Any deductions/remarks?">
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;"
+                    id="submitBtn" disabled>Settle Selected Orders</button>
             </div>
-            
-            <div class="form-group" style="margin-bottom: 0.75rem;">
-                <label>Date *</label>
-                <input type="date" name="settlement_date" id="settlement_date" required>
-            </div>
-            
-            <div class="form-group" style="margin-bottom: 0.75rem;">
-                <label>UTR Number (Txn ID) *</label>
-                <input type="text" name="utr_number" placeholder="Enter bank reference" required>
-            </div>
-            
-            <div class="form-group" style="margin-bottom: 0.75rem;">
-                <label>Actual Amount Received ₹ *</label>
-                <input type="number" name="amount_received" step="0.01" min="0" required id="amountReceivedInput">
-            </div>
-            
-            <div class="form-group" style="margin-bottom: 1.5rem;">
-                <label>Notes (Optional)</label>
-                <input type="text" name="notes" placeholder="Any deductions/remarks?">
-            </div>
-            
-            <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;" id="submitBtn" disabled>Settle Selected Orders</button>
         </div>
-    </div>
     </form>
 </div>
 
 
 {# ═══════════════════════════════════════════════════════════
-   TAB 2: SETTLEMENT LOGS (ACCORDION)
+TAB 2: SETTLEMENT LOGS (ACCORDION)
 ═══════════════════════════════════════════════════════════ #}
 <div id="tab-logs" class="tab-content {% if active_tab != 'logs' %}hidden{% endif %}">
 
@@ -141,10 +149,11 @@
     <div style="display:flex; flex-direction:column; gap:0.75rem;">
         {% for batch in batches %}
         {% set ts = batch.settlement_date or batch.created_at %}
-        <div class="accordion-item" style="border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;">
+        <div class="accordion-item"
+            style="border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;">
             <!-- Accordion Header -->
             <div class="accordion-header" onclick="toggleAccordion(this)"
-                 style="display:flex; justify-content:space-between; align-items:center; padding:1rem 1.25rem; cursor:pointer; background:var(--surface); transition: background 0.2s;">
+                style="display:flex; justify-content:space-between; align-items:center; padding:1rem 1.25rem; cursor:pointer; background:var(--surface); transition: background 0.2s;">
                 <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
                     <span class="text-bold" style="font-size:1em;">
                         {% if ts %}{{ ts.strftime('%d %b %Y') }}{% else %}—{% endif %}
@@ -153,7 +162,8 @@
                     <span class="text-muted" style="font-size:0.85em;">UTR: {{ batch.utr_number }}</span>
                 </div>
                 <div style="display:flex; align-items:center; gap:1rem;">
-                    <span class="text-bold text-green" style="font-size:1.1em;">₹ {{ "%.2f"|format(batch.amount_received) }}</span>
+                    <span class="text-bold text-green" style="font-size:1.1em;">₹ {{
+                        "%.2f"|format(batch.amount_received) }}</span>
                     <span class="text-muted" style="font-size:0.85em;">({{ batch.order_count }} orders)</span>
                     <span class="accordion-icon" style="font-size:1.2em; transition:transform 0.2s;">▸</span>
                 </div>
@@ -181,12 +191,15 @@
                         </tr>
                         {% endfor %}
                         {% if not batch.order_lines %}
-                        <tr><td colspan="5" class="empty-state">No order data recorded.</td></tr>
+                        <tr>
+                            <td colspan="5" class="empty-state">No order data recorded.</td>
+                        </tr>
                         {% endif %}
                     </tbody>
                 </table>
                 {% if batch.notes %}
-                <div style="padding:0.75rem 1.25rem; font-size:0.85em; color:var(--text-secondary); border-top:1px solid var(--border);">
+                <div
+                    style="padding:0.75rem 1.25rem; font-size:0.85em; color:var(--text-secondary); border-top:1px solid var(--border);">
                     <strong>Notes:</strong> {{ batch.notes }}
                 </div>
                 {% endif %}
@@ -195,7 +208,8 @@
         {% endfor %}
     </div>
     {% else %}
-    <div class="empty-state" style="padding:3rem; text-align:center; border:1px dashed var(--border); border-radius:var(--radius);">
+    <div class="empty-state"
+        style="padding:3rem; text-align:center; border:1px dashed var(--border); border-radius:var(--radius);">
         <div style="font-size:2.5rem; margin-bottom:1rem;">💳</div>
         <h3>No settlements yet</h3>
         <p class="text-muted">Settled batches will appear here with their full order breakdown.</p>
@@ -205,7 +219,7 @@
 
 
 {# ═══════════════════════════════════════════════════════════
-   PROCESS RETURN MODAL
+PROCESS RETURN MODAL
 ═══════════════════════════════════════════════════════════ #}
 <div class="modal-overlay hidden" id="returnModal">
     <div class="modal" style="max-width:460px;">
@@ -226,7 +240,8 @@
 
             <div class="form-group hidden" id="penalty-group" style="margin-bottom:1rem;">
                 <label>Penalty Amount ₹</label>
-                <input type="number" name="penalty_amount" id="penalty-amount" step="1" min="0" value="0" placeholder="0">
+                <input type="number" name="penalty_amount" id="penalty-amount" step="1" min="0" value="0"
+                    placeholder="0">
             </div>
 
             <div class="form-group" style="margin-bottom:1.5rem;">
@@ -239,8 +254,8 @@
 
             <div style="display:flex; gap:0.75rem; justify-content:flex-end;">
                 <button type="button" class="btn btn-ghost" onclick="closeReturnModal()">Cancel</button>
-                <button type="submit" class="btn btn-primary" 
-                        onclick="return confirm('Process this return? The order will be locked as terminal.')">
+                <button type="submit" class="btn btn-primary"
+                    onclick="return confirm('Process this return? The order will be locked as terminal.')">
                     Confirm Return
                 </button>
             </div>
@@ -269,26 +284,26 @@
         checkboxes.forEach(cb => cb.checked = source.checked);
         updateSelectedTotal();
     }
-    
+
     function updateSelectedTotal() {
         const checkedBoxes = document.querySelectorAll('.order-checkbox:checked');
         let total = 0;
-        
+
         checkedBoxes.forEach(cb => {
             total += parseFloat(cb.getAttribute('data-expected') || 0);
         });
-        
+
         document.getElementById('selectedTotalDisplay').textContent = '₹ ' + total.toFixed(2);
-        document.getElementById('selectedCountDisplay').textContent = 
+        document.getElementById('selectedCountDisplay').textContent =
             checkedBoxes.length + ' order' + (checkedBoxes.length !== 1 ? 's' : '') + ' selected';
-        
+
         const amtInput = document.getElementById('amountReceivedInput');
-        if(!amtInput.value && total > 0) {
+        if (!amtInput.value && total > 0) {
             amtInput.value = total.toFixed(2);
         } else if (total === 0) {
             amtInput.value = '';
         }
-        
+
         document.getElementById('submitBtn').disabled = checkedBoxes.length === 0;
     }
 

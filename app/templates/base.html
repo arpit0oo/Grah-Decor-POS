@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
+    {% if request.endpoint != 'auth.login' %}
     <!-- Sidebar -->
     <nav class="sidebar" id="sidebar">
         <div class="sidebar-header">
@@ -77,12 +78,12 @@
             <small>web-grahdecor.com</small>
         </div>
     </nav>
-
     <!-- Mobile toggle -->
     <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle menu">☰</button>
+    {% endif %}
 
     <!-- Main content -->
-    <main class="main-content">
+    <main class="main-content {% if request.endpoint == 'auth.login' %}no-sidebar{% endif %}">
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
         <div class="flash-container">
