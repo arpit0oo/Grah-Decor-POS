@@ -140,6 +140,7 @@
                         {% elif p.status == 'Cancelled' %}
                         <span class="text-danger text-bold" style="font-size: 0.8rem; padding: 0.2rem 0;">CANCELLED</span>
                         {% endif %}
+                        <button type="button" class="btn btn-xs btn-ghost" style="color:var(--text-secondary);" data-po="{{ p|tojson|forceescape }}" onclick="openViewPoModal(this)">History</button>
                     </div>
                 </td>
             </tr>
@@ -172,6 +173,26 @@
     </div>
 </div>
 
+<!-- Modal: View PO History -->
+<div class="modal-overlay hidden" id="poViewModal">
+    <div class="modal" style="max-width: 500px;">
+        <div class="modal-header">
+            <h3>PO Details & History</h3>
+            <button class="modal-close" onclick="closeModal('poViewModal')">×</button>
+        </div>
+        <div style="margin-bottom:1rem; border:1px solid var(--border); border-radius:var(--radius); padding:1rem; background:var(--bg-card); display:grid; grid-template-columns:1fr 1fr; gap:0.5rem 1rem; font-size:0.9em;">
+            <div class="text-muted">PO Number</div><div id="view-po-number" class="text-bold text-mono"></div>
+            <div class="text-muted">Vendor</div><div id="view-po-vendor" class="text-bold"></div>
+            <div class="text-muted">Item</div><div id="view-po-item" class="text-bold"></div>
+            <div class="text-muted">Qty & Total</div><div id="view-po-qty" class="text-bold"></div>
+        </div>
+        <div style="margin-top:1.5rem; padding-top:1.25rem; border-top:1px solid var(--border);">
+            <div style="font-size:0.75em; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin-bottom:1rem; font-weight:600;">PO Journey Timeline</div>
+            <div id="view-po-timeline" style="display:flex; align-items:flex-start; gap:0; overflow-x:auto; padding-bottom:0.5rem;"></div>
+        </div>
+    </div>
+</div>
+
 
 
 {% endblock %}
@@ -188,6 +209,58 @@ function calcTotal() {
 function openPayModal(id, poId) {
     document.getElementById('payForm').action = "/purchases/paid/" + id;
     document.getElementById('payModal').classList.remove('hidden');
+}
+
+function openViewPoModal(btn) {
+    const data = JSON.parse(btn.getAttribute('data-po'));
+    document.getElementById('view-po-number').textContent = data.po_number || '-';
+    document.getElementById('view-po-vendor').textContent = data.vendor_name || '-';
+    document.getElementById('view-po-item').textContent = data.item || '-';
+    document.getElementById('view-po-qty').textContent = `${data.quantity} @ ₹${parseFloat(data.unit_cost||0).toFixed(2)} = ₹${parseFloat(data.total_cost||0).toFixed(2)}`;
+
+    const history = data.status_history || [];
+    const timeline = document.getElementById('view-po-timeline');
+    timeline.innerHTML = '';
+
+    const statusColors = {
+        'Draft': '#f59e0b', 'Sent': '#3b82f6', 'Received': '#10b981',
+        'Paid': '#6366f1', 'Cancelled': '#ef4444'
+    };
+
+    if (history.length === 0) {
+        timeline.innerHTML = '<span class="text-muted" style="font-size:0.85em;">No status history available.</span>';
+    } else {
+        history.forEach((hop, idx) => {
+            const isLast = idx === history.length - 1;
+            let timeStr = '-';
+            if (hop.timestamp) {
+                try {
+                    const d = new Date(hop.timestamp);
+                    if (!isNaN(d)) timeStr = d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                } catch (e) {}
+            }
+            const color = statusColors[hop.status] || '#6b7280';
+            const node = document.createElement('div');
+            node.style.display = 'flex';
+            node.style.flexDirection = 'column';
+            node.style.alignItems = 'flex-start';
+            node.style.position = 'relative';
+            node.style.minWidth = '110px';
+            node.style.paddingRight = '15px';
+
+            node.innerHTML = `
+                <div style="font-size:0.75em; color:var(--text-muted); margin-bottom:4px;">${timeStr}</div>
+                <div style="display:flex; align-items:center; width:100%;">
+                    <div style="width:12px; height:12px; border-radius:50%; background:${color}; z-index:2;"></div>
+                    ${!isLast ? `<div style="height:2px; background:var(--border); flex:1; margin-left:-2px; z-index:1;"></div>` : ''}
+                </div>
+                <div style="font-size:0.85em; font-weight:600; color:${color}; margin-top:6px;">${hop.status}</div>
+            `;
+            timeline.appendChild(node);
+        });
+    }
+
+    document.getElementById('poViewModal').classList.remove('hidden');
 }
 
 </script>

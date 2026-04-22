@@ -583,8 +583,9 @@ body {
 .text-success { color: var(--success); }
 .text-danger { color: var(--danger); }
 
-.row-danger { background: #fff5f5; }
-.row-warning { background: #fffbeb; }
+.row-success { background: #dcfce7; }
+.row-danger { background: #fee2e2; }
+.row-warning { background: #fef3c7; }
 
 .actions-cell {
     white-space: nowrap;

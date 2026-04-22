@@ -23,7 +23,8 @@
     <div class="form-card hidden" id="rawForm">
         <h3>Register New Raw Material</h3>
         <p class="text-muted" style="font-size:0.85em; margin-bottom:1rem;">Initial quantity is always
-            <strong>0</strong>. Stock enters the system exclusively via the Purchase Book.</p>
+            <strong>0</strong>. Stock enters the system exclusively via the Purchase Book.
+        </p>
         <form autocomplete="off" method="POST" action="{{ url_for('inventory.raw_add') }}">
             <div class="form-grid form-grid-3">
                 <div class="form-group">
@@ -41,10 +42,6 @@
                         <option value="rolls">Rolls</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label for="raw-price">Price Per Unit ₹</label>
-                    <input type="number" id="raw-price" name="price" step="1" value="0" placeholder="0">
-                </div>
             </div>
             <input type="hidden" name="quantity" value="0">
             <div class="form-actions">
@@ -61,48 +58,27 @@
             <thead>
                 <tr>
                     <th>Material Name</th>
-                    <th>Quantity</th>
+                    <th class="text-right">Quantity</th>
                     <th>Unit</th>
-                    <th>Price / Unit ₹</th>
-                    <th>Total Value ₹</th>
+                    <th class="text-right">Price / Unit ₹</th>
+                    <th class="text-right">Total Value ₹</th>
                     <th>Last Updated</th>
-                    <th>Actions</th>
+                    <th class="text-right">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for m in raw_materials %}
                 <tr>
-                    <td>
-                        <form autocomplete="off" method="POST" action="{{ url_for('inventory.raw_edit', doc_id=m.id) }}"
-                            class="inline-edit-form">
-                            <input type="hidden" name="quantity" value="{{ m.quantity }}">
-                            <input type="text" name="name" value="{{ m.name }}" class="inline-input">
-                    </td>
-                    <td class="text-right text-bold">
-                        {{ m.quantity|int }}
-                    </td>
-                    <td>
-                        <select name="unit" class="inline-input inline-input-sm">
-                            <option value="pcs" {% if m.unit=='pcs' %}selected{% endif %}>pcs</option>
-                            <option value="kg" {% if m.unit=='kg' %}selected{% endif %}>kg</option>
-                            <option value="meters" {% if m.unit=='meters' %}selected{% endif %}>meters</option>
-                            <option value="liters" {% if m.unit=='liters' %}selected{% endif %}>liters</option>
-                            <option value="sheets" {% if m.unit=='sheets' %}selected{% endif %}>sheets</option>
-                            <option value="rolls" {% if m.unit=='rolls' %}selected{% endif %}>rolls</option>
-                        </select>
-                    </td>
-                    <td>
-                        <input type="number" name="price" value="{{ m.price if m.price else 0 }}" step="1"
-                            class="inline-input inline-input-sm">
-                    </td>
-                    <td class="text-right text-bold">
-                        {{ "%.0f"|format((m.price or 0) * (m.quantity or 0)) }}
-                    </td>
+                    <td><span class="text-bold">{{ m.name }}</span></td>
+                    <td class="text-right text-bold">{{ m.quantity }}</td>
+                    <td class="text-muted">{{ m.unit or '-' }}</td>
+                    <td class="text-right text-bold">{{ "%.2f"|format(m.calc_price or 0) }}</td>
+                    <td class="text-right text-bold">{{ "%.2f"|format(m.calc_total_value or 0) }}</td>
                     <td class="text-muted">{{ m.updated_at.strftime('%d/%m/%Y %H:%M') if m.updated_at and
                         m.updated_at.strftime else '-' }}</td>
                     <td class="actions-cell">
-                        <button type="submit" class="btn btn-xs">Save</button>
-                        </form>
+                        <button type="button" class="btn btn-xs btn-ghost"
+                            onclick="openRawHistoryModal('{{ m.name|escape }}')">History</button>
                     </td>
                 </tr>
                 {% endfor %}
@@ -139,6 +115,16 @@
                     <input type="number" id="ready-cost" name="cost_price" step="1" min="0" value="0">
                 </div>
             </div>
+            <div class="form-group">
+                <label for="ready-reason">Reason *</label>
+                <select id="ready-reason" name="reason" required>
+                    <option value="" disabled selected>Select reason…</option>
+                    <option value="Manufactured">Manufactured</option>
+                    <option value="Audit Correction">Audit Correction</option>
+                    <option value="Returned to Stock">Returned to Stock</option>
+                    <option value="Other">Other</option>
+                </select>
+            </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary">Add Product</button>
                 <button type="button" class="btn btn-ghost" onclick="toggleForm('readyForm')">Cancel</button>
@@ -173,17 +159,17 @@
                         {% if s.variants %}<span id="icon-{{ s.id }}" style="font-size:0.8em;">&#9654;</span>{% endif %}
                     </td>
                     <td>
-                        <form autocomplete="off" method="POST" action="{{ url_for('inventory.ready_edit', doc_id=s.id) }}"
-                            class="inline-edit-form">
-                            <strong><input type="text" name="name" value="{{ s.name }}" class="inline-input"></strong>
+                        <form autocomplete="off" method="POST"
+                            action="{{ url_for('inventory.ready_edit', doc_id=s.id) }}" class="inline-edit-form">
+                            <input type="hidden" name="name" value="{{ s.name }}">
+                            <input type="hidden" name="quantity" value="{{ s.quantity }}">
+                            <strong>{{ s.name }}</strong>
                     </td>
                     <td>
                         {% if s.variants %}
                         <span class="text-muted" style="font-size:0.85em;">{{ s.quantity|int }} total</span>
-                        <input type="hidden" name="quantity" value="{{ s.quantity }}">
                         {% else %}
-                        <input type="number" name="quantity" value="{{ s.quantity }}" step="1"
-                            min="{{ s.quantity|int }}" class="inline-input inline-input-sm" style="width:60px">
+                        <span class="text-bold">{{ s.quantity|int }}</span>
                         {% endif %}
                     </td>
                     <td class="text-warning text-bold">{{ s.reserved_quantity or 0 }}</td>
@@ -199,6 +185,9 @@
                         <button type="submit" class="btn btn-xs">Save</button>
                         </form>
                         {% if not s.variants %}
+                        <button type="button" class="btn btn-xs"
+                            style="color:var(--success); border-color:var(--success);"
+                            onclick="openAdjustModal('{{ s.id }}', '{{ s.name|escape }}', '')">Adjust</button>
                         <button type="button" class="btn btn-xs btn-ghost"
                             onclick="openHistoryModal('{{ s.name|escape }}', '')">History</button>
                         {% endif %}
@@ -214,16 +203,15 @@
                 <tr class="variant-row hidden" id="variant-{{ s.id }}" style="background:#f8f8ff;">
                     <td></td>
                     <td style="padding-left:2rem;">
-                        <form autocomplete="off" method="POST" action="{{ url_for('inventory.ready_edit', doc_id=v.id) }}"
-                            class="inline-edit-form">
+                        <form autocomplete="off" method="POST"
+                            action="{{ url_for('inventory.ready_edit', doc_id=v.id) }}" class="inline-edit-form">
                             <input type="hidden" name="name" value="{{ v.name }}">
+                            <input type="hidden" name="quantity" value="{{ v.quantity }}">
                             <span class="text-muted" style="font-size:0.8em;">&#9492;</span>
-                            <input type="text" name="color" value="{{ v.color }}" class="inline-input inline-input-sm"
-                                placeholder="Variant name">
+                            <span class="text-bold">{{ v.color }}</span>
                     </td>
                     <td>
-                        <input type="number" name="quantity" value="{{ v.quantity }}" step="1"
-                            min="{{ v.quantity|int }}" class="inline-input inline-input-sm" style="width:60px">
+                        <span class="text-bold">{{ v.quantity|int }}</span>
                     </td>
                     <td class="text-warning text-bold">{{ v.reserved_quantity or 0 }}</td>
                     <td class="{% if vavail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">{{ vavail|int
@@ -232,7 +220,9 @@
                     <td class="text-muted">{{ v.updated_at.strftime('%d/%m/%Y') if v.updated_at and
                         v.updated_at.strftime else '-' }}</td>
                     <td class="actions-cell">
-                        <button type="submit" class="btn btn-xs">Save</button>
+                        <button type="button" class="btn btn-xs"
+                            style="color:var(--success); border-color:var(--success);"
+                            onclick="openAdjustModal('{{ v.id }}', '{{ v.name|escape }}', '{{ v.color|escape }}')">Adjust</button>
                         </form>
                         <button type="button" class="btn btn-xs btn-ghost"
                             onclick="openHistoryModal('{{ v.name|escape }}', '{{ v.color|escape }}')">History</button>
@@ -256,8 +246,8 @@
 
     <div class="kpi-grid" style="margin-bottom: 2rem;">
         <div class="kpi-card" style="border-left: 4px solid var(--primary)">
-            <h3>Total Manufactured (Today)</h3>
-            <p class="kpi-value text-primary">+{{ today_produced|int }}</p>
+            <h3>Transactions Logged (Today)</h3>
+            <p class="kpi-value text-primary">+{{ today_log_count|int }}</p>
         </div>
         <div class="kpi-card" style="border-left: 4px solid var(--accent)">
             <h3>Total Shipped (Today)</h3>
@@ -273,6 +263,32 @@
         </div>
     </div>
 
+    <!-- ── LOGS FILTER BAR ── -->
+    <div class="card"
+        style="margin-bottom:1rem; padding:1rem; display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; background:white;">
+        <div class="form-group" style="flex:1; min-width:200px;">
+            <label>Search Item or Reason</label>
+            <input type="text" id="logSearch" placeholder="Type to search..." oninput="filterLogs()">
+        </div>
+        <div class="form-group" style="min-width:150px;">
+            <label>Log Type</label>
+            <select id="logTypeFilter" onchange="filterLogs()">
+                <option value="">All Types</option>
+                <option value="Raw Material">Raw Material</option>
+                <option value="Ready Stock">Ready Stock</option>
+            </select>
+        </div>
+        <div class="form-group" style="min-width:150px;">
+            <label>Date From</label>
+            <input type="date" id="logDateFrom" onchange="filterLogs()">
+        </div>
+        <div class="form-group" style="min-width:150px;">
+            <label>Date To</label>
+            <input type="date" id="logDateTo" onchange="filterLogs()">
+        </div>
+        <button class="btn btn-ghost" onclick="clearLogFilters()" style="margin-bottom:4px;">Clear</button>
+    </div>
+
     <div class="table-wrapper">
         <table class="data-table">
             <thead>
@@ -284,33 +300,33 @@
                     <th>Reason</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="logsTableBody">
                 {% for log in logs %}
-                <tr>
+                <tr class="log-row {% if log.delta > 0 %}row-success{% elif log.delta < 0 %}row-danger{% endif %}"
+                    data-search="{{ log.item_name|lower }} {{ log.color|lower }} {{ log.reason|lower }}"
+                    data-type="{{ log.item_type }}"
+                    data-date="{{ log.date.strftime('%Y-%m-%d') if log.date and log.date.strftime else '' }}">
                     <td class="text-muted">{{ log.date.strftime('%d/%m/%Y %H:%M') if log.date and log.date.strftime else
                         '-' }}</td>
-                    <td><span
-                            class="badge {% if log.item_type == 'Ready Stock' %}bg-success{% else %}bg-primary{% endif %}">{{
-                            log.item_type }}</span></td>
-                    <td>
+                    <td class="text-bold opacity-75">{{ log.item_type }}</td>
+                    <td class="text-bold">
                         {{ log.item_name }}
-                        {% if log.color %}<span class="text-muted">({{ log.color }})</span>{% endif %}
+                        {% if log.color %}<span class="text-muted" style="font-weight:normal;">({{ log.color
+                            }})</span>{% endif %}
                     </td>
                     <td class="text-bold">
                         {% if log.delta > 0 %}
-                        <span class="badge bg-success" style="font-size:1em; padding:4px 8px;">+{{ log.delta|int }}
-                            IN</span>
+                        +{{ log.delta|int }} IN
                         {% else %}
-                        <span class="badge bg-danger" style="font-size:1em; padding:4px 8px;">{{ log.delta|int }}
-                            OUT</span>
+                        {{ log.delta|int }} OUT
                         {% endif %}
                     </td>
-                    <td>{{ log.reason or '-' }}</td>
+                    <td class="text-muted" style="font-size:0.9em;">{{ log.reason or '-' }}</td>
                 </tr>
                 {% endfor %}
                 {% if not logs %}
-                <tr>
-                    <td colspan="5" class="empty-state">No transactions recorded yet.</td>
+                <tr id="logsEmptyState" {% if logs %}style="display:none;" {% endif %}>
+                    <td colspan="5" class="empty-state">No transactions match the selected filters.</td>
                 </tr>
                 {% endif %}
             </tbody>
@@ -363,6 +379,10 @@
                     <label>Quantity Produced</label>
                     <input type="number" name="produce_qty" value="1" min="1">
                 </div>
+                <div class="form-group" style="grid-column: span 3; margin-top: 0.5rem;">
+                    <label>Production Reason / Notes</label>
+                    <input type="text" name="produce_reason" placeholder="e.g. Regular Batch, Diwali Prep, etc.">
+                </div>
             </div>
 
             <div class="form-actions">
@@ -412,7 +432,7 @@
                 id="variantParentName"></strong></p>
         <form autocomplete="off" id="variantForm" method="POST" action="">
             <div class="form-group" style="margin-bottom:1rem;">
-                <label>Variant Name (e.g. Black, Gold) *</label>
+                <label>Variant Name (e.g. Black, white)</label>
                 <input type="text" name="variant_name" required placeholder="e.g. Black">
             </div>
             <div class="form-group" style="margin-bottom:1.5rem;">
@@ -427,10 +447,192 @@
     </div>
 </div>
 
+<!-- ── ADJUST STOCK MODAL ─────────────────────────── -->
+<div class="modal-overlay hidden" id="adjustModal">
+    <div class="modal" style="max-width:400px;">
+        <div class="modal-header">
+            <h3>Adjust Stock</h3>
+            <button class="modal-close" onclick="closeModal('adjustModal')">×</button>
+        </div>
+        <p class="text-muted" style="font-size:0.85em; margin-bottom:1rem;">
+            Adjusting: <strong id="adjustItemLabel"></strong>
+        </p>
+        <form autocomplete="off" id="adjustForm" method="POST" action="">
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label>Quantity to Add *</label>
+                <input type="number" name="adjustment" id="adjustQtyInput" required placeholder="e.g. 10" step="1"
+                    min="1">
+                <small class="text-muted">Only additions allowed. Stock is reduced automatically through orders.</small>
+            </div>
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label>Reason *</label>
+                <select name="reason" required>
+                    <option value="" disabled selected>Select reason…</option>
+                    <option value="Manufactured">Manufactured</option>
+                    <option value="Audit Correction">Audit Correction</option>
+                    <option value="Returned to Stock">Returned to Stock</option>
+                    <option value="Other">Other</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom:1.5rem;">
+                <label>Notes (optional)</label>
+                <input type="text" name="notes" placeholder="Any additional context">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Apply
+                    Adjustment</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ── RAW MATERIAL PURCHASE HISTORY MODAL ───────────── -->
+<div class="modal-overlay hidden" id="rawHistoryModal">
+    <div class="modal" style="max-width:680px;">
+        <div class="modal-header">
+            <h3>Purchase History: <span id="rawHistoryTitle" style="color:var(--primary);"></span></h3>
+            <button class="modal-close" onclick="closeModal('rawHistoryModal')">&#x00D7;</button>
+        </div>
+        <p id="rawHistoryTotals" class="text-muted" style="font-size:0.85em; margin-bottom:1rem;">Loading...</p>
+        <div style="overflow-x:auto; max-height:60vh; overflow-y:auto;">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>PO #</th>
+                        <th>Date</th>
+                        <th>Vendor</th>
+                        <th>Qty</th>
+                        <th>Unit Cost &#x20b9;</th>
+                        <th>Total &#x20b9;</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="rawHistoryTableBody">
+                    <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
+    // ── LOGS FILTERING LOGIC ──
+    function filterLogs() {
+        const searchVal = document.getElementById('logSearch').value.toLowerCase();
+        const typeVal = document.getElementById('logTypeFilter').value;
+        const dateFrom = document.getElementById('logDateFrom').value;
+        const dateTo = document.getElementById('logDateTo').value;
+
+        const rows = document.querySelectorAll('#logsTableBody .log-row');
+        let visibleCount = 0;
+
+        rows.forEach(row => {
+            const rowSearchText = row.getAttribute('data-search');
+            const rowType = row.getAttribute('data-type');
+            const rowDate = row.getAttribute('data-date'); // YYYY-MM-DD
+
+            // Search Check
+            const matchSearch = rowSearchText.indexOf(searchVal) !== -1;
+
+            // Type Check
+            const matchType = typeVal === "" || rowType === typeVal;
+
+            // Date Check (simple string comparison works for YYYY-MM-DD)
+            let matchDate = true;
+            if (rowDate) {
+                if (dateFrom && rowDate < dateFrom) matchDate = false;
+                if (dateTo && rowDate > dateTo) matchDate = false;
+            } else if (dateFrom || dateTo) {
+                matchDate = false; // no date on row but filter is active
+            }
+
+            if (matchSearch && matchType && matchDate) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        // Toggle Empty State row
+        const emptyRow = document.getElementById('logsEmptyState');
+        if (emptyRow) {
+            emptyRow.style.display = visibleCount === 0 ? '' : 'none';
+        }
+    }
+
+    function clearLogFilters() {
+        document.getElementById('logSearch').value = '';
+        document.getElementById('logTypeFilter').value = '';
+        document.getElementById('logDateFrom').value = '';
+        document.getElementById('logDateTo').value = '';
+        filterLogs();
+    }
+
+    async function openRawHistoryModal(name) {
+        document.getElementById('rawHistoryTitle').textContent = name;
+        const tbody = document.getElementById('rawHistoryTableBody');
+        const totalsDiv = document.getElementById('rawHistoryTotals');
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding:2rem;">Loading…</td></tr>';
+        totalsDiv.textContent = 'Loading…';
+        document.getElementById('rawHistoryModal').classList.remove('hidden');
+
+        try {
+            const res = await fetch('/inventory/api/raw-purchase-history?name=' + encodeURIComponent(name));
+            const data = await res.json();
+            tbody.innerHTML = '';
+
+            if (data.error) {
+                tbody.innerHTML = `<tr><td colspan="7" class="empty-state text-danger">${data.error}</td></tr>`;
+                totalsDiv.textContent = '';
+                return;
+            }
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No purchase orders found for this material.</td></tr>';
+                totalsDiv.textContent = '';
+                return;
+            }
+
+            let totalQty = 0, totalSpent = 0;
+            const statusColors = {
+                'Draft': '#f59e0b', 'Sent': '#3b82f6', 'Received': '#10b981',
+                'Paid': '#6366f1', 'Cancelled': '#9ca3af'
+            };
+            data.forEach(po => {
+                totalQty += po.quantity || 0;
+                if (po.status !== 'Cancelled') totalSpent += po.total_cost || 0;
+                const color = statusColors[po.status] || '#6b7280';
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="text-mono">${po.po_number || '-'}</td>
+                    <td class="text-muted">${po.date || '-'}</td>
+                    <td>${po.vendor_name || '-'}</td>
+                    <td class="text-bold text-right">${(po.quantity || 0).toLocaleString()}</td>
+                    <td class="text-right">${(po.unit_cost || 0).toFixed(2)}</td>
+                    <td class="text-right text-bold">${(po.total_cost || 0).toFixed(2)}</td>
+                    <td><span class="badge" style="background:${color}20;color:${color};border:1px solid ${color}60;">${po.status}</span></td>
+                `;
+                tbody.appendChild(tr);
+            });
+            totalsDiv.innerHTML = `Total Received: <strong>${totalQty.toLocaleString()} units</strong> &nbsp;|&nbsp; Total Spent (excl. Cancelled): <strong class="text-primary">&#x20b9; ${totalSpent.toFixed(2)}</strong>`;
+        } catch (err) {
+            console.error(err);
+            tbody.innerHTML = '<tr><td colspan="7" class="empty-state text-danger">Failed to load history.</td></tr>';
+            totalsDiv.textContent = '';
+        }
+    }
+
+    function openAdjustModal(docId, name, color) {
+        const label = name + (color ? ' (' + color + ')' : '');
+        document.getElementById('adjustItemLabel').textContent = label;
+        document.getElementById('adjustForm').action = '/inventory/ready/adjust/' + docId;
+        document.getElementById('adjustQtyInput').value = '';
+        document.getElementById('adjustModal').classList.remove('hidden');
+    }
+
     let rawRowCount = 1;
     function addRawRow() {
         const container = document.getElementById('rawMaterialRows');

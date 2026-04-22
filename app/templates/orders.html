@@ -54,7 +54,7 @@
         <!-- Section 2: Customer & Fulfillment -->
         <div class="form-section">
             <div class="form-section-title">Customer & Fulfillment</div>
-            <div class="form-grid form-grid-4">
+            <div class="form-grid form-grid-2">
                 <div class="form-group">
                     <label for="add-customer">Customer Name *</label>
                     <input type="text" id="add-customer" name="customer" required placeholder="Customer name">
@@ -62,22 +62,6 @@
                 <div class="form-group">
                     <label for="add-number">Phone / Number</label>
                     <input type="text" id="add-number" name="number" placeholder="Contact number">
-                </div>
-                <div class="form-group">
-                    <label for="add-status">Order Status</label>
-                    <select id="add-status" name="status">
-                        {% for s in statuses %}
-                        <option value="{{ s }}">{{ s }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="add-reviews">Review Status</label>
-                    <select id="add-reviews" name="reviews">
-                        {% for r in reviews %}
-                        <option value="{{ r }}">{{ r }}</option>
-                        {% endfor %}
-                    </select>
                 </div>
             </div>
         </div>
@@ -96,8 +80,8 @@
             </div>
         </div>
 
-        <!-- Section 4: Financials -->
-        <div class="form-section">
+        <!-- Section 4: Financial Breakdown -->
+        <div class="form-section" style="margin-bottom:0;">
             <div class="form-section-title">Financial Breakdown</div>
             <div class="form-grid form-grid-3">
                 <div class="form-group">
@@ -213,10 +197,35 @@
                     <td class="text-right">{{ "%.2f"|format(order.tax) }}</td>
                     <td class="text-right">{{ "%.2f"|format(order.marketplace_fee) }}</td>
                     <td class="text-right text-bold">{{ "%.2f"|format(order.bank_settlement) }}</td>
-                    <td>
-                        <span class="badge badge-{{ order.status|lower|replace(' ', '-') }}">{{ order.status }}</span>
+                    <td style="position:relative;">
+                        {% if is_terminal %}
+                            <span class="badge badge-{{ order.status|lower|replace(' ', '-') }}">{{ order.status }}</span>
+                        {% else %}
+                            <select class="badge badge-{{ order.status|lower|replace(' ', '-') }}" style="padding-right:1rem; cursor:pointer; outline:none; border:none; appearance:auto; text-align:center; font-family:var(--font); font-weight:600; min-width:85px; background-color:transparent;" onchange="inlineUpdateStatus('{{ order.id }}', this.value)">
+                                {% if order.status == 'Pending' %}
+                                    <option value="Pending" selected>Pending</option>
+                                    <option value="Shipped">Shipped</option>
+                                    <option value="Cancelled">Cancelled</option>
+                                {% elif order.status == 'Shipped' %}
+                                    <option value="Shipped" selected>Shipped</option>
+                                    <option value="Delivered">Delivered</option>
+                                    <option value="Cancelled">Cancelled</option>
+                                {% elif order.status == 'Delivered' %}
+                                    <option value="Delivered" selected>Delivered</option>
+                                    <option value="Settled">Settled</option>
+                                {% endif %}
+                            </select>
+                            <span style="position:absolute; right:8px; top:50%; transform:translateY(-50%); pointer-events:none; font-size:0.6em; color:currentColor; opacity:0.6;">▼</span>
+                        {% endif %}
                     </td>
-                    <td>{{ order.reviews or '-' }}</td>
+                    <td style="position:relative; text-align:center;">
+                        <select class="text-muted" style="cursor:pointer; outline:none; border:none; appearance:auto; background:transparent; font-family:var(--font); font-size:0.8rem; padding-right:1rem;" onchange="inlineUpdateReview('{{ order.id }}', this.value)">
+                            <option value="Pending" {% if order.reviews == 'Pending' or not order.reviews %}selected{% endif %}>Pending</option>
+                            <option value="Not Responding" {% if order.reviews == 'Not Responding' %}selected{% endif %}>Not Responding</option>
+                            <option value="Done" {% if order.reviews == 'Done' %}selected{% endif %}>Done</option>
+                        </select>
+                        <span style="position:absolute; right:8px; top:50%; transform:translateY(-50%); pointer-events:none; font-size:0.6em; color:currentColor; opacity:0.6;">▼</span>
+                    </td>
                     <td class="actions-cell">
                         <button type="button" class="btn btn-xs btn-ghost" style="color:var(--primary); border-color:var(--bg); background:var(--bg);" data-order="{{ order|tojson|forceescape }}"
                             onclick="openViewModalFromBtn(this)">View</button>
@@ -360,7 +369,7 @@
             <!-- Section 2: Customer & Fulfillment -->
             <div class="form-section">
                 <div class="form-section-title">Customer & Fulfillment</div>
-                <div class="form-grid form-grid-4">
+                <div class="form-grid form-grid-2">
                     <div class="form-group">
                         <label>Customer Name</label>
                         <input type="text" name="customer" id="edit-customer">
@@ -368,23 +377,6 @@
                     <div class="form-group">
                         <label>Phone</label>
                         <input type="text" name="number" id="edit-number">
-                    </div>
-                    <div class="form-group">
-                        <label>Order Status</label>
-                        <select name="status" id="edit-status">
-                            {% for s in statuses %}
-                            <option value="{{ s }}">{{ s }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Review Status</label>
-                        <select id="edit-reviews" name="reviews">
-                            <option value="">Select Review</option>
-                            {% for r in reviews %}
-                            <option value="{{ r }}">{{ r }}</option>
-                            {% endfor %}
-                        </select>
                     </div>
                 </div>
             </div>
@@ -744,11 +736,9 @@
         }
 
         document.getElementById('edit-platform').value = data.platform || '';
-        document.getElementById('edit-status').value = data.status || 'Pending';
         document.getElementById('edit-shipping').value = data.shipping || 0;
         document.getElementById('edit-tax').value = data.tax || 0;
         document.getElementById('edit-marketplace_fee').value = data.marketplace_fee || 0;
-        document.getElementById('edit-reviews').value = data.reviews || '';
         
         calcSettlement('edit');
         document.getElementById('editModal').classList.remove('hidden');
@@ -777,6 +767,35 @@
         const settlement = sp - sh - tx - mf;
         const el = document.getElementById(prefix + '-settlement-display');
         if (el) el.textContent = '\u20b9 ' + settlement.toFixed(2);
+    }
+
+    function inlineUpdateStatus(orderId, newStatus) {
+        submitInlineAction(orderId, 'status_' + newStatus);
+    }
+    
+    function inlineUpdateReview(orderId, newReview) {
+        submitInlineAction(orderId, 'review_' + newReview);
+    }
+
+    function submitInlineAction(orderId, actionValue) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = "{{ url_for('orders.orders_bulk_action') }}";
+        
+        const actionInput = document.createElement('input');
+        actionInput.type = 'hidden';
+        actionInput.name = 'action';
+        actionInput.value = actionValue;
+        form.appendChild(actionInput);
+        
+        const orderInput = document.createElement('input');
+        orderInput.type = 'hidden';
+        orderInput.name = 'order_ids';
+        orderInput.value = orderId;
+        form.appendChild(orderInput);
+        
+        document.body.appendChild(form);
+        form.submit();
     }
     
     document.addEventListener('DOMContentLoaded', () => {

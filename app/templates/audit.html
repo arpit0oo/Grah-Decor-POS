@@ -4,7 +4,7 @@
 {% block content %}
 
 {# ═══════════════════════════════════════════════════════════
-   VIEW: AUDIT HISTORY LIST
+VIEW: AUDIT HISTORY LIST
 ═══════════════════════════════════════════════════════════ #}
 {% if view == 'list' %}
 <div class="page-header">
@@ -36,7 +36,8 @@
                 <td>
                     {% if ts %}
                     <span class="text-bold">{{ ts.strftime('%d %b %Y') }}</span>
-                    <span class="text-muted" style="font-size:0.85em; margin-left:0.5rem;">{{ ts.strftime('%H:%M') }} UTC</span>
+                    <span class="text-muted" style="font-size:0.85em; margin-left:0.5rem;">{{ ts.strftime('%H:%M') }}
+                        UTC</span>
                     {% else %}
                     <span class="text-muted">—</span>
                     {% endif %}
@@ -47,7 +48,8 @@
                 </td>
                 <td class="text-muted">{{ a.notes or '—' }}</td>
                 <td style="text-align:center;">
-                    <a href="{{ url_for('audit.audit_report', audit_id=a.id) }}" class="btn btn-xs btn-ghost">View Details</a>
+                    <a href="{{ url_for('audit.audit_report', audit_id=a.id) }}" class="btn btn-xs btn-ghost">View
+                        Details</a>
                 </td>
             </tr>
             {% endfor %}
@@ -55,7 +57,8 @@
     </table>
 </div>
 {% else %}
-<div class="empty-state" style="padding:3rem; text-align:center; border:1px dashed var(--border); border-radius:var(--radius);">
+<div class="empty-state"
+    style="padding:3rem; text-align:center; border:1px dashed var(--border); border-radius:var(--radius);">
     <div style="font-size:2.5rem; margin-bottom:1rem;">🔍</div>
     <h3>No audits yet</h3>
     <p class="text-muted">Run your first stock audit to create a checkpoint.</p>
@@ -65,7 +68,7 @@
 
 
 {# ═══════════════════════════════════════════════════════════
-   VIEW: NEW AUDIT FORM
+VIEW: NEW AUDIT FORM
 ═══════════════════════════════════════════════════════════ #}
 {% elif view == 'new' %}
 <div class="page-header">
@@ -73,9 +76,10 @@
     <a href="{{ url_for('audit.audit_list') }}" class="btn btn-ghost">← Back</a>
 </div>
 
-<div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:1rem 1.5rem; margin-bottom:1.5rem; font-size:0.875em;">
-    <strong>📌 How to use:</strong> Enter the <em>actual physical count</em> from your warehouse for each item.
-    The system will calculate what was consumed since the last checkpoint and update live quantities automatically.
+<div
+    style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:1rem 1.5rem; margin-bottom:1.5rem; font-size:0.875em;">
+    <strong>📌 How to use:</strong> Enter the <em>actual physical count</em> from your warehouse on Closing stock.
+    The system will calculate what was consumed since the last audit and update live quantities automatically.
 </div>
 
 <form autocomplete="off" method="POST" action="{{ url_for('audit.audit_finalize') }}">
@@ -87,7 +91,7 @@
                     <th>Unit</th>
                     <th style="text-align:right;">Opening Stock</th>
                     <th style="text-align:right;">Unit Cost ₹</th>
-                    <th style="text-align:center; width:160px;">Purchased</th>
+                    <th style="text-align:center; width:160px;">Closing Stock</th>
                     <th style="text-align:right;">Utilized</th>
                     <th style="text-align:right;">Utilized Cost ₹</th>
                 </tr>
@@ -97,40 +101,36 @@
                 <tr>
                     <td class="text-bold">
                         {{ m.name }}
-                        <input type="hidden" name="doc_id[]"        value="{{ m.id }}">
-                        <input type="hidden" name="name[]"          value="{{ m.name }}">
-                        <input type="hidden" name="unit[]"          value="{{ m.unit }}">
-                        <input type="hidden" name="price[]"         value="{{ m.price or 0 }}">
-                        <input type="hidden" name="opening_stock[]" value="{{ m.quantity|int }}">
+                        <input type="hidden" name="doc_id[]" value="{{ m.id }}">
+                        <input type="hidden" name="name[]" value="{{ m.name }}">
+                        <input type="hidden" name="unit[]" value="{{ m.unit }}">
+                        <input type="hidden" name="price[]" value="{{ m.calc_price or 0 }}">
+                        <input type="hidden" name="opening_stock[]" value="{{ m.quantity|float }}">
                     </td>
                     <td class="text-muted">{{ m.unit }}</td>
-                    <td class="text-right" id="sys-{{ loop.index }}">{{ m.quantity|int }}</td>
-                    <td class="text-right">{{ m.price|int }}</td>
+                    <td class="text-right" id="sys-{{ loop.index }}">{{ m.quantity|float }}</td>
+                    <td class="text-right">{{ "%.2f"|format(m.calc_price or 0) }}</td>
                     <td style="text-align:center;">
-                        <input type="number"
-                               name="purchased[]"
-                               id="actual-{{ loop.index }}"
-                               value="{{ m.quantity|int }}"
-                               min="0"
-                               step="1"
-                               class="inline-input inline-input-sm"
-                               style="width:90px; text-align:center;"
-                               data-idx="{{ loop.index }}"
-                               data-price="{{ m.price|int }}"
-                               data-opening="{{ m.quantity|int }}"
-                               oninput="recalcRow(this)">
+                        <input type="number" name="purchased[]" id="actual-{{ loop.index }}"
+                            value="{{ m.quantity|float }}" min="0" step="any" class="inline-input inline-input-sm"
+                            style="width:90px; text-align:center;" data-idx="{{ loop.index }}"
+                            data-price="{{ m.calc_price or 0 }}" data-opening="{{ m.quantity|float }}"
+                            oninput="recalcRow(this)">
                     </td>
                     <td class="text-right" id="util-{{ loop.index }}">0</td>
                     <td class="text-right text-bold" id="ucost-{{ loop.index }}">₹ 0</td>
                 </tr>
                 {% endfor %}
                 {% if not raw_materials %}
-                <tr><td colspan="7" class="empty-state">No raw materials registered.</td></tr>
+                <tr>
+                    <td colspan="7" class="empty-state">No raw materials registered.</td>
+                </tr>
                 {% endif %}
             </tbody>
             <tfoot>
                 <tr style="border-top:2px solid var(--border);">
-                    <td colspan="5" class="text-right text-bold" style="padding-right:1rem;">Total Estimated Utilization:</td>
+                    <td colspan="5" class="text-right text-bold" style="padding-right:1rem;">Total Estimated
+                        Utilization:</td>
                     <td></td>
                     <td class="text-right text-bold text-danger" id="grandTotal">₹ 0</td>
                 </tr>
@@ -140,13 +140,13 @@
 
     <div class="form-group" style="margin-top:1.5rem; max-width:600px;">
         <label>Audit Notes (optional)</label>
-        <textarea name="notes" rows="2" placeholder="e.g. Monthly checkpoint — April 2026"
-                  class="inline-input" style="width:100%; border:1px solid var(--border); border-radius:var(--radius); padding:0.5rem;"></textarea>
+        <textarea name="notes" rows="2" placeholder="e.g. Monthly checkpoint — April 2026" class="inline-input"
+            style="width:100%; border:1px solid var(--border); border-radius:var(--radius); padding:0.5rem;"></textarea>
     </div>
 
     <div class="form-actions" style="margin-top:1.5rem;">
         <button type="submit" class="btn btn-primary"
-                onclick="return confirm('Finalize this audit? Live quantities will be updated to match your physical counts.')">
+            onclick="return confirm('Finalize this audit? Live quantities will be updated to match your physical counts.')">
             ✅ Finalize Audit &amp; Lock Quantities
         </button>
         <a href="{{ url_for('audit.audit_list') }}" class="btn btn-ghost">Cancel</a>
@@ -155,7 +155,7 @@
 
 
 {# ═══════════════════════════════════════════════════════════
-   VIEW: SINGLE AUDIT REPORT
+VIEW: SINGLE AUDIT REPORT
 ═══════════════════════════════════════════════════════════ #}
 {% elif view == 'report' %}
 {% set ts = audit.created_at or audit.date %}
@@ -205,16 +205,17 @@
         <tbody>
             {% for item in audit.line_items %}
             {% set util_positive = item.utilized > 0 %}
-            {% set v_opening   = item.opening_stock if item.opening_stock is defined else item.system_qty %}
+            {% set v_opening = item.opening_stock if item.opening_stock is defined else item.system_qty %}
             {% set v_purchased = item.purchased if item.purchased is defined else item.actual_qty %}
-            {% set v_closing   = item.closing_stock if item.closing_stock is defined else item.variance %}
+            {% set v_closing = item.closing_stock if item.closing_stock is defined else item.variance %}
             <tr class="{% if v_closing < 0 %}row-warning{% endif %}">
                 <td class="text-bold">{{ item.name }}</td>
                 <td class="text-muted">{{ item.unit }}</td>
                 <td class="text-right">{{ item.unit_cost|int }}</td>
                 <td class="text-right">{{ v_opening|int }}</td>
                 <td class="text-right">{{ v_purchased|int }}</td>
-                <td class="text-right {% if v_closing < 0 %}text-danger{% elif v_closing > 0 %}text-success{% endif %} text-bold">
+                <td
+                    class="text-right {% if v_closing < 0 %}text-danger{% elif v_closing > 0 %}text-success{% endif %} text-bold">
                     {% if v_closing > 0 %}+{% endif %}{{ v_closing|int }}
                 </td>
                 <td class="text-right {% if util_positive %}text-danger{% endif %}">{{ item.utilized|int }}</td>
@@ -224,7 +225,9 @@
             </tr>
             {% endfor %}
             {% if not audit.line_items %}
-            <tr><td colspan="8" class="empty-state">No item data.</td></tr>
+            <tr>
+                <td colspan="8" class="empty-state">No item data.</td>
+            </tr>
             {% endif %}
         </tbody>
         <tfoot>
@@ -242,24 +245,24 @@
 {% block scripts %}
 {% if view == 'new' %}
 <script>
-function recalcRow(el) {
-    const idx        = el.dataset.idx;
-    const unitCost   = parseFloat(el.dataset.price) || 0;
-    const openingQty = parseInt(el.dataset.opening)  || 0;
-    const purchased  = parseFloat(el.value)          || 0;
-    const utilized   = openingQty - purchased;
-    const ucost      = utilized * unitCost;
+    function recalcRow(el) {
+        const idx = el.dataset.idx;
+        const unitCost = parseFloat(el.dataset.price) || 0;
+        const openingQty = parseInt(el.dataset.opening) || 0;
+        const purchased = parseFloat(el.value) || 0;
+        const utilized = openingQty - purchased;
+        const ucost = utilized * unitCost;
 
-    document.getElementById('util-'  + idx).textContent = utilized;
-    document.getElementById('ucost-' + idx).textContent = '₹ ' + Math.max(0, ucost).toFixed(0);
+        document.getElementById('util-' + idx).textContent = utilized;
+        document.getElementById('ucost-' + idx).textContent = '₹ ' + Math.max(0, ucost).toFixed(0);
 
-    // Recompute grand total
-    let grand = 0;
-    document.querySelectorAll('[id^="ucost-"]').forEach(el => {
-        grand += parseFloat(el.textContent.replace('₹ ', '')) || 0;
-    });
-    document.getElementById('grandTotal').textContent = '₹ ' + grand.toFixed(0);
-}
+        // Recompute grand total
+        let grand = 0;
+        document.querySelectorAll('[id^="ucost-"]').forEach(el => {
+            grand += parseFloat(el.textContent.replace('₹ ', '')) || 0;
+        });
+        document.getElementById('grandTotal').textContent = '₹ ' + grand.toFixed(0);
+    }
 </script>
 {% endif %}
 {% endblock %}

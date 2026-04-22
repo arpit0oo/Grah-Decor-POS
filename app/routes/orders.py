@@ -162,7 +162,6 @@ def orders_bulk_action():
         flash(f'Successfully deleted {success_count} orders.', 'success')
     elif action.startswith('status_'):
         new_status = action.replace('status_', '')
-        from datetime import datetime, timezone
         from app import get_db
         db = get_db()
         for doc_id in order_ids:
@@ -171,13 +170,19 @@ def orders_bulk_action():
                 old = doc.to_dict()
                 if old.get('status') in TERMINAL_STATUSES:
                     continue  # skip locked orders
-                history = old.get('status_history', [])
-                now = datetime.now(timezone.utc)
-                history.append({'status': new_status, 'timestamp': now.isoformat()})
                 update_order(doc_id, {'status': new_status})
-                db.collection('orders').document(doc_id).update({'status_history': history})
                 success_count += 1
         flash(f'Successfully changed status of {success_count} orders to {new_status}.', 'success')
+    elif action.startswith('review_'):
+        new_review = action.replace('review_', '')
+        from app import get_db
+        db = get_db()
+        for doc_id in order_ids:
+            doc = db.collection('orders').document(doc_id).get()
+            if doc.exists:
+                db.collection('orders').document(doc_id).update({'reviews': new_review})
+                success_count += 1
+        flash(f'Successfully changed review of {success_count} orders.', 'success')
     else:
         flash('Invalid action requested.', 'error')
         

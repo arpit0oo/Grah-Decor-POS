@@ -44,17 +44,33 @@ def get_product_inventory_logs(name, color=None, limit=100):
 def get_all_raw_materials():
     db = get_db()
     docs = db.collection('raw_materials').order_by('name').stream()
-    return [{'id': d.id, **d.to_dict()} for d in docs]
+    materials = [{'id': d.id, **d.to_dict()} for d in docs]
+
+    # Pre-fetch POs to calculate moving average cost
+    po_docs = db.collection('purchase_orders').where(filter=FieldFilter('status', 'in', ['Received', 'Paid'])).stream()
+    pos = [d.to_dict() for d in po_docs]
+
+    for m in materials:
+        name = m.get('name', '').lower()
+        mat_pos = [po for po in pos if po.get('item', '').lower() == name]
+        
+        total_invested = sum(po.get('total_cost', 0) for po in mat_pos)
+        total_qty_purchased = sum(po.get('quantity', 0) for po in mat_pos)
+        
+        avg_price = total_invested / total_qty_purchased if total_qty_purchased > 0 else 0
+        m['calc_price'] = avg_price
+        m['calc_total_value'] = avg_price * float(m.get('quantity', 0))
+
+    return materials
 
 
-def add_raw_material(name, quantity, unit, price=0, reason='Manual Add'):
+def add_raw_material(name, quantity, unit, reason='Manual Add'):
     db = get_db()
-    qty = int(float(quantity or 0))
+    qty = float(quantity or 0)
     db.collection('raw_materials').add({
         'name': name,
         'quantity': qty,
         'unit': unit,
-        'price': float(price or 0),
         'updated_at': datetime.now(timezone.utc),
     })
     log_inventory_transaction('Raw Material', name, '', qty, reason)
@@ -136,6 +152,7 @@ def get_ready_stock_grouped():
         if children:
             parent['variants'] = children
             parent['quantity'] = sum(v.get('quantity', 0) for v in children)
+            parent['reserved_quantity'] = sum(v.get('reserved_quantity', 0) for v in children)
         else:
             parent['variants'] = []
 
@@ -162,12 +179,8 @@ def update_ready_stock(doc_id, data):
     if not doc.exists:
         return False
 
-    if 'quantity' in data:
-        current_quantity = float(doc.to_dict().get('quantity', 0))
-        new_quantity = float(data['quantity'] or 0)
-        data['quantity'] = new_quantity
-        if new_quantity < current_quantity:
-            raise ValueError("Manual decrement of ready stock is not allowed.")
+    # Strip quantity if somehow submitted — all quantity changes go via adjust_ready_stock_qty
+    data.pop('quantity', None)
 
     data['updated_at'] = datetime.now(timezone.utc)
     doc_ref.update(data)
@@ -233,13 +246,14 @@ def adjust_ready_stock_qty(name, color, delta=0, reserved_delta=0, reason='Manua
 
 # ── Produce ────────────────────────────────────────────────────
 
-def produce_item(raw_items, product_name, product_color, produce_qty):
+def produce_item(raw_items, product_name, product_color, produce_qty, reason=''):
     """
     Deduct raw materials and add to ready stock.
     raw_items: list of dicts [{name, quantity_used}, ...]
     """
+    res_suffix = f" — {reason}" if reason else ""
     for item in raw_items:
-        adjust_raw_material_qty(item['name'], -float(item['quantity_used']), reason=f'Used for producing {product_name}')
+        adjust_raw_material_qty(item['name'], -float(item['quantity_used']), reason=f'Used for producing {product_name}{res_suffix}')
 
-    if not adjust_ready_stock_qty(product_name, product_color, float(produce_qty), reason='Production'):
-        add_ready_stock(product_name, product_color, float(produce_qty), 0, reason='Production')
+    if not adjust_ready_stock_qty(product_name, product_color, float(produce_qty), reason=f'Production{res_suffix}'):
+        add_ready_stock(product_name, product_color, float(produce_qty), 0, reason=f'Production{res_suffix}')

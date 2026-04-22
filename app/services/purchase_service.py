@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from app import get_db
 from app.services.inventory_service import adjust_raw_material_qty, add_raw_material
-from google.cloud.firestore_v1 import FieldFilter
+from google.cloud.firestore_v1 import FieldFilter, ArrayUnion
 
 def generate_po_number():
     db = get_db()
@@ -60,15 +60,18 @@ def add_purchase_order(vendor_name, item, quantity, unit_cost):
         'payment_id': '',
         'created_at': now,
         'updated_at': now,
+        'status_history': [{'status': 'Draft', 'timestamp': now.isoformat()}],
     })
 
     return doc_ref.id
 
 def mark_po_sent(po_id):
     db = get_db()
+    now = datetime.now(timezone.utc)
     db.collection('purchase_orders').document(po_id).update({
         'status': 'Sent',
-        'updated_at': datetime.now(timezone.utc)
+        'updated_at': now,
+        'status_history': ArrayUnion([{'status': 'Sent', 'timestamp': now.isoformat()}])
     })
 
 def mark_po_received(po_id):
@@ -82,9 +85,11 @@ def mark_po_received(po_id):
     if data.get('status') in ['Received', 'Paid']:
         return False
         
+    now = datetime.now(timezone.utc)
     db.collection('purchase_orders').document(po_id).update({
         'status': 'Received',
-        'updated_at': datetime.now(timezone.utc)
+        'updated_at': now,
+        'status_history': ArrayUnion([{'status': 'Received', 'timestamp': now.isoformat()}])
     })
     
     # Increment inventory
@@ -95,7 +100,7 @@ def mark_po_received(po_id):
     
     reason = f"PO {po_number} Received"
     if not adjust_raw_material_qty(item, quantity, reason=reason):
-        add_raw_material(item, quantity, 'pcs', unit_cost, reason=reason)
+        add_raw_material(item, quantity, 'pcs', reason=reason)
         
     return True
 
@@ -111,10 +116,12 @@ def mark_po_paid(po_id, payment_id):
     if data.get('status') == 'Paid':
         return False
         
+    now = datetime.now(timezone.utc)
     db.collection('purchase_orders').document(po_id).update({
         'status': 'Paid',
         'payment_id': payment_id,
-        'updated_at': datetime.now(timezone.utc)
+        'updated_at': now,
+        'status_history': ArrayUnion([{'status': 'Paid', 'timestamp': now.isoformat()}])
     })
     
     po_number = data.get('po_number', po_id)
@@ -145,9 +152,11 @@ def cancel_po(po_id):
     if old_status == 'Cancelled':
         return True
         
+    now = datetime.now(timezone.utc)
     db.collection('purchase_orders').document(po_id).update({
         'status': 'Cancelled',
-        'updated_at': datetime.now(timezone.utc)
+        'updated_at': now,
+        'status_history': ArrayUnion([{'status': 'Cancelled', 'timestamp': now.isoformat()}])
     })
     
     # If it was received or paid, reverse inventory

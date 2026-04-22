@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from app.services.inventory_service import (
     get_all_raw_materials, add_raw_material, update_raw_material, delete_raw_material,
     get_all_ready_stock, get_ready_stock_grouped, add_ready_stock, add_ready_stock_variant,
-    update_ready_stock, delete_ready_stock,
+    update_ready_stock, delete_ready_stock, adjust_ready_stock_qty,
     produce_item, get_inventory_logs, get_product_inventory_logs
 )
 
@@ -21,20 +21,19 @@ def inventory_list():
     today = datetime.now(timezone.utc).date()
     today_in = 0
     today_out = 0
-    today_produced = 0
+    today_log_count = 0
     today_shipped = 0
     
     for log in logs:
         # Some datetime objects might have timezone attached, safe way:
         dt = log.get('date')
         if dt and hasattr(dt, 'date') and dt.date() == today:
+            today_log_count += 1
             delta = log.get('delta', 0)
             reason = log.get('reason', '')
             
             if delta > 0:
                 today_in += delta
-                if 'Produce' in reason or 'Production' in reason:
-                    today_produced += delta
             elif delta < 0:
                 today_out += abs(delta)
                 if 'Shipped' in reason or 'Delivered' in reason:
@@ -44,7 +43,7 @@ def inventory_list():
     return render_template('inventory.html', 
                            raw_materials=raw, ready_stock=get_ready_stock_grouped(), logs=logs, active_tab=tab,
                            today_in=today_in, today_out=today_out, 
-                           today_produced=today_produced, today_shipped=today_shipped)
+                           today_log_count=today_log_count, today_shipped=today_shipped)
 
 
 # ── Raw Materials ──────────────────────────────────────────────
@@ -54,9 +53,8 @@ def raw_add():
     name = request.form.get('name', '').strip()
     quantity = request.form.get('quantity', 0)
     unit = request.form.get('unit', 'pcs').strip()
-    price = request.form.get('price', 0)
     if name:
-        add_raw_material(name, quantity, unit, price)
+        add_raw_material(name, quantity, unit)
         flash('Raw material added.', 'success')
     else:
         flash('Name is required.', 'error')
@@ -66,17 +64,12 @@ def raw_add():
 @inventory_bp.route('/raw/edit/<doc_id>', methods=['POST'])
 def raw_edit(doc_id):
     data = {}
-    if request.form.get('name'):
-        data['name'] = request.form['name'].strip()
-    if request.form.get('quantity') is not None:
-        data['quantity'] = float(request.form['quantity'])
+    # Name and Price are LOCKED — only unit can change
     if request.form.get('unit'):
         data['unit'] = request.form['unit'].strip()
-    if request.form.get('price') is not None:
-        data['price'] = float(request.form['price'])
     if data:
         update_raw_material(doc_id, data)
-        flash('Raw material updated.', 'success')
+        flash('Raw material unit updated.', 'success')
     return redirect(url_for('inventory.inventory_list', tab='raw'))
 
 
@@ -95,8 +88,9 @@ def ready_add():
     color = request.form.get('color', '').strip()
     quantity = request.form.get('quantity', 0)
     cost_price = request.form.get('cost_price', 0)
+    reason = request.form.get('reason', 'Manual Add').strip() or 'Manual Add'
     if name:
-        add_ready_stock(name, color, quantity, cost_price)
+        add_ready_stock(name, color, quantity, cost_price, reason=reason)
         flash('Ready stock item added.', 'success')
     else:
         flash('Product name is required.', 'error')
@@ -106,20 +100,56 @@ def ready_add():
 @inventory_bp.route('/ready/edit/<doc_id>', methods=['POST'])
 def ready_edit(doc_id):
     data = {}
-    if request.form.get('name'):
-        data['name'] = request.form['name'].strip()
-    if request.form.get('color') is not None:
-        data['color'] = request.form['color'].strip()
-    if request.form.get('quantity') is not None:
-        data['quantity'] = float(request.form['quantity'])
+    # Name and Quantity are LOCKED — use Adjust Stock to change quantity
     if request.form.get('cost_price') is not None:
-        data['cost_price'] = float(request.form['cost_price'])
+        data['cost_price'] = float(request.form.get('cost_price') or 0)
     if data:
         try:
             update_ready_stock(doc_id, data)
-            flash('Ready stock updated.', 'success')
+            flash('Cost price updated.', 'success')
         except ValueError as e:
             flash(str(e), 'error')
+    return redirect(url_for('inventory.inventory_list', tab='ready'))
+
+
+@inventory_bp.route('/ready/adjust/<doc_id>', methods=['POST'])
+def ready_adjust(doc_id):
+    adjustment = request.form.get('adjustment', '').strip()
+    reason = request.form.get('reason', '').strip()
+    notes = request.form.get('notes', '').strip()
+
+    if not adjustment or not reason:
+        flash('Adjustment quantity and reason are required.', 'error')
+        return redirect(url_for('inventory.inventory_list', tab='ready'))
+
+    try:
+        delta = int(float(adjustment))
+    except ValueError:
+        flash('Invalid adjustment quantity.', 'error')
+        return redirect(url_for('inventory.inventory_list', tab='ready'))
+
+    if delta < 1:
+        flash('Only positive additions are allowed. Stock is reduced through orders.', 'error')
+        return redirect(url_for('inventory.inventory_list', tab='ready'))
+
+    from app.services.inventory_service import get_all_ready_stock
+    all_docs = get_all_ready_stock()
+    item = next((d for d in all_docs if d['id'] == doc_id), None)
+    if not item:
+        flash('Item not found.', 'error')
+        return redirect(url_for('inventory.inventory_list', tab='ready'))
+
+    full_reason = f"{reason}: {notes}" if notes else reason
+    adjust_ready_stock_qty(
+        item.get('name', ''),
+        item.get('color', ''),
+        delta,
+        0,
+        reason=full_reason,
+        ref_id=doc_id
+    )
+    direction = f"+{delta}" if delta > 0 else str(delta)
+    flash(f'Stock adjusted by {direction} for {item.get("name")}. Reason: {reason}.', 'success')
     return redirect(url_for('inventory.inventory_list', tab='ready'))
 
 
@@ -158,6 +188,7 @@ def produce():
     product_name = request.form.get('product_name', '').strip()
     product_color = request.form.get('product_color', '').strip()
     produce_qty = request.form.get('produce_qty', 1)
+    produce_reason = request.form.get('produce_reason', '').strip()
 
     # Collect raw materials used (dynamic form fields)
     raw_items = []
@@ -172,7 +203,7 @@ def produce():
         i += 1
 
     if product_name and raw_items:
-        produce_item(raw_items, product_name, product_color, produce_qty)
+        produce_item(raw_items, product_name, product_color, produce_qty, reason=produce_reason)
         flash(f'Produced {produce_qty} x {product_name}.', 'success')
     else:
         flash('Please fill in product and raw materials.', 'error')
@@ -221,3 +252,31 @@ def api_product_logs():
         if log.get('date'):
             log['date'] = log['date'].isoformat()
     return jsonify(logs)
+
+
+@inventory_bp.route('/api/raw-purchase-history', methods=['GET'])
+def api_raw_purchase_history():
+    """Return all purchase orders for a given raw material name."""
+    name = request.args.get('name', '').strip()
+    if not name:
+        return jsonify({'error': 'Name is required'}), 400
+
+    from app.services.purchase_service import get_all_purchase_orders
+    all_pos = get_all_purchase_orders()
+    # Filter to matching item name (case-insensitive)
+    matched = [po for po in all_pos if (po.get('item') or '').lower() == name.lower()]
+
+    result = []
+    for po in matched:
+        created = po.get('created_at')
+        date_str = created.strftime('%d/%m/%Y') if created and hasattr(created, 'strftime') else '-'
+        result.append({
+            'po_number':   po.get('po_number', '-'),
+            'date':        date_str,
+            'vendor_name': po.get('vendor_name', '-'),
+            'quantity':    po.get('quantity', 0),
+            'unit_cost':   po.get('unit_cost', 0),
+            'total_cost':  po.get('total_cost', 0),
+            'status':      po.get('status', '-'),
+        })
+    return jsonify(result)
