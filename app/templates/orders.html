@@ -204,7 +204,7 @@
                         {% if is_terminal %}
                             <span class="badge badge-{{ order.status|lower|replace(' ', '-') }}">{{ order.status }}</span>
                         {% else %}
-                            <select class="badge badge-{{ order.status|lower|replace(' ', '-') }}" style="padding-right:1rem; cursor:pointer; outline:none; border:none; appearance:auto; text-align:center; font-family:var(--font); font-weight:600; min-width:85px; background-color:transparent;" onchange="inlineUpdateStatus('{{ order.id }}', this.value)">
+                            <select class="badge badge-{{ order.status|lower|replace(' ', '-') }}" style="padding-right:1rem; cursor:pointer; outline:none; border:none; appearance:auto; text-align:center; font-family:var(--font); font-weight:600; min-width:85px; background-color:transparent;" onchange="inlineUpdateStatus('{{ order.id }}', this.value, this)">
                                 {% if order.status == 'Pending' %}
                                     <option value="Pending" selected>Pending</option>
                                     <option value="Shipped">Shipped</option>
@@ -532,7 +532,7 @@
                         <input type="number" name="quantity[]" class="item-qty" value="1" min="1" step="1" oninput="calcSettlement('${prefix}')">
                     </div>
                     <div class="form-group">
-                        <label>Unit Price ₹</label>
+                        <label>Selling Price ₹</label>
                         <input type="number" name="price[]" class="item-price" value="0" min="0" step="0.01" oninput="calcSettlement('${prefix}')">
                     </div>
                 </div>
@@ -637,7 +637,10 @@
                 sellingPrice += lineTotal;
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td>${item.product || '-'}</td>
+                    <td>
+                        ${item.product || '-'}
+                        ${item.color ? `<span class="text-muted" style="font-size:0.85em;">(${item.color})</span>` : ''}
+                    </td>
                     <td>${item.color || '-'}</td>
                     <td class="text-right">${qty}</td>
                     <td class="text-right">₹ ${parseFloat(price).toFixed(2)}</td>
@@ -808,7 +811,18 @@
         if (el) el.textContent = '\u20b9 ' + settlement.toFixed(2);
     }
 
-    function inlineUpdateStatus(orderId, newStatus) {
+    function inlineUpdateStatus(orderId, newStatus, selectEl) {
+        if (!confirm(`Are you sure you want to change the order status to ${newStatus}? This action cannot be undone.`)) {
+            if (selectEl) {
+                const selectedOpt = selectEl.querySelector('option[selected]');
+                if (selectedOpt) {
+                    selectEl.value = selectedOpt.value;
+                } else {
+                    location.reload(); // Fallback if no option has the 'selected' attribute explicitly
+                }
+            }
+            return;
+        }
         submitInlineAction(orderId, 'status_' + newStatus);
     }
     
