@@ -53,15 +53,36 @@
 
         <!-- Section 2: Customer & Fulfillment -->
         <div class="form-section">
-            <div class="form-section-title">Customer & Fulfillment</div>
-            <div class="form-grid form-grid-2">
+            <div class="form-section-title">Customer Details</div>
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label>
+                    <input type="radio" name="customer_mode" value="existing" checked onchange="toggleCustomerMode('add')"> Existing Customer
+                </label>
+                <label style="margin-left: 1rem;">
+                    <input type="radio" name="customer_mode" value="new" onchange="toggleCustomerMode('add')"> Create New Customer
+                </label>
+            </div>
+            
+            <!-- Existing Customer Select -->
+            <div id="add-existing-customer-group" class="form-group">
+                <label for="add-existing-customer">Select Customer *</label>
+                <select id="add-existing-customer" name="existing_customer" required style="width: 100%;">
+                    <option value="" disabled selected>Select a customer...</option>
+                    {% for c in customers %}
+                    <option value="{{ c.customer_id }} - {{ c.name }}">{{ c.customer_id }} - {{ c.name }} ({{ c.phone_numbers[0] if c.phone_numbers else 'No phone' }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- New Customer Fields (Hidden by default) -->
+            <div id="add-new-customer-group" class="form-grid form-grid-2 hidden">
                 <div class="form-group">
-                    <label for="add-customer">Customer Name *</label>
-                    <input type="text" id="add-customer" name="customer" required placeholder="Customer name">
+                    <label for="add-new-customer-name">New Customer Name *</label>
+                    <input type="text" id="add-new-customer-name" name="new_customer_name" placeholder="Customer name">
                 </div>
                 <div class="form-group">
-                    <label for="add-number">Phone / Number</label>
-                    <input type="tel" id="add-number" name="number" placeholder="10-digit number" 
+                    <label for="add-new-customer-phone">Phone / Number</label>
+                    <input type="tel" id="add-new-customer-phone" name="new_customer_phone" placeholder="10-digit number" 
                         pattern="[0-9]{10}" maxlength="10" 
                         oninput="this.value = this.value.replace(/[^0-9]/g, '');"
                         title="Please enter a 10-digit phone number without country code">
@@ -784,6 +805,24 @@
         
         calcSettlement('edit');
         document.getElementById('editModal').classList.remove('hidden');
+    }
+
+    function toggleCustomerMode(prefix) {
+        let mode = document.querySelector(`input[name="customer_mode"]:checked`).value;
+        let existingGroup = document.getElementById(`${prefix}-existing-customer-group`);
+        let newGroup = document.getElementById(`${prefix}-new-customer-group`);
+        
+        if (mode === 'existing') {
+            existingGroup.classList.remove('hidden');
+            newGroup.classList.add('hidden');
+            document.getElementById(`${prefix}-existing-customer`).required = true;
+            document.getElementById(`${prefix}-new-customer-name`).required = false;
+        } else {
+            existingGroup.classList.add('hidden');
+            newGroup.classList.remove('hidden');
+            document.getElementById(`${prefix}-existing-customer`).required = false;
+            document.getElementById(`${prefix}-new-customer-name`).required = true;
+        }
     }
 
     function calcSettlement(prefix) {

@@ -47,6 +47,13 @@
                 </a>
             </li>
             <li>
+                <a href="{{ url_for('contact.contacts_list') }}"
+                   class="nav-link {% if request.path.startswith('/contacts') %}active{% endif %}">
+                    <span class="nav-icon">👥</span>
+                    <span class="nav-label">Contacts</span>
+                </a>
+            </li>
+            <li>
                 <a href="{{ url_for('cashbook.dashboard') }}"
                    class="nav-link {% if request.path.startswith('/cashbook') %}active{% endif %}">
                     <span class="nav-icon">💰</span>

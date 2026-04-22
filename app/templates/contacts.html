@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Contacts — Grah Decor POS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Contacts</h1>
+    <button class="btn btn-primary" onclick="openVendorModal()">+ Add Vendor</button>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+    <button class="tab {% if active_tab == 'vendors' %}active{% endif %}" onclick="switchTab('vendors')">Vendors ({{ vendors|length }})</button>
+    <button class="tab {% if active_tab == 'customers' %}active{% endif %}" onclick="switchTab('customers')">Customers ({{ customers|length }})</button>
+</div>
+
+<!-- ── VENDORS TAB ─────────────────────────────────────── -->
+<div class="tab-content {% if active_tab != 'vendors' %}hidden{% endif %}" id="tab-vendors">
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Vendor ID</th>
+                    <th>Name</th>
+                    <th>Phone Numbers</th>
+                    <th>Added On</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for v in vendors %}
+                <tr>
+                    <td class="text-mono">{{ v.vendor_id }}</td>
+                    <td class="text-bold">{{ v.name }}</td>
+                    <td class="text-muted">
+                        {% if v.phone_numbers %}
+                            {{ v.phone_numbers | join(', ') }}
+                        {% else %}
+                            Not available
+                        {% endif %}
+                    </td>
+                    <td class="text-muted">{{ v.created_at.strftime('%d/%m/%Y') if v.created_at and v.created_at.strftime else '-' }}</td>
+                </tr>
+                {% endfor %}
+                {% if not vendors %}
+                <tr>
+                    <td colspan="4" class="empty-state">No vendors found. Add one above.</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ── CUSTOMERS TAB ───────────────────────────────────── -->
+<div class="tab-content {% if active_tab != 'customers' %}hidden{% endif %}" id="tab-customers">
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Customer ID</th>
+                    <th>Name</th>
+                    <th>Phone Numbers</th>
+                    <th>Platform Used</th>
+                    <th>Recent Order ID</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in customers %}
+                <tr>
+                    <td class="text-mono">{{ c.customer_id }}</td>
+                    <td class="text-bold">{{ c.name }}</td>
+                    <td class="text-muted">
+                        {% if c.phone_numbers %}
+                            {{ c.phone_numbers | join(', ') }}
+                        {% else %}
+                            Not available
+                        {% endif %}
+                    </td>
+                    <td><span class="badge" style="background:#e0e7ff; color:#3730a3; border: 1px solid #c7d2fe;">{{ c.platform_used or 'Unknown' }}</span></td>
+                    <td class="text-mono">{{ c.recent_order_id or '-' }}</td>
+                </tr>
+                {% endfor %}
+                {% if not customers %}
+                <tr>
+                    <td colspan="5" class="empty-state">No customers yet. Customers are added during order creation.</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ── ADD VENDOR MODAL ────────────────────────────────── -->
+<div class="modal-overlay hidden" id="vendorModal">
+    <div class="modal" style="max-width: 450px;">
+        <div class="modal-header">
+            <h3>Add New Vendor</h3>
+            <button class="modal-close" onclick="closeModal('vendorModal')">×</button>
+        </div>
+        <form autocomplete="off" method="POST" action="{{ url_for('contact.add_vendor_route') }}">
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label>Vendor Name *</label>
+                <input type="text" name="name" required placeholder="e.g. Laxmi Timber">
+            </div>
+            
+            <div id="phoneInputsContainer">
+                <div class="form-group" style="margin-bottom: 0.5rem;">
+                    <label>Phone Number(s)</label>
+                    <input type="text" name="phone_1" placeholder="e.g. +91 9876543210">
+                </div>
+            </div>
+            
+            <button type="button" class="btn btn-xs btn-ghost" onclick="addPhoneRow()" style="margin-bottom: 1.5rem;">+ Add another number</button>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">Save Vendor</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function switchTab(tab) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+        event.target.classList.add('active');
+        document.getElementById('tab-' + tab).classList.remove('hidden');
+    }
+
+    function openVendorModal() {
+        document.getElementById('vendorModal').classList.remove('hidden');
+    }
+    
+    let phoneCount = 1;
+    function addPhoneRow() {
+        phoneCount++;
+        const container = document.getElementById('phoneInputsContainer');
+        const div = document.createElement('div');
+        div.className = 'form-group';
+        div.style.marginBottom = '0.5rem';
+        div.innerHTML = `<input type="text" name="phone_${phoneCount}" placeholder="Alternate phone number">`;
+        container.appendChild(div);
+    }
+</script>
+{% endblock %}

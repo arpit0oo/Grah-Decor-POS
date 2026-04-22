@@ -5,6 +5,7 @@ from app.services.order_service import (
     PLATFORMS, STATUSES, REVIEWS, TERMINAL_STATUSES
 )
 from app.services.inventory_service import get_all_ready_stock
+from app.services.contact_service import get_all_customers, add_customer, update_customer_metadata
 
 orders_bp = Blueprint('orders', __name__, url_prefix='/orders')
 
@@ -60,6 +61,7 @@ def orders_list():
     ready_stock = get_all_ready_stock()
     products = sorted(list(set(s['name'] for s in ready_stock if s.get('name'))))
     colors = sorted(list(set(s['color'] for s in ready_stock if s.get('color'))))
+    customers = get_all_customers()
 
     return render_template('orders.html',
                            orders=orders,
@@ -68,6 +70,7 @@ def orders_list():
                            reviews=REVIEWS,
                            products=products,
                            colors=colors,
+                           customers=customers,
                            total_sales=total_sales,
                            total_settlement=total_settlement,
                            filter_date_from=date_from or '',
@@ -80,13 +83,46 @@ def orders_list():
 def order_add():
     order_items = parse_order_items(request.form)
     
+    order_id = request.form.get('order_id', '').strip()
+    platform = request.form.get('platform', '')
+    
+    # Handle Customer Logic
+    customer_mode = request.form.get('customer_mode', 'existing')
+    customer_name = ''
+    customer_id = ''
+    phone_number = request.form.get('number', '').strip()
+    
+    if customer_mode == 'existing':
+        cust_val = request.form.get('existing_customer', '')
+        if cust_val:
+            parts = cust_val.split(' - ', 1)
+            customer_id = parts[0]
+            customer_name = parts[1] if len(parts) > 1 else parts[0]
+            
+            # Find the customer doc ID to update metadata
+            customers = get_all_customers()
+            c_doc = next((c for c in customers if c['customer_id'] == customer_id), None)
+            if c_doc:
+                update_customer_metadata(c_doc['id'], platform_used=platform, recent_order_id=order_id)
+                phone_number = c_doc['phone_numbers'][0] if c_doc['phone_numbers'] else phone_number
+    else:
+        customer_name = request.form.get('new_customer_name', '').strip()
+        phone_number = request.form.get('new_customer_phone', '').strip()
+        phones = [phone_number] if phone_number else []
+        if customer_name:
+            c_doc_id = add_customer(customer_name, phones, platform_used=platform, recent_order_id=order_id)
+            # The add_customer returns the customer_id string, wait, no it returns the ID string (GDC-XXX)
+            # We need to make sure contact_service returns the generated ID.
+            customer_id = c_doc_id
+
     data = {
         'date': request.form.get('date', ''),
-        'order_id': request.form.get('order_id', '').strip(),
-        'customer': request.form.get('customer', '').strip(),
-        'number': request.form.get('number', '').strip(),
+        'order_id': order_id,
+        'customer': customer_name,
+        'customer_id': customer_id,
+        'number': phone_number,
         'order_items': order_items,
-        'platform': request.form.get('platform', ''),
+        'platform': platform,
         'shipping': request.form.get('shipping', 0),
         'refund': request.form.get('refund', 0),
         'tax': request.form.get('tax', 0),
