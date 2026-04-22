@@ -122,19 +122,31 @@
                         <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_sent', po_id=p.id) }}" style="margin:0;">
                             <button type="submit" class="btn btn-xs btn-primary">Mark Sent</button>
                         </form>
+<<<<<<< HEAD
                         <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0;" onsubmit="return confirm('Are you sure you want to cancel this PO? This action cannot be undone.');">
+=======
+                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0;">
+>>>>>>> e71db85f26f16bb5ffc9c8e95edae0ca6407df17
                             <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--danger)">Cancel</button>
                         </form>
                         {% elif p.status == 'Sent' %}
                         <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_received', po_id=p.id) }}" style="margin:0;">
                             <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--success); border-color:var(--success);" onclick="return confirm('Receive items and increment inventory?')">Receive</button>
                         </form>
+<<<<<<< HEAD
                         <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0;" onsubmit="return confirm('Are you sure you want to cancel this PO? This action cannot be undone.');">
+=======
+                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0;">
+>>>>>>> e71db85f26f16bb5ffc9c8e95edae0ca6407df17
                             <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--danger)">Cancel</button>
                         </form>
                         {% elif p.status == 'Received' %}
                         <button type="button" class="btn btn-xs btn-ghost" style="color:var(--primary); border-color:var(--primary);" onclick="openPayModal('{{ p.id }}', '{{ p.po_number }}')">Pay</button>
+<<<<<<< HEAD
                         <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0;" onsubmit="return confirm('Are you sure you want to cancel this PO? This action cannot be undone.');">
+=======
+                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0;">
+>>>>>>> e71db85f26f16bb5ffc9c8e95edae0ca6407df17
                             <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--danger)">Cancel</button>
                         </form>
                         {% elif p.status == 'Cancelled' %}

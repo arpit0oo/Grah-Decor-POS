@@ -122,6 +122,10 @@
                     <option value="Manufactured">Manufactured</option>
                     <option value="Audit Correction">Audit Correction</option>
                     <option value="Returned to Stock">Returned to Stock</option>
+<<<<<<< HEAD
+=======
+                    <option value="Other">Other</option>
+>>>>>>> e71db85f26f16bb5ffc9c8e95edae0ca6407df17
                 </select>
             </div>
             <div class="form-actions">
@@ -158,6 +162,7 @@
                         {% if s.variants %}<span id="icon-{{ s.id }}" style="font-size:0.8em;">&#9654;</span>{% endif %}
                     </td>
                     <td>
+<<<<<<< HEAD
                         <form autocomplete="off" method="POST" id="form-ready-{{ s.id }}"
                             action="{{ url_for('inventory.ready_edit', doc_id=s.id) }}" class="inline-edit-form">
                             <input type="hidden" name="name" value="{{ s.name }}" form="form-ready-{{ s.id }}">
@@ -166,6 +171,13 @@
                             {% if not s.variants and s.color %}
                             <span class="text-muted" style="font-size:0.85em;">({{ s.color }})</span>
                             {% endif %}
+=======
+                        <form autocomplete="off" method="POST"
+                            action="{{ url_for('inventory.ready_edit', doc_id=s.id) }}" class="inline-edit-form">
+                            <input type="hidden" name="name" value="{{ s.name }}">
+                            <input type="hidden" name="quantity" value="{{ s.quantity }}">
+                            <strong>{{ s.name }}</strong>
+>>>>>>> e71db85f26f16bb5ffc9c8e95edae0ca6407df17
                     </td>
                     <td>
                         {% if s.variants %}
@@ -179,13 +191,18 @@
                         }}</td>
                     <td>
                         <input type="number" name="cost_price" value="{{ s.cost_price or 0 }}" step="1"
+<<<<<<< HEAD
                             class="inline-input inline-input-sm cost-input" readonly
                             style="pointer-events:none; border-color:transparent; background:transparent;"
                             form="form-ready-{{ s.id }}">
+=======
+                            class="inline-input inline-input-sm">
+>>>>>>> e71db85f26f16bb5ffc9c8e95edae0ca6407df17
                     </td>
                     <td class="text-muted">{{ s.updated_at.strftime('%d/%m/%Y') if s.updated_at and
                         s.updated_at.strftime else '-' }}</td>
                     <td class="actions-cell">
+<<<<<<< HEAD
                         <button type="button" class="btn btn-xs edit-cost-btn"
                             onclick="toggleEditCost(this)">Edit</button>
                         <button type="submit" class="btn btn-xs save-cost-btn hidden"
@@ -201,6 +218,20 @@
                             style="color:var(--success); border-color:var(--success);"
                             onclick="openAdjustModal('{{ s.id }}', '{{ s.name|escape }}', '')">Add New Stock</button>
                         {% endif %}
+=======
+                        <button type="submit" class="btn btn-xs">Save</button>
+                        </form>
+                        {% if not s.variants %}
+                        <button type="button" class="btn btn-xs"
+                            style="color:var(--success); border-color:var(--success);"
+                            onclick="openAdjustModal('{{ s.id }}', '{{ s.name|escape }}', '')">Adjust</button>
+                        <button type="button" class="btn btn-xs btn-ghost"
+                            onclick="openHistoryModal('{{ s.name|escape }}', '')">History</button>
+                        {% endif %}
+                        <button type="button" class="btn btn-xs btn-ghost"
+                            style="color:var(--primary); border-color:var(--primary);"
+                            onclick="openVariantModal('{{ s.id }}', '{{ s.name|escape }}')">+ Variant</button>
+>>>>>>> e71db85f26f16bb5ffc9c8e95edae0ca6407df17
                     </td>
                 </tr>
 
@@ -227,6 +258,7 @@
                     <td class="text-muted">{{ v.updated_at.strftime('%d/%m/%Y') if v.updated_at and
                         v.updated_at.strftime else '-' }}</td>
                     <td class="actions-cell">
+<<<<<<< HEAD
                         <button type="button" class="btn btn-xs btn-ghost"
                             onclick="openHistoryModal('{{ v.name|escape }}', '{{ v.color|escape }}')">History</button>
                         <button type="button" class="btn btn-xs"
@@ -234,6 +266,14 @@
                             onclick="openAdjustModal('{{ v.id }}', '{{ v.name|escape }}', '{{ v.color|escape }}')">Add
                             New Stock</button>
                         </form>
+=======
+                        <button type="button" class="btn btn-xs"
+                            style="color:var(--success); border-color:var(--success);"
+                            onclick="openAdjustModal('{{ v.id }}', '{{ v.name|escape }}', '{{ v.color|escape }}')">Adjust</button>
+                        </form>
+                        <button type="button" class="btn btn-xs btn-ghost"
+                            onclick="openHistoryModal('{{ v.name|escape }}', '{{ v.color|escape }}')">History</button>
+>>>>>>> e71db85f26f16bb5ffc9c8e95edae0ca6407df17
                     </td>
                 </tr>
                 {% endfor %}
@@ -459,11 +499,19 @@
 <div class="modal-overlay hidden" id="adjustModal">
     <div class="modal" style="max-width:400px;">
         <div class="modal-header">
+<<<<<<< HEAD
             <h3>Add New Stock</h3>
             <button class="modal-close" onclick="closeModal('adjustModal')">×</button>
         </div>
         <p class="text-muted" style="font-size:0.85em; margin-bottom:1rem;">
             Adding Stock to: <strong id="adjustItemLabel"></strong>
+=======
+            <h3>Adjust Stock</h3>
+            <button class="modal-close" onclick="closeModal('adjustModal')">×</button>
+        </div>
+        <p class="text-muted" style="font-size:0.85em; margin-bottom:1rem;">
+            Adjusting: <strong id="adjustItemLabel"></strong>
+>>>>>>> e71db85f26f16bb5ffc9c8e95edae0ca6407df17
         </p>
         <form autocomplete="off" id="adjustForm" method="POST" action="">
             <div class="form-group" style="margin-bottom:1rem;">
@@ -479,6 +527,10 @@
                     <option value="Manufactured">Manufactured</option>
                     <option value="Audit Correction">Audit Correction</option>
                     <option value="Returned to Stock">Returned to Stock</option>
+<<<<<<< HEAD
+=======
+                    <option value="Other">Other</option>
+>>>>>>> e71db85f26f16bb5ffc9c8e95edae0ca6407df17
                 </select>
             </div>
             <div class="form-group" style="margin-bottom:1.5rem;">
@@ -640,6 +692,7 @@
         document.getElementById('adjustModal').classList.remove('hidden');
     }
 
+<<<<<<< HEAD
     function toggleEditCost(btn) {
         const td = btn.closest('.actions-cell');
         const tr = btn.closest('tr');
@@ -661,6 +714,8 @@
         input.focus();
     }
 
+=======
+>>>>>>> e71db85f26f16bb5ffc9c8e95edae0ca6407df17
     let rawRowCount = 1;
     function addRawRow() {
         const container = document.getElementById('rawMaterialRows');
