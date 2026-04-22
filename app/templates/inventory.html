@@ -169,7 +169,7 @@
                             <input type="text" name="color" value="{{ s.color }}" class="inline-input inline-input-sm">
                     </td>
                     <td>
-                            <input type="number" name="quantity" value="{{ s.quantity }}" step="1" class="inline-input inline-input-sm" style="width:60px">
+                            <input type="number" name="quantity" value="{{ s.quantity }}" step="1" min="{{ s.quantity }}" class="inline-input inline-input-sm" style="width:60px">
                     </td>
                     <td class="text-warning text-bold">
                         {{ s.reserved_quantity or 0 }}

@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Platform Settlements</h1>
+</div>
+
+<div class="filter-bar">
+    <form method="get" action="{{ url_for('settlements.settlements_list') }}" class="filter-form">
+        <select name="platform" onchange="this.form.submit()">
+            <option value="">All Platforms</option>
+            {% for p in platforms %}
+            <option value="{{ p }}" {% if filter_platform == p %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+        </select>
+        <div style="flex:1"></div>
+        <div class="settlement-display" style="min-width: 250px;">
+            <span>Expected Unsettled Pending:</span>
+            <strong>₹ {{ "%.2f"|format(total_expected) }}</strong>
+        </div>
+    </form>
+</div>
+
+<form id="settlementForm" method="post" action="{{ url_for('settlements.add_settlement') }}">
+<div style="display:flex; gap: 1.5rem; align-items: flex-start; flex-wrap: wrap;">
+    <!-- Orders Table -->
+    <div style="flex: 1; min-width: 600px;">
+        <div class="table-wrapper" style="max-height: 600px; overflow-y: auto;">
+                <table class="data-table">
+                    <thead style="position: sticky; top: 0; z-index: 10;">
+                        <tr>
+                            <th style="width: 40px; text-align: center;">
+                                <input type="checkbox" id="selectAllOrders" onchange="toggleAllOrders(this)">
+                            </th>
+                            <th>Date</th>
+                            <th>Order ID</th>
+                            <th>Platform</th>
+                            <th>Items</th>
+                            <th class="text-right">Est. Bank Expected</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in orders %}
+                        <tr>
+                            <td style="text-align: center;">
+                                <input type="checkbox" name="order_ids" value="{{ order.id }}" class="order-checkbox" 
+                                    data-expected="{{ order.bank_settlement|default(0) }}" onchange="updateSelectedTotal()">
+                            </td>
+                            <td>{{ order.date.strftime('%d/%m/%Y') if order.date and order.date.strftime else '-' }}</td>
+                            <td class="text-mono">{{ order.order_id or '-' }}</td>
+                            <td><span class="badge badge-platform">{{ order.platform }}</span></td>
+                            <td>{{ order.order_items|length if order.order_items else 0 }} Items</td>
+                            <td class="text-right text-bold text-green">₹ {{ "%.2f"|format(order.bank_settlement|default(0)) }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% if not orders %}
+                        <tr>
+                            <td colspan="6" class="empty-state">No unsettled shipped/delivered orders found.</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+        </div>
+    </div>
+    
+    <!-- Settlement Actions Box -->
+    <div class="form-card" style="width: 320px; position: sticky; top: 1.5rem;">
+        <h3 style="margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Process Settlement</h3>
+        
+        <div style="margin-bottom: 1rem;">
+            <small class="text-muted" style="text-transform: uppercase; font-size: 0.7em;">Selected Expected</small>
+            <div id="selectedTotalDisplay" style="font-size: 1.5rem; font-weight: bold; color: var(--text);">₹ 0.00</div>
+            <div id="selectedCountDisplay" style="font-size: 0.8em; color: var(--text-secondary);">0 orders selected</div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 0.75rem;">
+            <label>Confirm Platform *</label>
+            <select name="platform" required>
+                <!-- Preselect based on filter -->
+                <option value="">Select Platform</option>
+                {% for p in platforms %}
+                <option value="{{ p }}" {% if filter_platform == p %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="form-group" style="margin-bottom: 0.75rem;">
+            <label>Date *</label>
+            <input type="date" name="settlement_date" id="settlement_date" required>
+        </div>
+        
+        <div class="form-group" style="margin-bottom: 0.75rem;">
+            <label>UTR Number (Txn ID) *</label>
+            <input type="text" name="utr_number" placeholder="Enter bank reference" required>
+        </div>
+        
+        <div class="form-group" style="margin-bottom: 0.75rem;">
+            <label>Actual Amount Received ₹ *</label>
+            <input type="number" name="amount_received" step="0.01" min="0" required id="amountReceivedInput">
+        </div>
+        
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+            <label>Notes (Optional)</label>
+            <input type="text" name="notes" placeholder="Any deductions/remarks?">
+        </div>
+        
+        <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;" id="submitBtn" disabled>Settle Selected Orders</button>
+    </div>
+</div>
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.getElementById('settlement_date').valueAsDate = new Date();
+
+    function toggleAllOrders(source) {
+        const checkboxes = document.querySelectorAll('.order-checkbox');
+        checkboxes.forEach(cb => cb.checked = source.checked);
+        updateSelectedTotal();
+    }
+    
+    function updateSelectedTotal() {
+        const checkedBoxes = document.querySelectorAll('.order-checkbox:checked');
+        let total = 0;
+        
+        checkedBoxes.forEach(cb => {
+            total += parseFloat(cb.getAttribute('data-expected') || 0);
+        });
+        
+        document.getElementById('selectedTotalDisplay').textContent = '₹ ' + total.toFixed(2);
+        document.getElementById('selectedCountDisplay').textContent = `${checkedBoxes.length} order${checkedBoxes.length !== 1 ? 's' : ''} selected`;
+        
+        const amtInput = document.getElementById('amountReceivedInput');
+        if(!amtInput.value && total > 0) {
+            amtInput.value = total.toFixed(2);
+        } else if (total === 0) {
+            amtInput.value = '';
+        }
+        
+        const submitBtn = document.getElementById('submitBtn');
+        submitBtn.disabled = checkedBoxes.length === 0;
+    }
+</script>
+{% endblock %}

@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
 from app import get_db
 from app.services.inventory_service import adjust_ready_stock_qty
-from app.services.cashbook_service import add_cashbook_entry, update_cashbook_entry_by_ref
 from google.cloud.firestore_v1 import FieldFilter
 
 
@@ -47,12 +46,12 @@ def get_all_orders(date_from=None, date_to=None, platform=None, status=None):
 
 
 def add_order(data):
-    from app.services.cashbook_service import add_cashbook_entry
-
     db = get_db()
     now = datetime.now(timezone.utc)
 
-    selling_price = max(0, float(data.get('selling_price', 0)))
+    order_items = data.get('order_items', [])
+    selling_price = sum(float(item.get('price', 0)) * float(item.get('quantity', 1)) for item in order_items)
+    
     shipping = max(0, float(data.get('shipping', 0)))
     refund = max(0, float(data.get('refund', 0)))
     tax = max(0, float(data.get('tax', 0)))
@@ -78,8 +77,7 @@ def add_order(data):
         'order_id': data.get('order_id', ''),
         'customer': data.get('customer', ''),
         'number': data.get('number', ''),
-        'product': data.get('product', ''),
-        'color': data.get('color', ''),
+        'order_items': order_items,
         'platform': data.get('platform', ''),
         'selling_price': selling_price,
         'shipping': shipping,
@@ -87,34 +85,28 @@ def add_order(data):
         'tax': tax,
         'marketplace_fee': marketplace_fee,
         'bank_settlement': bank_settlement,
-        'status': data.get('status', 'Pending'),
+        'status': status,
         'reviews': data.get('reviews', ''),
         'created_at': now,
     }
 
     _, doc_ref = db.collection('orders').add(order)
 
-    # Adjust stock based on status
-    product = data.get('product', '')
-    color = data.get('color', '')
-    status = data.get('status', 'Pending')
-    if product:
-        qty_delta, res_delta = get_stock_deltas(status)
-        if qty_delta != 0 or res_delta != 0:
-            o_id = data.get('order_id')
-            label = f"Order {o_id} " if o_id else "Order "
-            reason = f"{label}logged ({status})"
-            adjust_ready_stock_qty(product, color, qty_delta, res_delta, reason=reason, ref_id=doc_ref.id)
+    # Adjust stock based on status for each item
+    for item in order_items:
+        product = item.get('product', '')
+        color = item.get('color', '')
+        qty = float(item.get('quantity', 1))
+        
+        if product:
+            qty_delta, res_delta = get_stock_deltas(status)
+            if qty_delta != 0 or res_delta != 0:
+                o_id = data.get('order_id')
+                label = f"Order {o_id} " if o_id else "Order "
+                reason = f"{label}logged ({status})"
+                adjust_ready_stock_qty(product, color, qty_delta * qty, res_delta * qty, reason=reason, ref_id=doc_ref.id)
 
-    # Log cash inflow (use bank_settlement as the actual money received)
-    if bank_settlement > 0:
-        add_cashbook_entry(
-            entry_type='inflow',
-            category='Sale',
-            description=f'Order {data.get("order_id", "")} — {product} ({data.get("platform", "")})',
-            amount=bank_settlement,
-            reference_id=doc_ref.id,
-        )
+    # Cashbook entry is now exclusively handled by the Payment Settlement process
 
     return doc_ref.id
 
@@ -122,24 +114,25 @@ def add_order(data):
 def update_order(doc_id, data):
     db = get_db()
     
-    # Fetch old order data to allow stock recalcs
     doc = db.collection('orders').document(doc_id).get()
     if not doc.exists:
         return
     old_data = doc.to_dict()
     
     update_data = {}
-    for field in ['order_id', 'customer', 'number', 'product', 'color',
-                  'platform', 'status', 'reviews']:
+    for field in ['order_id', 'customer', 'number', 'platform', 'status', 'reviews']:
         if field in data:
             update_data[field] = data[field]
+            
+    if 'order_items' in data:
+        update_data['order_items'] = data['order_items']
+        update_data['selling_price'] = sum(float(item.get('price', 0)) * float(item.get('quantity', 1)) for item in data['order_items'])
 
-    for field in ['selling_price', 'shipping', 'refund', 'tax', 'marketplace_fee']:
+    for field in ['shipping', 'refund', 'tax', 'marketplace_fee']:
         if field in data:
             update_data[field] = max(0, float(data[field])) if data[field] else 0
 
-    # Recalculate bank settlement if price fields changed or status changed
-    if any(f in data for f in ['selling_price', 'shipping', 'refund', 'tax', 'marketplace_fee', 'status']):
+    if any(f in data for f in ['order_items', 'shipping', 'refund', 'tax', 'marketplace_fee', 'status']):
         new_status = update_data.get('status', old_data.get('status', 'Pending'))
         if new_status in CANCELLED_STATUSES:
             update_data['bank_settlement'] = 0.0
@@ -160,47 +153,29 @@ def update_order(doc_id, data):
     update_data['updated_at'] = datetime.now(timezone.utc)
     db.collection('orders').document(doc_id).update(update_data)
 
-    # 1. Sync financial/text changes automatically to the Cashbook
-    if 'bank_settlement' in update_data or 'product' in update_data or 'order_id' in update_data or 'platform' in update_data:
-        amount = update_data.get('bank_settlement', old_data.get('bank_settlement', 0))
-        o_id = update_data.get('order_id', old_data.get('order_id', ''))
-        prod = update_data.get('product', old_data.get('product', ''))
-        plat = update_data.get('platform', old_data.get('platform', ''))
-        desc = f"Order {o_id} — {prod} ({plat})"
-        update_cashbook_entry_by_ref(doc_id, amount=amount if amount > 0 else 0, description=desc)
 
-    # 2. Adjust stock if product, color, or status changed
-    old_product = old_data.get('product', '')
-    old_color = old_data.get('color', '')
     old_status = old_data.get('status', 'Pending')
-    
-    new_product = update_data.get('product', old_product)
-    new_color = update_data.get('color', old_color)
+    old_items = old_data.get('order_items', [])
     new_status = update_data.get('status', old_status)
+    new_items = update_data.get('order_items', old_items)
     
-    # Calculate net stock adjustments
-    old_qty_d, old_res_d = get_stock_deltas(old_status)
-    new_qty_d, new_res_d = get_stock_deltas(new_status)
+    old_items_sig = [(i.get('product'), i.get('color'), i.get('quantity')) for i in old_items]
+    new_items_sig = [(i.get('product'), i.get('color'), i.get('quantity')) for i in new_items]
     
-    # Net Deltas = New - Old (to find what actually changed)
-    net_qty_delta = (new_qty_d if new_product else 0) - (old_qty_d if old_product else 0)
-    net_res_delta = (new_res_d if new_product else 0) - (old_res_d if old_product else 0)
+    if old_status != new_status or old_items_sig != new_items_sig:
+        old_qty_d, old_res_d = get_stock_deltas(old_status)
+        for item in old_items:
+            prod = item.get('product')
+            qty = float(item.get('quantity', 1))
+            if prod and (old_qty_d != 0 or old_res_d != 0):
+                adjust_ready_stock_qty(prod, item.get('color', ''), -old_qty_d * qty, -old_res_d * qty, reason=f"Update reversal ({old_status})", ref_id=doc_id)
 
-    if net_qty_delta != 0 or net_res_delta != 0:
-        o_id = update_data.get('order_id', old_data.get('order_id', ''))
-        label = f"Order {o_id} " if o_id else "Order "
-        
-        reason = f"{label}state update ({old_status} → {new_status})"
-        if old_product == new_product:
-            adjust_ready_stock_qty(new_product, new_color, net_qty_delta, net_res_delta, reason=reason, ref_id=doc_id)
-        else:
-            # If product changed, we MUST do two steps: reverse old, apply new
-            if old_product:
-                reverse_reason = f"{label}product change (reversing {old_status})"
-                adjust_ready_stock_qty(old_product, old_color, -old_qty_d, -old_res_d, reason=reverse_reason, ref_id=doc_id)
-            if new_product:
-                apply_reason = f"{label}product change (applying {new_status})"
-                adjust_ready_stock_qty(new_product, new_color, new_qty_d, new_res_d, reason=apply_reason, ref_id=doc_id)
+        new_qty_d, new_res_d = get_stock_deltas(new_status)
+        for item in new_items:
+            prod = item.get('product')
+            qty = float(item.get('quantity', 1))
+            if prod and (new_qty_d != 0 or new_res_d != 0):
+                adjust_ready_stock_qty(prod, item.get('color', ''), new_qty_d * qty, new_res_d * qty, reason=f"Update apply ({new_status})", ref_id=doc_id)
 
 
 def delete_order(doc_id):
@@ -209,24 +184,17 @@ def delete_order(doc_id):
     if not doc.exists:
         return False
     data = doc.to_dict()
-    # Reverse stock deduction or reservation
-    if data.get('product'):
+    
+    if data.get('order_items'):
         old_qty_delta, old_res_delta = get_stock_deltas(data.get('status', 'Pending'))
-        if old_qty_delta != 0 or old_res_delta != 0:
-            o_id = data.get('order_id')
-            label = f"Order {o_id} " if o_id else "Order "
-            reason = f"{label}deleted (reversed {data.get('status', 'Pending')})"
-            adjust_ready_stock_qty(data['product'], data.get('color', ''), -old_qty_delta, -old_res_delta, reason=reason, ref_id=doc_id)
-    # Delete linked cashbook
-    _delete_cashbook_by_ref(doc_id)
+        for item in data['order_items']:
+            prod = item.get('product')
+            qty = float(item.get('quantity', 1))
+            if prod and (old_qty_delta != 0 or old_res_delta != 0):
+                o_id = data.get('order_id')
+                label = f"Order {o_id} " if o_id else "Order "
+                reason = f"{label}deleted (reversed {data.get('status', 'Pending')})"
+                adjust_ready_stock_qty(prod, item.get('color', ''), -old_qty_delta * qty, -old_res_delta * qty, reason=reason, ref_id=doc_id)
+                
     db.collection('orders').document(doc_id).delete()
     return True
-
-
-def _delete_cashbook_by_ref(ref_id):
-    db = get_db()
-    docs = db.collection('cashbook').where(
-        filter=FieldFilter('reference_id', '==', ref_id)
-    ).stream()
-    for d in docs:
-        db.collection('cashbook').document(d.id).delete()

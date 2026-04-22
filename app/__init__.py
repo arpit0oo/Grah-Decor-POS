@@ -1,8 +1,10 @@
 import os
 import firebase_admin
 from firebase_admin import credentials, firestore
-from flask import Flask
+from flask import Flask, request
+from flask_login import LoginManager, current_user
 from app.config import Config
+from app.services.auth_service import User
 
 
 db = None
@@ -32,16 +34,36 @@ def create_app():
 
     db = firestore.client()
 
+    # Initialize Flask-Login
+    login_manager = LoginManager(app)
+    login_manager.login_view = 'auth.login'
+
+    @login_manager.user_loader
+    def load_user(user_id):
+        if user_id == app.config.get('LOGIN_USERNAME'):
+            return User(id=user_id)
+        return None
+
+    @app.before_request
+    def require_login():
+        if not current_user.is_authenticated:
+            if request.endpoint and request.endpoint != 'auth.login' and request.endpoint != 'static':
+                return app.login_manager.unauthorized()
+
     # Register blueprints
+    from app.routes.auth import auth_bp
     from app.routes.inventory import inventory_bp
     from app.routes.purchase import purchase_bp
     from app.routes.orders import orders_bp
     from app.routes.cashbook import cashbook_bp
+    from app.routes.settlements import settlements_bp
 
+    app.register_blueprint(auth_bp)
     app.register_blueprint(inventory_bp)
     app.register_blueprint(purchase_bp)
     app.register_blueprint(orders_bp)
     app.register_blueprint(cashbook_bp)
+    app.register_blueprint(settlements_bp)
 
     # Root redirect
     @app.route('/')

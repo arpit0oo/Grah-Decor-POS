@@ -8,6 +8,27 @@ from app.services.inventory_service import get_all_ready_stock
 
 orders_bp = Blueprint('orders', __name__, url_prefix='/orders')
 
+def parse_order_items(form):
+    products = form.getlist('product[]')
+    colors = form.getlist('color[]')
+    quantities = form.getlist('quantity[]')
+    prices = form.getlist('price[]')
+    
+    order_items = []
+    for i in range(len(products)):
+        if products[i].strip() and products[i].strip() != '__other__':
+            qty = float(quantities[i]) if i < len(quantities) and quantities[i] else 1
+            price = float(prices[i]) if i < len(prices) and prices[i] else 0
+            color = colors[i].strip() if i < len(colors) else ''
+            if color == '__other__':
+                color = ''
+            order_items.append({
+                'product': products[i].strip(),
+                'color': color,
+                'quantity': qty,
+                'price': price
+            })
+    return order_items
 
 @orders_bp.route('/')
 def orders_list():
@@ -57,15 +78,15 @@ def orders_list():
 
 @orders_bp.route('/add', methods=['POST'])
 def order_add():
+    order_items = parse_order_items(request.form)
+    
     data = {
         'date': request.form.get('date', ''),
         'order_id': request.form.get('order_id', '').strip(),
         'customer': request.form.get('customer', '').strip(),
         'number': request.form.get('number', '').strip(),
-        'product': request.form.get('product', '').strip(),
-        'color': request.form.get('color', '').strip(),
+        'order_items': order_items,
         'platform': request.form.get('platform', ''),
-        'selling_price': request.form.get('selling_price', 0),
         'shipping': request.form.get('shipping', 0),
         'refund': request.form.get('refund', 0),
         'tax': request.form.get('tax', 0),
@@ -74,26 +95,26 @@ def order_add():
         'reviews': request.form.get('reviews', '').strip(),
     }
 
-    if data['customer'] and data['product']:
+    if data['customer'] and len(order_items) > 0:
         add_order(data)
         flash('Order logged successfully.', 'success')
     else:
-        flash('Customer and Product are required.', 'error')
+        flash('Customer and at least one Product are required.', 'error')
 
     return redirect(url_for('orders.orders_list'))
 
 
 @orders_bp.route('/edit/<doc_id>', methods=['POST'])
 def order_edit(doc_id):
+    order_items = parse_order_items(request.form)
+    
     data = {
         'date': request.form.get('date', ''),
         'order_id': request.form.get('order_id', '').strip(),
         'customer': request.form.get('customer', '').strip(),
         'number': request.form.get('number', '').strip(),
-        'product': request.form.get('product', '').strip(),
-        'color': request.form.get('color', '').strip(),
+        'order_items': order_items,
         'platform': request.form.get('platform', ''),
-        'selling_price': request.form.get('selling_price', 0),
         'shipping': request.form.get('shipping', 0),
         'refund': request.form.get('refund', 0),
         'tax': request.form.get('tax', 0),
@@ -132,7 +153,6 @@ def orders_bulk_action():
     elif action.startswith('status_'):
         new_status = action.replace('status_', '')
         for doc_id in order_ids:
-            # Reusing robust update_order which correctly handles stock recalculations
             update_order(doc_id, {'status': new_status})
             success_count += 1
         flash(f'Successfully changed status of {success_count} orders to {new_status}.', 'success')

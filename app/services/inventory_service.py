@@ -110,8 +110,20 @@ def add_ready_stock(name, color, quantity, cost_price, reason='Manual Add'):
 
 def update_ready_stock(doc_id, data):
     db = get_db()
+    doc_ref = db.collection('ready_stock').document(doc_id)
+    doc = doc_ref.get()
+    if not doc.exists:
+        return False
+
+    if 'quantity' in data:
+        current_quantity = float(doc.to_dict().get('quantity', 0))
+        new_quantity = float(data['quantity'])
+        if new_quantity < current_quantity:
+            raise ValueError("Manual decrement of ready stock is not allowed.")
+
     data['updated_at'] = datetime.now(timezone.utc)
-    db.collection('ready_stock').document(doc_id).update(data)
+    doc_ref.update(data)
+    return True
 
 
 def delete_ready_stock(doc_id):

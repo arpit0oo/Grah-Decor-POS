@@ -114,8 +114,11 @@ def ready_edit(doc_id):
     if request.form.get('cost_price') is not None:
         data['cost_price'] = float(request.form['cost_price'])
     if data:
-        update_ready_stock(doc_id, data)
-        flash('Ready stock updated.', 'success')
+        try:
+            update_ready_stock(doc_id, data)
+            flash('Ready stock updated.', 'success')
+        except ValueError as e:
+            flash(str(e), 'error')
     return redirect(url_for('inventory.inventory_list', tab='ready'))
 
 
