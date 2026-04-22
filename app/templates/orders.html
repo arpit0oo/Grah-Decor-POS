@@ -258,7 +258,7 @@
 
 <!-- View Modal -->
 <div class="modal-overlay hidden" id="viewModal">
-    <div class="modal" style="max-width: 600px;">
+    <div class="modal" style="max-width: 700px;">
         <div class="modal-header">
             <h3>Order Details <span id="view-order-id" class="text-muted" style="font-size: 0.9em; margin-left: 0.5rem;"></span></h3>
             <button class="modal-close" onclick="closeModal('viewModal')">×</button>
@@ -301,6 +301,12 @@
                 <span style="font-size:0.75em;">Items Total</span>
                 <strong id="view-total-display" style="font-size:1.15em;">₹ 0.00</strong>
             </div>
+        </div>
+
+        <!-- Order Journey Timeline -->
+        <div style="margin-top:1.5rem; padding-top:1.25rem; border-top:1px solid var(--border);">
+            <div style="font-size:0.75em; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin-bottom:1rem; font-weight:600;">Order Journey</div>
+            <div id="view-timeline" style="display:flex; align-items:flex-start; gap:0; overflow-x:auto; padding-bottom:0.5rem;"></div>
         </div>
     </div>
 </div>
@@ -597,6 +603,49 @@
         }
         
         document.getElementById('view-total-display').textContent = '₹ ' + grandTotal.toFixed(2);
+
+        // ── Build Timeline ──
+        const history = data.status_history || [];
+        const timeline = document.getElementById('view-timeline');
+        timeline.innerHTML = '';
+
+        const statusColors = {
+            'Pending':   '#f59e0b',
+            'Shipped':   '#3b82f6',
+            'Delivered': '#10b981',
+            'RTO':       '#ef4444',
+            'Returned':  '#ef4444',
+            'Cancelled': '#6b7280',
+            'Settled':   '#059669',
+        };
+
+        if (history.length === 0) {
+            timeline.innerHTML = '<span class="text-muted" style="font-size:0.85em;">No status history available.</span>';
+        } else {
+            history.forEach((entry, i) => {
+                const color = statusColors[entry.status] || 'var(--primary)';
+                let dateLabel = '';
+                try {
+                    const d = new Date(entry.timestamp);
+                    if (!isNaN(d)) {
+                        dateLabel = d.toLocaleDateString('en-GB', {day:'2-digit',month:'short'}) + ' ' +
+                                    d.toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit'});
+                    }
+                } catch(e) {}
+
+                const node = document.createElement('div');
+                node.style.cssText = 'display:flex;align-items:center;flex-shrink:0;';
+                node.innerHTML = `
+                    <div style="text-align:center;">
+                        <div style="font-size:0.72em;color:#6b7280;margin-bottom:4px;white-space:nowrap;">${dateLabel}</div>
+                        <div style="display:inline-block;padding:4px 10px;border-radius:999px;background:${color}20;color:${color};font-size:0.78em;font-weight:600;border:1.5px solid ${color};white-space:nowrap;">${entry.status}</div>
+                    </div>
+                    ${i < history.length - 1 ? '<div style="height:2px;width:28px;background:#e5e7eb;flex-shrink:0;margin:0 2px;margin-top:20px;"></div>' : ''}
+                `;
+                timeline.appendChild(node);
+            });
+        }
+
         document.getElementById('viewModal').classList.remove('hidden');
     }
 

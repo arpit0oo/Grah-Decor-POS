@@ -87,7 +87,7 @@
                     <th>Unit</th>
                     <th style="text-align:right;">Opening Stock</th>
                     <th style="text-align:right;">Unit Cost ₹</th>
-                    <th style="text-align:center; width:160px;">Closing Stock</th>
+                    <th style="text-align:center; width:160px;">Purchased</th>
                     <th style="text-align:right;">Utilized</th>
                     <th style="text-align:right;">Utilized Cost ₹</th>
                 </tr>
@@ -97,18 +97,18 @@
                 <tr>
                     <td class="text-bold">
                         {{ m.name }}
-                        <input type="hidden" name="doc_id[]"     value="{{ m.id }}">
-                        <input type="hidden" name="name[]"       value="{{ m.name }}">
-                        <input type="hidden" name="unit[]"       value="{{ m.unit }}">
-                        <input type="hidden" name="price[]"      value="{{ m.price or 0 }}">
-                        <input type="hidden" name="system_qty[]" value="{{ m.quantity|int }}">
+                        <input type="hidden" name="doc_id[]"        value="{{ m.id }}">
+                        <input type="hidden" name="name[]"          value="{{ m.name }}">
+                        <input type="hidden" name="unit[]"          value="{{ m.unit }}">
+                        <input type="hidden" name="price[]"         value="{{ m.price or 0 }}">
+                        <input type="hidden" name="opening_stock[]" value="{{ m.quantity|int }}">
                     </td>
                     <td class="text-muted">{{ m.unit }}</td>
                     <td class="text-right" id="sys-{{ loop.index }}">{{ m.quantity|int }}</td>
                     <td class="text-right">{{ m.price|int }}</td>
                     <td style="text-align:center;">
                         <input type="number"
-                               name="actual_qty[]"
+                               name="purchased[]"
                                id="actual-{{ loop.index }}"
                                value="{{ m.quantity|int }}"
                                min="0"
@@ -117,7 +117,7 @@
                                style="width:90px; text-align:center;"
                                data-idx="{{ loop.index }}"
                                data-price="{{ m.price|int }}"
-                               data-system="{{ m.quantity|int }}"
+                               data-opening="{{ m.quantity|int }}"
                                oninput="recalcRow(this)">
                     </td>
                     <td class="text-right" id="util-{{ loop.index }}">0</td>
@@ -196,8 +196,8 @@
                 <th>Unit</th>
                 <th style="text-align:right;">Unit Cost ₹</th>
                 <th style="text-align:right;">Opening Stock</th>
-                <th style="text-align:right;">Closing Stock</th>
                 <th style="text-align:right;">Purchased</th>
+                <th style="text-align:right;">Closing Stock</th>
                 <th style="text-align:right;">Utilized</th>
                 <th style="text-align:right;">Utilized Cost ₹</th>
             </tr>
@@ -205,14 +205,17 @@
         <tbody>
             {% for item in audit.line_items %}
             {% set util_positive = item.utilized > 0 %}
-            <tr class="{% if item.variance < 0 %}row-warning{% endif %}">
+            {% set v_opening   = item.opening_stock if item.opening_stock is defined else item.system_qty %}
+            {% set v_purchased = item.purchased if item.purchased is defined else item.actual_qty %}
+            {% set v_closing   = item.closing_stock if item.closing_stock is defined else item.variance %}
+            <tr class="{% if v_closing < 0 %}row-warning{% endif %}">
                 <td class="text-bold">{{ item.name }}</td>
                 <td class="text-muted">{{ item.unit }}</td>
                 <td class="text-right">{{ item.unit_cost|int }}</td>
-                <td class="text-right">{{ item.system_qty|int }}</td>
-                <td class="text-right">{{ item.actual_qty|int }}</td>
-                <td class="text-right {% if item.variance < 0 %}text-danger{% elif item.variance > 0 %}text-success{% endif %} text-bold">
-                    {% if item.variance > 0 %}+{% endif %}{{ item.variance|int }}
+                <td class="text-right">{{ v_opening|int }}</td>
+                <td class="text-right">{{ v_purchased|int }}</td>
+                <td class="text-right {% if v_closing < 0 %}text-danger{% elif v_closing > 0 %}text-success{% endif %} text-bold">
+                    {% if v_closing > 0 %}+{% endif %}{{ v_closing|int }}
                 </td>
                 <td class="text-right {% if util_positive %}text-danger{% endif %}">{{ item.utilized|int }}</td>
                 <td class="text-right text-bold {% if util_positive %}text-danger{% endif %}">
@@ -240,12 +243,12 @@
 {% if view == 'new' %}
 <script>
 function recalcRow(el) {
-    const idx       = el.dataset.idx;
-    const unitCost  = parseFloat(el.dataset.price) || 0;
-    const systemQty = parseInt(el.dataset.system)  || 0;
-    const actual    = parseFloat(el.value)          || 0;
-    const utilized  = systemQty - actual;
-    const ucost     = utilized * unitCost;
+    const idx        = el.dataset.idx;
+    const unitCost   = parseFloat(el.dataset.price) || 0;
+    const openingQty = parseInt(el.dataset.opening)  || 0;
+    const purchased  = parseFloat(el.value)          || 0;
+    const utilized   = openingQty - purchased;
+    const ucost      = utilized * unitCost;
 
     document.getElementById('util-'  + idx).textContent = utilized;
     document.getElementById('ucost-' + idx).textContent = '₹ ' + Math.max(0, ucost).toFixed(0);

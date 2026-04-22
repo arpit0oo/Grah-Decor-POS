@@ -3,7 +3,8 @@ from app.services.settlement_service import (
     get_unsettled_orders,
     create_payment_settlement,
     get_settlement_batches,
-    process_order_return
+    process_order_return,
+    get_returned_orders
 )
 from app.services.order_service import PLATFORMS
 
@@ -18,6 +19,11 @@ def settlements_list():
     total_expected = sum(o.get('bank_settlement', 0) for o in unsettled_orders)
     
     batches = get_settlement_batches()
+    returned = get_returned_orders()
+
+    # Metrics for Returns tab
+    total_damaged = sum(1 for o in returned if o.get('item_condition') == 'damaged')
+    total_penalties = sum(float(o.get('penalty_amount', 0)) for o in returned)
     
     return render_template('settlements.html',
                            orders=unsettled_orders,
@@ -25,7 +31,10 @@ def settlements_list():
                            filter_platform=platform_filter,
                            total_expected=total_expected,
                            batches=batches,
-                           active_tab=tab)
+                           active_tab=tab,
+                           returned_orders=returned,
+                           total_damaged=total_damaged,
+                           total_penalties=total_penalties)
 
 @settlements_bp.route('/add', methods=['POST'])
 def add_settlement():
@@ -34,6 +43,7 @@ def add_settlement():
     amount_received = request.form.get('amount_received', 0)
     settlement_date = request.form.get('settlement_date', '')
     notes = request.form.get('notes', '').strip()
+    platform_deductions = request.form.get('platform_deductions', 0)
     
     order_ids = request.form.getlist('order_ids')
     
@@ -51,7 +61,8 @@ def add_settlement():
         amount_received=amount_received,
         order_ids=order_ids,
         settlement_date=settlement_date,
-        notes=notes
+        notes=notes,
+        platform_deductions=platform_deductions
     )
     
     flash(f"Settlement logged. {len(order_ids)} orders marked as Settled.", "success")
