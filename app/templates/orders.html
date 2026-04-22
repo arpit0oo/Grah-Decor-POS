@@ -1,0 +1,420 @@
+{% extends "base.html" %}
+{% block title %}Orders — Grah Decor POS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Order Book</h1>
+    <button class="btn btn-primary" onclick="toggleForm('orderForm')">+ New Order</button>
+</div>
+
+<!-- Datalists for Auto-Complete -->
+<datalist id="productsList">
+    {% for p in products %}
+    <option value="{{ p }}">
+    {% endfor %}
+</datalist>
+<datalist id="colorsList">
+    {% for c in colors %}
+    <option value="{{ c }}">
+    {% endfor %}
+</datalist>
+<datalist id="reviewsList">
+    {% for r in reviews %}
+    <option value="{{ r }}">
+    {% endfor %}
+</datalist>
+
+<!-- Add Order Form -->
+<div class="form-card hidden" id="orderForm">
+    <h3>Log New Order</h3>
+    <form method="POST" action="{{ url_for('orders.order_add') }}">
+        <div class="form-grid form-grid-4">
+            <div class="form-group">
+                <label for="add-date">Date</label>
+                <input type="date" id="add-date" name="date" value="{{ today }}" required>
+            </div>
+            <div class="form-group">
+                <label for="add-order-id">Order ID</label>
+                <input type="text" id="add-order-id" name="order_id" placeholder="Platform order ID">
+            </div>
+            <div class="form-group">
+                <label for="add-customer">Customer *</label>
+                <input type="text" id="add-customer" name="customer" required placeholder="Customer name">
+            </div>
+            <div class="form-group">
+                <label for="add-number">Phone / Number</label>
+                <input type="text" id="add-number" name="number" placeholder="Contact number">
+            </div>
+        </div>
+        <div class="form-grid form-grid-4">
+            <div class="form-group">
+                <label for="add-product">Product *</label>
+                <select id="add-product-select" name="product" required onchange="handleDropdownOther(this, 'add-product-custom')">
+                    <option value="" disabled selected>Select Product</option>
+                    {% for p in products %}
+                    <option value="{{ p }}">{{ p }}</option>
+                    {% endfor %}
+                    <option value="__other__">Other (Custom)...</option>
+                </select>
+                <input type="text" id="add-product-custom" class="hidden" placeholder="Enter custom product name" style="margin-top:0.5rem">
+            </div>
+            <div class="form-group">
+                <label for="add-color">Color</label>
+                <select id="add-color-select" name="color" onchange="handleDropdownOther(this, 'add-color-custom')">
+                    <option value="">No Color</option>
+                    {% for c in colors %}
+                    <option value="{{ c }}">{{ c }}</option>
+                    {% endfor %}
+                    <option value="__other__">Other (Custom)...</option>
+                </select>
+                <input type="text" id="add-color-custom" class="hidden" placeholder="Enter custom color" style="margin-top:0.5rem">
+            </div>
+            <div class="form-group">
+                <label for="add-platform">Platform</label>
+                <select id="add-platform" name="platform">
+                    {% for p in platforms %}
+                    <option value="{{ p }}">{{ p }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="add-status">Status</label>
+                <select id="add-status" name="status">
+                    {% for s in statuses %}
+                    <option value="{{ s }}">{{ s }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="form-grid form-grid-5">
+            <div class="form-group">
+                <label for="add-selling-price">Selling Price ₹</label>
+                <input type="number" id="add-selling-price" name="selling_price" step="0.01" value="0" oninput="calcSettlement('add')">
+            </div>
+            <div class="form-group">
+                <label for="add-shipping">Shipping ₹</label>
+                <input type="number" id="add-shipping" name="shipping" step="0.01" value="0" oninput="calcSettlement('add')">
+            </div>
+            <div class="form-group">
+                <label for="add-refund">Refund ₹</label>
+                <input type="number" id="add-refund" name="refund" step="0.01" value="0" oninput="calcSettlement('add')">
+            </div>
+            <div class="form-group">
+                <label for="add-tax">Tax ₹</label>
+                <input type="number" id="add-tax" name="tax" step="0.01" value="0" oninput="calcSettlement('add')">
+            </div>
+            <div class="form-group">
+                <label for="add-marketplace-fee">Marketplace Fee ₹</label>
+                <input type="number" id="add-marketplace-fee" name="marketplace_fee" step="0.01" value="0" oninput="calcSettlement('add')">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="settlement-display">
+                Bank Settlement: <strong id="add-settlement-display">₹ 0.00</strong>
+            </div>
+            <div class="form-group" style="flex:1">
+                <label for="add-reviews">Reviews / Notes</label>
+                <input type="text" id="add-reviews" name="reviews" placeholder="Optional notes" list="reviewsList" autocomplete="off">
+            </div>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Order</button>
+            <button type="button" class="btn btn-ghost" onclick="toggleForm('orderForm')">Cancel</button>
+        </div>
+    </form>
+</div>
+
+<!-- Filters -->
+<div class="filter-bar">
+    <form method="GET" action="{{ url_for('orders.orders_list') }}" class="filter-form">
+        <input type="date" name="date_from" value="{{ filter_date_from }}" placeholder="From">
+        <input type="date" name="date_to" value="{{ filter_date_to }}" placeholder="To">
+        <select name="platform">
+            <option value="">All Platforms</option>
+            {% for p in platforms %}
+            <option value="{{ p }}" {% if filter_platform == p %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+        </select>
+        <select name="status">
+            <option value="">All Statuses</option>
+            {% for s in statuses %}
+            <option value="{{ s }}" {% if filter_status == s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-sm">Filter</button>
+        <a href="{{ url_for('orders.orders_list') }}" class="btn btn-sm btn-ghost">Clear</a>
+    </form>
+</div>
+
+<!-- Summary -->
+<div class="summary-row">
+    <div class="summary-item">
+        <span class="summary-label">Total Orders</span>
+        <span class="summary-value">{{ orders|length }}</span>
+    </div>
+    <div class="summary-item">
+        <span class="summary-label">Total Sales</span>
+        <span class="summary-value">₹ {{ "%.2f"|format(total_sales) }}</span>
+    </div>
+    <div class="summary-item">
+        <span class="summary-label">Total Settlement</span>
+        <span class="summary-value">₹ {{ "%.2f"|format(total_settlement) }}</span>
+    </div>
+</div>
+
+<!-- Orders Table -->
+<div class="table-wrapper">
+    <table class="data-table" id="ordersTable">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Order ID</th>
+                <th>Customer</th>
+                <th>Product</th>
+                <th>Color</th>
+                <th>Platform</th>
+                <th>Selling ₹</th>
+                <th>Shipping</th>
+                <th>Tax</th>
+                <th>Mkt Fee</th>
+                <th>Settlement ₹</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for o in orders %}
+            <tr>
+                <td>{{ o.date.strftime('%d/%m/%Y') if o.date and o.date.strftime else '-' }}</td>
+                <td class="text-mono">{{ o.order_id or '-' }}</td>
+                <td>{{ o.customer }}</td>
+                <td>{{ o.product }}</td>
+                <td>{{ o.color or '-' }}</td>
+                <td><span class="badge badge-platform">{{ o.platform }}</span></td>
+                <td class="text-right">{{ "%.2f"|format(o.selling_price) }}</td>
+                <td class="text-right">{{ "%.2f"|format(o.shipping) }}</td>
+                <td class="text-right">{{ "%.2f"|format(o.tax) }}</td>
+                <td class="text-right">{{ "%.2f"|format(o.marketplace_fee) }}</td>
+                <td class="text-right text-bold">{{ "%.2f"|format(o.bank_settlement) }}</td>
+                <td>
+                    <span class="badge badge-{{ o.status|lower|replace(' ', '-') }}">{{ o.status }}</span>
+                </td>
+                <td class="actions-cell">
+                    <button class="btn btn-xs btn-ghost" data-id="{{ o.id }}" data-order="{{ o|tojson|forceescape }}" onclick="openEditModalFromBtn(this)">Edit</button>
+                    <form method="POST" action="{{ url_for('orders.order_delete', doc_id=o.id) }}" style="display:inline"
+                          onsubmit="return confirm('Delete this order?')">
+                        <button type="submit" class="btn btn-xs btn-danger">Del</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+            {% if not orders %}
+            <tr><td colspan="13" class="empty-state">No orders found. Click "+ New Order" to add one.</td></tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay hidden" id="editModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Edit Order</h3>
+            <button class="modal-close" onclick="closeModal('editModal')">×</button>
+        </div>
+        <form method="POST" id="editForm">
+            <div class="form-grid form-grid-4">
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="date" name="date" id="edit-date">
+                </div>
+                <div class="form-group">
+                    <label>Order ID</label>
+                    <input type="text" name="order_id" id="edit-order_id">
+                </div>
+                <div class="form-group">
+                    <label>Customer</label>
+                    <input type="text" name="customer" id="edit-customer">
+                </div>
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input type="text" name="number" id="edit-number">
+                </div>
+            </div>
+            <div class="form-grid form-grid-4">
+                <div class="form-group">
+                    <label>Product</label>
+                    <select id="edit-product-select" name="product" onchange="handleDropdownOther(this, 'edit-product-custom')">
+                        <option value="">Select Product</option>
+                        {% for p in products %}
+                        <option value="{{ p }}">{{ p }}</option>
+                        {% endfor %}
+                        <option value="__other__">Other (Custom)...</option>
+                    </select>
+                    <input type="text" id="edit-product-custom" class="hidden" placeholder="Enter custom product" style="margin-top:0.5rem">
+                </div>
+                <div class="form-group">
+                    <label>Color</label>
+                    <select id="edit-color-select" name="color" onchange="handleDropdownOther(this, 'edit-color-custom')">
+                        <option value="">No Color</option>
+                        {% for c in colors %}
+                        <option value="{{ c }}">{{ c }}</option>
+                        {% endfor %}
+                        <option value="__other__">Other (Custom)...</option>
+                    </select>
+                    <input type="text" id="edit-color-custom" class="hidden" placeholder="Enter custom color" style="margin-top:0.5rem">
+                </div>
+                <div class="form-group">
+                    <label>Platform</label>
+                    <select name="platform" id="edit-platform">
+                        {% for p in platforms %}
+                        <option value="{{ p }}">{{ p }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Status</label>
+                    <select name="status" id="edit-status">
+                        {% for s in statuses %}
+                        <option value="{{ s }}">{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="form-grid form-grid-5">
+                <div class="form-group">
+                    <label>Selling Price ₹</label>
+                    <input type="number" name="selling_price" id="edit-selling_price" step="0.01" oninput="calcSettlement('edit')">
+                </div>
+                <div class="form-group">
+                    <label>Shipping ₹</label>
+                    <input type="number" name="shipping" id="edit-shipping" step="0.01" oninput="calcSettlement('edit')">
+                </div>
+                <div class="form-group">
+                    <label>Refund ₹</label>
+                    <input type="number" name="refund" id="edit-refund" step="0.01" oninput="calcSettlement('edit')">
+                </div>
+                <div class="form-group">
+                    <label>Tax ₹</label>
+                    <input type="number" name="tax" id="edit-tax" step="0.01" oninput="calcSettlement('edit')">
+                </div>
+                <div class="form-group">
+                    <label>Marketplace Fee ₹</label>
+                    <input type="number" name="marketplace_fee" id="edit-marketplace_fee" step="0.01" oninput="calcSettlement('edit')">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="settlement-display">
+                    Bank Settlement: <strong id="edit-settlement-display">₹ 0.00</strong>
+                </div>
+                <div class="form-group" style="flex:1">
+                    <label>Reviews / Notes</label>
+                    <input type="text" name="reviews" id="edit-reviews" list="reviewsList" autocomplete="off">
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Update Order</button>
+                <button type="button" class="btn btn-ghost" onclick="closeModal('editModal')">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function handleDropdownOther(selectElem, customInputId) {
+    const customInput = document.getElementById(customInputId);
+    if (selectElem.value === '__other__') {
+        customInput.classList.remove('hidden');
+        customInput.name = selectElem.name;  // Transfer 'name' attribute to text input
+        selectElem.name = '';               // Remove 'name' from select so backend gets text input
+        if (selectElem.required) customInput.required = true;
+    } else {
+        customInput.classList.add('hidden');
+        selectElem.name = customInput.name || selectElem.name || customInputId.split('-')[1]; // Restore name
+        customInput.name = '';
+        customInput.required = false;
+        customInput.value = '';
+    }
+}
+
+function openEditModalFromBtn(btn) {
+    const docId = btn.getAttribute('data-id');
+    const data = JSON.parse(btn.getAttribute('data-order'));
+    openEditModal(docId, data);
+}
+
+function openEditModal(docId, data) {
+    const form = document.getElementById('editForm');
+    form.action = '/orders/edit/' + docId;
+
+    // Parse date
+    if (data.date) {
+        try {
+            let d = new Date(data.date);
+            if (!isNaN(d)) {
+                document.getElementById('edit-date').value = d.toISOString().split('T')[0];
+            }
+        } catch(e) {}
+    }
+
+    document.getElementById('edit-order_id').value = data.order_id || '';
+    document.getElementById('edit-customer').value = data.customer || '';
+    document.getElementById('edit-number').value = data.number || '';
+    // Reset dropdown logic for product
+    document.getElementById('edit-product-custom').classList.add('hidden');
+    document.getElementById('edit-product-select').name = 'product';
+    document.getElementById('edit-product-custom').name = '';
+    
+    // Check if current product is in the dropdown list
+    let prodSelect = document.getElementById('edit-product-select');
+    let prodOptions = Array.from(prodSelect.options).map(o => o.value);
+    if (data.product && !prodOptions.includes(data.product)) {
+        prodSelect.value = '__other__';
+        handleDropdownOther(prodSelect, 'edit-product-custom');
+        document.getElementById('edit-product-custom').value = data.product;
+    } else {
+        prodSelect.value = data.product || '';
+    }
+
+    // Reset dropdown logic for color
+    document.getElementById('edit-color-custom').classList.add('hidden');
+    document.getElementById('edit-color-select').name = 'color';
+    document.getElementById('edit-color-custom').name = '';
+
+    // Check if current color is in the dropdown list
+    let colorSelect = document.getElementById('edit-color-select');
+    let colorOptions = Array.from(colorSelect.options).map(o => o.value);
+    if (data.color && !colorOptions.includes(data.color)) {
+        colorSelect.value = '__other__';
+        handleDropdownOther(colorSelect, 'edit-color-custom');
+        document.getElementById('edit-color-custom').value = data.color;
+    } else {
+        colorSelect.value = data.color || '';
+    }
+    document.getElementById('edit-platform').value = data.platform || '';
+    document.getElementById('edit-status').value = data.status || 'Pending';
+    document.getElementById('edit-selling_price').value = data.selling_price || 0;
+    document.getElementById('edit-shipping').value = data.shipping || 0;
+    document.getElementById('edit-refund').value = data.refund || 0;
+    document.getElementById('edit-tax').value = data.tax || 0;
+    document.getElementById('edit-marketplace_fee').value = data.marketplace_fee || 0;
+    document.getElementById('edit-reviews').value = data.reviews || '';
+    calcSettlement('edit');
+
+    document.getElementById('editModal').classList.remove('hidden');
+}
+
+function calcSettlement(prefix) {
+    const sp = parseFloat(document.getElementById(prefix + '-selling_price')?.value || document.getElementById(prefix + '-selling-price')?.value || 0);
+    const sh = parseFloat(document.getElementById(prefix + '-shipping').value || 0);
+    const rf = parseFloat(document.getElementById(prefix + '-refund').value || 0);
+    const tx = parseFloat(document.getElementById(prefix + '-tax').value || 0);
+    const mf = parseFloat(document.getElementById(prefix + '-marketplace_fee')?.value || document.getElementById(prefix + '-marketplace-fee')?.value || 0);
+    const settlement = sp - sh - rf - tx - mf;
+    const el = document.getElementById(prefix + '-settlement-display');
+    if (el) el.textContent = '₹ ' + settlement.toFixed(2);
+}
+</script>
+{% endblock %}
