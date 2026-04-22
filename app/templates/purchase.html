@@ -77,6 +77,7 @@
     <table class="data-table">
         <thead>
             <tr>
+                <th>Purchase ID</th>
                 <th>Date</th>
                 <th>Vendor</th>
                 <th>Item</th>
@@ -89,6 +90,7 @@
         <tbody>
             {% for p in purchases %}
             <tr>
+                <td><span class="text-mono">{{ p.purchase_id or '-' }}</span></td>
                 <td>{{ p.date.strftime('%d/%m/%Y') if p.date and p.date.strftime else '-' }}</td>
                 <td>{{ p.vendor_name }}</td>
                 <td>{{ p.item }}</td>
