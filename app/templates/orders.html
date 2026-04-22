@@ -197,10 +197,11 @@
             </thead>
             <tbody>
                 {% for order in orders %}
-                <tr>
+                {% set is_terminal = order.status in ['Cancelled', 'Settled', 'Returned', 'RTO'] %}
+                <tr style="{% if is_terminal %}opacity:0.6;{% endif %}">
                     <td style="text-align: center;">
                         <input type="checkbox" class="row-checkbox" name="order_ids" value="{{ order.id }}"
-                            onclick="updateBulkBar()">
+                            onclick="updateBulkBar()" {% if is_terminal %}disabled{% endif %}>
                     </td>
                     <td>{{ order.date.strftime('%d/%m/%Y') if order.date and order.date.strftime else '-' }}</td>
                     <td class="text-mono">{{ order.order_id or '-' }}</td>
@@ -219,9 +220,11 @@
                     <td class="actions-cell">
                         <button type="button" class="btn btn-xs btn-ghost" style="color:var(--primary); border-color:var(--bg); background:var(--bg);" data-order="{{ order|tojson|forceescape }}"
                             onclick="openViewModalFromBtn(this)">View</button>
+                        {% if not is_terminal %}
                         <button type="button" class="btn btn-xs btn-ghost" data-id="{{ order.id }}"
                             data-order="{{ order|tojson|forceescape }}"
                             onclick="openEditModalFromBtn(this)">Edit</button>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -244,9 +247,6 @@
             <option value="status_Pending">Mark Pending</option>
             <option value="status_Shipped">Mark Shipped</option>
             <option value="status_Delivered">Mark Delivered</option>
-            <option value="status_RTO">Mark RTO</option>
-            <option value="status_Customer Return">Mark Return</option>
-            <option value="status_Exchange">Mark Exchange</option>
             <option value="status_Cancelled">Mark Cancelled</option>
         </select>
         <button type="button" class="btn btn-primary btn-sm" onclick="submitBulk()">Apply</button>

@@ -1,5 +1,10 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
-from app.services.settlement_service import get_unsettled_orders, create_payment_settlement
+from app.services.settlement_service import (
+    get_unsettled_orders,
+    create_payment_settlement,
+    get_settlement_batches,
+    process_order_return
+)
 from app.services.order_service import PLATFORMS
 
 settlements_bp = Blueprint('settlements', __name__, url_prefix='/settlements')
@@ -7,15 +12,20 @@ settlements_bp = Blueprint('settlements', __name__, url_prefix='/settlements')
 @settlements_bp.route('/')
 def settlements_list():
     platform_filter = request.args.get('platform', '')
-    unsettled_orders = get_unsettled_orders(platform=platform_filter if platform_filter else None)
+    tab = request.args.get('tab', 'unsettled')
     
+    unsettled_orders = get_unsettled_orders(platform=platform_filter if platform_filter else None)
     total_expected = sum(o.get('bank_settlement', 0) for o in unsettled_orders)
+    
+    batches = get_settlement_batches()
     
     return render_template('settlements.html',
                            orders=unsettled_orders,
                            platforms=PLATFORMS,
                            filter_platform=platform_filter,
-                           total_expected=total_expected)
+                           total_expected=total_expected,
+                           batches=batches,
+                           active_tab=tab)
 
 @settlements_bp.route('/add', methods=['POST'])
 def add_settlement():
@@ -44,5 +54,31 @@ def add_settlement():
         notes=notes
     )
     
-    flash(f"Settlement logged successfully for {len(order_ids)} orders.", "success")
+    flash(f"Settlement logged. {len(order_ids)} orders marked as Settled.", "success")
+    return redirect(url_for('settlements.settlements_list'))
+
+
+@settlements_bp.route('/process_return', methods=['POST'])
+def process_return():
+    order_id       = request.form.get('order_id', '').strip()
+    return_type    = request.form.get('return_type', 'rto')
+    penalty_amount = request.form.get('penalty_amount', 0)
+    item_condition = request.form.get('item_condition', 'damaged')
+    
+    if not order_id:
+        flash("No order specified.", "error")
+        return redirect(url_for('settlements.settlements_list'))
+    
+    try:
+        penalty = float(penalty_amount) if penalty_amount else 0
+    except (ValueError, TypeError):
+        penalty = 0
+    
+    if process_order_return(order_id, return_type, penalty, item_condition):
+        status_label = 'RTO' if return_type == 'rto' else 'Returned'
+        restock_label = ' Items restocked.' if item_condition == 'restock' else ' Items marked as damaged.'
+        flash(f"Order marked as {status_label}.{restock_label}", "success")
+    else:
+        flash("Could not process return.", "error")
+    
     return redirect(url_for('settlements.settlements_list'))

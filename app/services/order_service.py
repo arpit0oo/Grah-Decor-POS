@@ -6,10 +6,11 @@ from google.cloud.firestore_v1 import FieldFilter
 
 PLATFORMS = ['Amazon', 'Flipkart', 'Meesho', 'Instagram', 'Personal Reference', 'Website']
 REVIEWS = ['Done', 'Pending', 'Not Responding']
-STATUSES = ['Pending', 'Shipped', 'Delivered', 'RTO', 'Customer Return', 'Exchange', 'Cancelled']
-DISPATCHED_STATUSES = ['Shipped', 'Delivered']
-RETURNED_STATUSES = ['RTO', 'Customer Return']
+STATUSES = ['Pending', 'Shipped', 'Delivered', 'RTO', 'Returned', 'Cancelled', 'Settled']
+DISPATCHED_STATUSES = ['Shipped', 'Delivered', 'Settled']
+RETURNED_STATUSES = ['RTO', 'Returned', 'Customer Return']
 CANCELLED_STATUSES = ['Cancelled']
+TERMINAL_STATUSES = ['Cancelled', 'Settled', 'Returned', 'RTO']
 
 def get_stock_deltas(status):
     """Returns (qty_delta, reserved_delta) based on order status."""
