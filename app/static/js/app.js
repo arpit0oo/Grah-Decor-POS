@@ -63,3 +63,11 @@ document.addEventListener('keydown', function (e) {
         });
     }
 });
+
+// ── Disable Scroll on Number Inputs ────────────────────────
+// This prevents accidental value changes when scrolling the page
+document.addEventListener('wheel', function (e) {
+    if (document.activeElement.type === 'number') {
+        document.activeElement.blur();
+    }
+}, { passive: false });

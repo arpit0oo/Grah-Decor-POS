@@ -61,7 +61,10 @@
                 </div>
                 <div class="form-group">
                     <label for="add-number">Phone / Number</label>
-                    <input type="text" id="add-number" name="number" placeholder="Contact number">
+                    <input type="tel" id="add-number" name="number" placeholder="10-digit number" 
+                        pattern="[0-9]{10}" maxlength="10" 
+                        oninput="this.value = this.value.replace(/[^0-9]/g, '');"
+                        title="Please enter a 10-digit phone number without country code">
                 </div>
             </div>
         </div>
@@ -376,7 +379,10 @@
                     </div>
                     <div class="form-group">
                         <label>Phone</label>
-                        <input type="text" name="number" id="edit-number">
+                        <input type="tel" name="number" id="edit-number" 
+                            pattern="[0-9]{10}" maxlength="10" 
+                            oninput="this.value = this.value.replace(/[^0-9]/g, '');"
+                            title="Please enter a 10-digit phone number without country code">
                     </div>
                 </div>
             </div>
@@ -512,7 +518,7 @@
                     </div>
                     <div class="form-group">
                         <label>Variant / Color</label>
-                        <select name="color[]" class="item-color" onchange="handleDropdownOther(this)">
+                        <select name="color[]" class="item-color" onchange="handleDropdownOther(this); if(checkDuplicates(this.closest('.order-item-row'))) { alert('This product and variant combination is already added. Please adjust the quantity of the existing item instead.'); this.value=''; }">
                             <option value="">No Variant</option>
                             {% for c in colors %}
                             <option value="{{ c }}">{{ c }}</option>
@@ -536,6 +542,30 @@
 
     function addOrderItemRow(containerId, prefix) {
         document.getElementById(containerId).insertAdjacentHTML('beforeend', getOrderItemRowHtml(prefix));
+    }
+
+    function checkDuplicates(row) {
+        if (!row) return false;
+        const container = row.parentElement;
+        const allRows = Array.from(container.querySelectorAll('.order-item-row'));
+        
+        const currentProduct = row.querySelector('.item-product').value;
+        const currentColor = row.querySelector('.item-color').value;
+
+        // Ignore if product is empty or custom
+        if (!currentProduct || currentProduct === '__other__') return false;
+
+        for (let otherRow of allRows) {
+            if (otherRow === row) continue;
+
+            const otherProduct = otherRow.querySelector('.item-product').value;
+            const otherColor = otherRow.querySelector('.item-color').value;
+
+            if (currentProduct === otherProduct && currentColor === otherColor) {
+                return true;
+            }
+        }
+        return false;
     }
 
     async function fetchVariants(selectEl) {
@@ -564,6 +594,15 @@
             // If no variants, leave colour dropdown as generic list
         } catch (e) {
             console.warn('Could not fetch variants:', e);
+        }
+        
+        // After setting variants, check for duplicates
+        if (checkDuplicates(row)) {
+            alert("This product is already added to the order. Please adjust the quantity of the existing item instead.");
+            selectEl.value = "";
+            colorSel.innerHTML = '<option value="">No Variant</option>';
+            const prefix = row.closest('#edit-order-items') ? 'edit' : 'add';
+            calcSettlement(prefix);
         }
     }
 
