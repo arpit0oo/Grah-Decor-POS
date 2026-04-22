@@ -22,7 +22,7 @@ TAB 1: UNSETTLED ORDERS
 <div id="tab-unsettled" class="tab-content {% if active_tab not in ['logs','returns'] %}{% else %}hidden{% endif %}">
 
     <div class="filter-bar">
-        <form method="get" action="{{ url_for('settlements.settlements_list') }}" class="filter-form">
+        <form autocomplete="off" method="get" action="{{ url_for('settlements.settlements_list') }}" class="filter-form">
             <select name="platform" onchange="this.form.submit()">
                 <option value="">All Platforms</option>
                 {% for p in platforms %}
@@ -37,7 +37,7 @@ TAB 1: UNSETTLED ORDERS
         </form>
     </div>
 
-    <form id="settlementForm" method="post" action="{{ url_for('settlements.add_settlement') }}">
+    <form autocomplete="off" id="settlementForm" method="post" action="{{ url_for('settlements.add_settlement') }}">
         <div style="display:flex; gap: 1.5rem; align-items: flex-start; flex-wrap: wrap;">
             <!-- Orders Table -->
             <div style="flex: 1; min-width: 600px;">
@@ -308,7 +308,7 @@ PROCESS RETURN MODAL
             <h3>Process Return <span id="return-order-label" class="text-muted" style="font-size:0.85em;"></span></h3>
             <button class="modal-close" onclick="closeReturnModal()">×</button>
         </div>
-        <form method="POST" action="{{ url_for('settlements.process_return') }}">
+        <form autocomplete="off" method="POST" action="{{ url_for('settlements.process_return') }}">
             <input type="hidden" name="order_id" id="return-order-id">
 
             <div class="form-group" style="margin-bottom:1rem;">

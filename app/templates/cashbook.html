@@ -33,7 +33,7 @@
 
 <!-- Date Filter -->
 <div class="filter-bar">
-    <form method="GET" action="{{ url_for('cashbook.dashboard') }}" class="filter-form">
+    <form autocomplete="off" method="GET" action="{{ url_for('cashbook.dashboard') }}" class="filter-form">
         <input type="date" name="date_from" value="{{ date_from }}" placeholder="From">
         <input type="date" name="date_to" value="{{ date_to }}" placeholder="To">
         <button type="submit" class="btn btn-sm">Filter</button>
@@ -87,7 +87,7 @@
             <h3>Add Manual Expense</h3>
             <button class="modal-close" onclick="closeModal('expenseModal')">×</button>
         </div>
-        <form id="expenseForm" method="POST" action="{{ url_for('cashbook.add_expense') }}">
+        <form autocomplete="off" id="expenseForm" method="POST" action="{{ url_for('cashbook.add_expense') }}">
             <div class="form-group" style="margin-bottom:1rem;">
                 <label>Date *</label>
                 <input type="date" name="date" id="expenseDate" required>

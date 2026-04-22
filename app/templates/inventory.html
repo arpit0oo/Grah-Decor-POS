@@ -9,13 +9,12 @@
 
 <!-- Tabs -->
 <div class="tabs">
-    <button class="tab {% if active_tab == 'ready' %}active{% endif %}"
-            onclick="switchTab('ready')">Ready Stock ({{ ready_stock|length }})</button>
-    <button class="tab {% if active_tab == 'raw' %}active{% endif %}"
-            onclick="switchTab('raw')">Raw Materials ({{ raw_materials|length }})</button>
-    <button class="tab {% if active_tab == 'logs' %}active{% endif %}"
-            onclick="switchTab('logs')">Inventory Log</button>
-    <a href="{{ url_for('audit.audit_list') }}" class="tab" style="text-decoration:none;">🔍 Stock Audit</a>
+    <button class="tab {% if active_tab == 'ready' %}active{% endif %}" onclick="switchTab('ready')">Ready Stock ({{
+        ready_stock|length }})</button>
+    <button class="tab {% if active_tab == 'raw' %}active{% endif %}" onclick="switchTab('raw')">Raw Materials ({{
+        raw_materials|length }})</button>
+    <button class="tab {% if active_tab == 'logs' %}active{% endif %}" onclick="switchTab('logs')">Inventory
+        Log</button>
 </div>
 
 <!-- ── RAW MATERIALS TAB ───────────────────────────────── -->
@@ -23,8 +22,9 @@
     <!-- Add Form -->
     <div class="form-card hidden" id="rawForm">
         <h3>Register New Raw Material</h3>
-        <p class="text-muted" style="font-size:0.85em; margin-bottom:1rem;">Initial quantity is always <strong>0</strong>. Stock enters the system exclusively via the Purchase Book.</p>
-        <form method="POST" action="{{ url_for('inventory.raw_add') }}">
+        <p class="text-muted" style="font-size:0.85em; margin-bottom:1rem;">Initial quantity is always
+            <strong>0</strong>. Stock enters the system exclusively via the Purchase Book.</p>
+        <form autocomplete="off" method="POST" action="{{ url_for('inventory.raw_add') }}">
             <div class="form-grid form-grid-3">
                 <div class="form-group">
                     <label for="raw-name">Material Name *</label>
@@ -73,7 +73,8 @@
                 {% for m in raw_materials %}
                 <tr>
                     <td>
-                        <form method="POST" action="{{ url_for('inventory.raw_edit', doc_id=m.id) }}" class="inline-edit-form">
+                        <form autocomplete="off" method="POST" action="{{ url_for('inventory.raw_edit', doc_id=m.id) }}"
+                            class="inline-edit-form">
                             <input type="hidden" name="quantity" value="{{ m.quantity }}">
                             <input type="text" name="name" value="{{ m.name }}" class="inline-input">
                     </td>
@@ -81,22 +82,24 @@
                         {{ m.quantity|int }}
                     </td>
                     <td>
-                            <select name="unit" class="inline-input inline-input-sm">
-                                <option value="pcs" {% if m.unit == 'pcs' %}selected{% endif %}>pcs</option>
-                                <option value="kg" {% if m.unit == 'kg' %}selected{% endif %}>kg</option>
-                                <option value="meters" {% if m.unit == 'meters' %}selected{% endif %}>meters</option>
-                                <option value="liters" {% if m.unit == 'liters' %}selected{% endif %}>liters</option>
-                                <option value="sheets" {% if m.unit == 'sheets' %}selected{% endif %}>sheets</option>
-                                <option value="rolls" {% if m.unit == 'rolls' %}selected{% endif %}>rolls</option>
-                            </select>
+                        <select name="unit" class="inline-input inline-input-sm">
+                            <option value="pcs" {% if m.unit=='pcs' %}selected{% endif %}>pcs</option>
+                            <option value="kg" {% if m.unit=='kg' %}selected{% endif %}>kg</option>
+                            <option value="meters" {% if m.unit=='meters' %}selected{% endif %}>meters</option>
+                            <option value="liters" {% if m.unit=='liters' %}selected{% endif %}>liters</option>
+                            <option value="sheets" {% if m.unit=='sheets' %}selected{% endif %}>sheets</option>
+                            <option value="rolls" {% if m.unit=='rolls' %}selected{% endif %}>rolls</option>
+                        </select>
                     </td>
                     <td>
-                            <input type="number" name="price" value="{{ m.price if m.price else 0 }}" step="1" class="inline-input inline-input-sm">
+                        <input type="number" name="price" value="{{ m.price if m.price else 0 }}" step="1"
+                            class="inline-input inline-input-sm">
                     </td>
                     <td class="text-right text-bold">
                         {{ "%.0f"|format((m.price or 0) * (m.quantity or 0)) }}
                     </td>
-                    <td class="text-muted">{{ m.updated_at.strftime('%d/%m/%Y %H:%M') if m.updated_at and m.updated_at.strftime else '-' }}</td>
+                    <td class="text-muted">{{ m.updated_at.strftime('%d/%m/%Y %H:%M') if m.updated_at and
+                        m.updated_at.strftime else '-' }}</td>
                     <td class="actions-cell">
                         <button type="submit" class="btn btn-xs">Save</button>
                         </form>
@@ -104,7 +107,9 @@
                 </tr>
                 {% endfor %}
                 {% if not raw_materials %}
-                <tr><td colspan="7" class="empty-state">No raw materials. Add your first one above.</td></tr>
+                <tr>
+                    <td colspan="7" class="empty-state">No raw materials. Add your first one above.</td>
+                </tr>
                 {% endif %}
             </tbody>
         </table>
@@ -115,7 +120,7 @@
 <div class="tab-content {% if active_tab != 'ready' %}hidden{% endif %}" id="tab-ready">
     <div class="form-card hidden" id="readyForm">
         <h3>Add Product / Parent</h3>
-        <form method="POST" action="{{ url_for('inventory.ready_add') }}">
+        <form autocomplete="off" method="POST" action="{{ url_for('inventory.ready_add') }}">
             <div class="form-grid form-grid-4">
                 <div class="form-group">
                     <label for="ready-name">Product Name *</label>
@@ -161,33 +166,45 @@
                 {% for s in ready_stock %}
                 {% set avail = s.quantity - (s.reserved_quantity or 0) %}
                 {# ── PARENT ROW ── #}
-                <tr class="{% if s.variants %}parent-row{% endif %} {% if not s.variants and avail <= 0 %}row-danger{% elif not s.variants and avail < 5 %}row-warning{% endif %}" style="{% if s.variants %}background: var(--surface);{% endif %}">
-                    <td style="text-align:center; cursor:pointer;" {% if s.variants %}onclick="toggleVariants('{{ s.id }}')"{% endif %}>
+                <tr class="{% if s.variants %}parent-row{% endif %} {% if not s.variants and avail <= 0 %}row-danger{% elif not s.variants and avail < 5 %}row-warning{% endif %}"
+                    style="{% if s.variants %}background: var(--surface);{% endif %}">
+                    <td style="text-align:center; cursor:pointer;" {% if s.variants
+                        %}onclick="toggleVariants('{{ s.id }}')" {% endif %}>
                         {% if s.variants %}<span id="icon-{{ s.id }}" style="font-size:0.8em;">&#9654;</span>{% endif %}
                     </td>
                     <td>
-                        <form method="POST" action="{{ url_for('inventory.ready_edit', doc_id=s.id) }}" class="inline-edit-form">
+                        <form autocomplete="off" method="POST" action="{{ url_for('inventory.ready_edit', doc_id=s.id) }}"
+                            class="inline-edit-form">
                             <strong><input type="text" name="name" value="{{ s.name }}" class="inline-input"></strong>
                     </td>
                     <td>
                         {% if s.variants %}
-                            <span class="text-muted" style="font-size:0.85em;">{{ s.quantity|int }} total</span>
-                            <input type="hidden" name="quantity" value="{{ s.quantity }}">
+                        <span class="text-muted" style="font-size:0.85em;">{{ s.quantity|int }} total</span>
+                        <input type="hidden" name="quantity" value="{{ s.quantity }}">
                         {% else %}
-                            <input type="number" name="quantity" value="{{ s.quantity }}" step="1" min="{{ s.quantity|int }}" class="inline-input inline-input-sm" style="width:60px">
+                        <input type="number" name="quantity" value="{{ s.quantity }}" step="1"
+                            min="{{ s.quantity|int }}" class="inline-input inline-input-sm" style="width:60px">
                         {% endif %}
                     </td>
                     <td class="text-warning text-bold">{{ s.reserved_quantity or 0 }}</td>
-                    <td class="{% if avail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">{{ avail|int }}</td>
+                    <td class="{% if avail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">{{ avail|int
+                        }}</td>
                     <td>
-                        <input type="number" name="cost_price" value="{{ s.cost_price or 0 }}" step="1" class="inline-input inline-input-sm">
+                        <input type="number" name="cost_price" value="{{ s.cost_price or 0 }}" step="1"
+                            class="inline-input inline-input-sm">
                     </td>
-                    <td class="text-muted">{{ s.updated_at.strftime('%d/%m/%Y') if s.updated_at and s.updated_at.strftime else '-' }}</td>
+                    <td class="text-muted">{{ s.updated_at.strftime('%d/%m/%Y') if s.updated_at and
+                        s.updated_at.strftime else '-' }}</td>
                     <td class="actions-cell">
                         <button type="submit" class="btn btn-xs">Save</button>
                         </form>
-                        <button type="button" class="btn btn-xs btn-ghost" onclick="openHistoryModal('{{ s.name|escape }}', '')">History</button>
-                        <button type="button" class="btn btn-xs btn-ghost" style="color:var(--primary); border-color:var(--primary);" onclick="openVariantModal('{{ s.id }}', '{{ s.name|escape }}')">+ Variant</button>
+                        {% if not s.variants %}
+                        <button type="button" class="btn btn-xs btn-ghost"
+                            onclick="openHistoryModal('{{ s.name|escape }}', '')">History</button>
+                        {% endif %}
+                        <button type="button" class="btn btn-xs btn-ghost"
+                            style="color:var(--primary); border-color:var(--primary);"
+                            onclick="openVariantModal('{{ s.id }}', '{{ s.name|escape }}')">+ Variant</button>
                     </td>
                 </tr>
 
@@ -197,29 +214,37 @@
                 <tr class="variant-row hidden" id="variant-{{ s.id }}" style="background:#f8f8ff;">
                     <td></td>
                     <td style="padding-left:2rem;">
-                        <form method="POST" action="{{ url_for('inventory.ready_edit', doc_id=v.id) }}" class="inline-edit-form">
+                        <form autocomplete="off" method="POST" action="{{ url_for('inventory.ready_edit', doc_id=v.id) }}"
+                            class="inline-edit-form">
                             <input type="hidden" name="name" value="{{ v.name }}">
                             <span class="text-muted" style="font-size:0.8em;">&#9492;</span>
-                            <input type="text" name="color" value="{{ v.color }}" class="inline-input inline-input-sm" placeholder="Variant name">
+                            <input type="text" name="color" value="{{ v.color }}" class="inline-input inline-input-sm"
+                                placeholder="Variant name">
                     </td>
                     <td>
-                        <input type="number" name="quantity" value="{{ v.quantity }}" step="1" min="{{ v.quantity|int }}" class="inline-input inline-input-sm" style="width:60px">
+                        <input type="number" name="quantity" value="{{ v.quantity }}" step="1"
+                            min="{{ v.quantity|int }}" class="inline-input inline-input-sm" style="width:60px">
                     </td>
                     <td class="text-warning text-bold">{{ v.reserved_quantity or 0 }}</td>
-                    <td class="{% if vavail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">{{ vavail|int }}</td>
+                    <td class="{% if vavail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">{{ vavail|int
+                        }}</td>
                     <td class="text-muted" colspan="1" style="font-size:0.8em;">Inherits parent</td>
-                    <td class="text-muted">{{ v.updated_at.strftime('%d/%m/%Y') if v.updated_at and v.updated_at.strftime else '-' }}</td>
+                    <td class="text-muted">{{ v.updated_at.strftime('%d/%m/%Y') if v.updated_at and
+                        v.updated_at.strftime else '-' }}</td>
                     <td class="actions-cell">
                         <button type="submit" class="btn btn-xs">Save</button>
                         </form>
-                        <button type="button" class="btn btn-xs btn-ghost" onclick="openHistoryModal('{{ v.name|escape }}', '{{ v.color|escape }}')" >History</button>
+                        <button type="button" class="btn btn-xs btn-ghost"
+                            onclick="openHistoryModal('{{ v.name|escape }}', '{{ v.color|escape }}')">History</button>
                     </td>
                 </tr>
                 {% endfor %}
 
                 {% endfor %}
                 {% if not ready_stock %}
-                <tr><td colspan="8" class="empty-state">No ready stock. Add items or use Produce.</td></tr>
+                <tr>
+                    <td colspan="8" class="empty-state">No ready stock. Add items or use Produce.</td>
+                </tr>
                 {% endif %}
             </tbody>
         </table>
@@ -228,7 +253,7 @@
 
 <!-- ── INVENTORY LOGS TAB ──────────────────────────────── -->
 <div class="tab-content {% if active_tab != 'logs' %}hidden{% endif %}" id="tab-logs">
-    
+
     <div class="kpi-grid" style="margin-bottom: 2rem;">
         <div class="kpi-card" style="border-left: 4px solid var(--primary)">
             <h3>Total Manufactured (Today)</h3>
@@ -262,24 +287,31 @@
             <tbody>
                 {% for log in logs %}
                 <tr>
-                    <td class="text-muted">{{ log.date.strftime('%d/%m/%Y %H:%M') if log.date and log.date.strftime else '-' }}</td>
-                    <td><span class="badge {% if log.item_type == 'Ready Stock' %}bg-success{% else %}bg-primary{% endif %}">{{ log.item_type }}</span></td>
+                    <td class="text-muted">{{ log.date.strftime('%d/%m/%Y %H:%M') if log.date and log.date.strftime else
+                        '-' }}</td>
+                    <td><span
+                            class="badge {% if log.item_type == 'Ready Stock' %}bg-success{% else %}bg-primary{% endif %}">{{
+                            log.item_type }}</span></td>
                     <td>
                         {{ log.item_name }}
                         {% if log.color %}<span class="text-muted">({{ log.color }})</span>{% endif %}
                     </td>
                     <td class="text-bold">
                         {% if log.delta > 0 %}
-                            <span class="badge bg-success" style="font-size:1em; padding:4px 8px;">+{{ log.delta|int }} IN</span>
+                        <span class="badge bg-success" style="font-size:1em; padding:4px 8px;">+{{ log.delta|int }}
+                            IN</span>
                         {% else %}
-                            <span class="badge bg-danger" style="font-size:1em; padding:4px 8px;">{{ log.delta|int }} OUT</span>
+                        <span class="badge bg-danger" style="font-size:1em; padding:4px 8px;">{{ log.delta|int }}
+                            OUT</span>
                         {% endif %}
                     </td>
                     <td>{{ log.reason or '-' }}</td>
                 </tr>
                 {% endfor %}
                 {% if not logs %}
-                <tr><td colspan="5" class="empty-state">No transactions recorded yet.</td></tr>
+                <tr>
+                    <td colspan="5" class="empty-state">No transactions recorded yet.</td>
+                </tr>
                 {% endif %}
             </tbody>
         </table>
@@ -293,8 +325,9 @@
             <h3>Produce — Convert Raw → Ready</h3>
             <button class="modal-close" onclick="closeModal('produceModal')">×</button>
         </div>
-        <form method="POST" action="{{ url_for('inventory.produce') }}">
-            <p class="text-muted" style="margin-bottom:1rem">Select raw materials to consume and the finished product to add.</p>
+        <form autocomplete="off" method="POST" action="{{ url_for('inventory.produce') }}">
+            <p class="text-muted" style="margin-bottom:1rem">Select raw materials to consume and the finished product to
+                add.</p>
 
             <h4>Raw Materials Used</h4>
             <div id="rawMaterialRows">
@@ -313,7 +346,8 @@
                     </div>
                 </div>
             </div>
-            <button type="button" class="btn btn-xs" onclick="addRawRow()" style="margin-bottom:1.5rem">+ Another Material</button>
+            <button type="button" class="btn btn-xs" onclick="addRawRow()" style="margin-bottom:1.5rem">+ Another
+                Material</button>
 
             <h4>Finished Product</h4>
             <div class="form-grid form-grid-3">
@@ -374,8 +408,9 @@
             <h3>Add Variant</h3>
             <button class="modal-close" onclick="closeModal('variantModal')">×</button>
         </div>
-        <p class="text-muted" style="font-size:0.85em; margin-bottom:1rem;">Adding a variant to: <strong id="variantParentName"></strong></p>
-        <form id="variantForm" method="POST" action="">
+        <p class="text-muted" style="font-size:0.85em; margin-bottom:1rem;">Adding a variant to: <strong
+                id="variantParentName"></strong></p>
+        <form autocomplete="off" id="variantForm" method="POST" action="">
             <div class="form-group" style="margin-bottom:1rem;">
                 <label>Variant Name (e.g. Black, Gold) *</label>
                 <input type="text" name="variant_name" required placeholder="e.g. Black">
@@ -385,7 +420,8 @@
                 <input type="number" name="quantity" step="1" min="0" value="0">
             </div>
             <div class="form-actions">
-                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Add Variant</button>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Add
+                    Variant</button>
             </div>
         </form>
     </div>
@@ -395,11 +431,11 @@
 
 {% block scripts %}
 <script>
-let rawRowCount = 1;
-function addRawRow() {
-    const container = document.getElementById('rawMaterialRows');
-    const options = document.querySelector('.raw-material-select').innerHTML;
-    const html = `
+    let rawRowCount = 1;
+    function addRawRow() {
+        const container = document.getElementById('rawMaterialRows');
+        const options = document.querySelector('.raw-material-select').innerHTML;
+        const html = `
     <div class="form-grid form-grid-2 raw-row">
         <div class="form-group">
             <select name="raw_name_${rawRowCount}" class="raw-material-select">${options}</select>
@@ -408,91 +444,91 @@ function addRawRow() {
             <input type="number" name="raw_qty_${rawRowCount}" step="1" value="1" min="0">
         </div>
     </div>`;
-    container.insertAdjacentHTML('beforeend', html);
-    rawRowCount++;
-}
+        container.insertAdjacentHTML('beforeend', html);
+        rawRowCount++;
+    }
 
-function openProduceModal() {
-    document.getElementById('produceModal').classList.remove('hidden');
-}
+    function openProduceModal() {
+        document.getElementById('produceModal').classList.remove('hidden');
+    }
 
-function switchTab(tab) {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
-    event.target.classList.add('active');
-    document.getElementById('tab-' + tab).classList.remove('hidden');
-}
+    function switchTab(tab) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+        event.target.classList.add('active');
+        document.getElementById('tab-' + tab).classList.remove('hidden');
+    }
 
-function toggleVariants(parentId) {
-    const rows = document.querySelectorAll('#variant-' + parentId);
-    const icon = document.getElementById('icon-' + parentId);
-    const hidden = rows[0] && rows[0].classList.contains('hidden');
-    rows.forEach(r => r.classList.toggle('hidden', !hidden));
-    if (icon) icon.textContent = hidden ? '\u25BE' : '\u25B6';
-}
+    function toggleVariants(parentId) {
+        const rows = document.querySelectorAll('#variant-' + parentId);
+        const icon = document.getElementById('icon-' + parentId);
+        const hidden = rows[0] && rows[0].classList.contains('hidden');
+        rows.forEach(r => r.classList.toggle('hidden', !hidden));
+        if (icon) icon.textContent = hidden ? '\u25BE' : '\u25B6';
+    }
 
-function openVariantModal(parentId, parentName) {
-    document.getElementById('variantParentName').textContent = parentName;
-    document.getElementById('variantForm').action = '/inventory/ready/add_variant/' + parentId;
-    document.getElementById('variantModal').classList.remove('hidden');
-}
+    function openVariantModal(parentId, parentName) {
+        document.getElementById('variantParentName').textContent = parentName;
+        document.getElementById('variantForm').action = '/inventory/ready/add_variant/' + parentId;
+        document.getElementById('variantModal').classList.remove('hidden');
+    }
 
-async function openHistoryModal(name, color) {
-    const title = name + (color && color !== 'None' ? ` (${color})` : '');
-    document.getElementById('historyItemTitle').textContent = title;
-    
-    const tbody = document.getElementById('historyTableBody');
-    const totalsDiv = document.getElementById('historyItemTotals');
-    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted" style="padding: 2rem;">Loading ledger data...</td></tr>';
-    totalsDiv.textContent = 'Calculating...';
-    
-    document.getElementById('historyModal').classList.remove('hidden');
+    async function openHistoryModal(name, color) {
+        const title = name + (color && color !== 'None' ? ` (${color})` : '');
+        document.getElementById('historyItemTitle').textContent = title;
 
-    try {
-        const url = `/inventory/api/product-logs?name=${encodeURIComponent(name)}&color=${encodeURIComponent(color || '')}`;
-        const response = await fetch(url);
-        const logs = await response.json();
-        
-        let inTotal = 0;
-        let outTotal = 0;
-        tbody.innerHTML = '';
-        
-        if (logs.error) {
-            tbody.innerHTML = `<tr><td colspan="3" class="empty-state text-danger">${logs.error}</td></tr>`;
-            totalsDiv.textContent = '';
-            return;
-        }
+        const tbody = document.getElementById('historyTableBody');
+        const totalsDiv = document.getElementById('historyItemTotals');
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted" style="padding: 2rem;">Loading ledger data...</td></tr>';
+        totalsDiv.textContent = 'Calculating...';
 
-        if (logs.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No transaction history found.</td></tr>';
-        } else {
-            logs.forEach(log => {
-                if (log.delta > 0) inTotal += log.delta;
-                if (log.delta < 0) outTotal += Math.abs(log.delta);
-                
-                const d = new Date(log.date);
-                const isNaN_date = isNaN(d);
-                const dateStr = !isNaN_date ? d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-';
-                
-                const badgeHtml = log.delta > 0 
-                    ? `<span class="badge bg-success" style="padding:2px 6px;">+${log.delta} IN</span>`
-                    : `<span class="badge bg-danger" style="padding:2px 6px;">${log.delta} OUT</span>`;
-                
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
+        document.getElementById('historyModal').classList.remove('hidden');
+
+        try {
+            const url = `/inventory/api/product-logs?name=${encodeURIComponent(name)}&color=${encodeURIComponent(color || '')}`;
+            const response = await fetch(url);
+            const logs = await response.json();
+
+            let inTotal = 0;
+            let outTotal = 0;
+            tbody.innerHTML = '';
+
+            if (logs.error) {
+                tbody.innerHTML = `<tr><td colspan="3" class="empty-state text-danger">${logs.error}</td></tr>`;
+                totalsDiv.textContent = '';
+                return;
+            }
+
+            if (logs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No transaction history found.</td></tr>';
+            } else {
+                logs.forEach(log => {
+                    if (log.delta > 0) inTotal += log.delta;
+                    if (log.delta < 0) outTotal += Math.abs(log.delta);
+
+                    const d = new Date(log.date);
+                    const isNaN_date = isNaN(d);
+                    const dateStr = !isNaN_date ? d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-';
+
+                    const badgeHtml = log.delta > 0
+                        ? `<span class="badge bg-success" style="padding:2px 6px;">+${log.delta} IN</span>`
+                        : `<span class="badge bg-danger" style="padding:2px 6px;">${log.delta} OUT</span>`;
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
                     <td class="text-muted" style="white-space: nowrap;">${dateStr}</td>
                     <td class="text-bold">${badgeHtml}</td>
                     <td>${log.reason || '-'}</td>
                 `;
-                tbody.appendChild(tr);
-            });
+                    tbody.appendChild(tr);
+                });
+            }
+            totalsDiv.innerHTML = `Total Lifetime IN: <strong class="text-success">+${inTotal}</strong> &nbsp;|&nbsp; Total Lifetime OUT: <strong class="text-danger">-${outTotal}</strong>`;
+        } catch (err) {
+            console.error(err);
+            tbody.innerHTML = '<tr><td colspan="3" class="empty-state text-danger">Failed to load history. Check your connection.</td></tr>';
+            totalsDiv.textContent = '';
         }
-        totalsDiv.innerHTML = `Total Lifetime IN: <strong class="text-success">+${inTotal}</strong> &nbsp;|&nbsp; Total Lifetime OUT: <strong class="text-danger">-${outTotal}</strong>`;
-    } catch (err) {
-        console.error(err);
-        tbody.innerHTML = '<tr><td colspan="3" class="empty-state text-danger">Failed to load history. Check your connection.</td></tr>';
-        totalsDiv.textContent = '';
     }
-}
 </script>
 {% endblock %}
