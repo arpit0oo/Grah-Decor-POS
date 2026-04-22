@@ -244,16 +244,4 @@ def adjust_ready_stock_qty(name, color, delta=0, reserved_delta=0, reason='Manua
     return False
 
 
-# ── Produce ────────────────────────────────────────────────────
 
-def produce_item(raw_items, product_name, product_color, produce_qty, reason=''):
-    """
-    Deduct raw materials and add to ready stock.
-    raw_items: list of dicts [{name, quantity_used}, ...]
-    """
-    res_suffix = f" — {reason}" if reason else ""
-    for item in raw_items:
-        adjust_raw_material_qty(item['name'], -float(item['quantity_used']), reason=f'Used for producing {product_name}{res_suffix}')
-
-    if not adjust_ready_stock_qty(product_name, product_color, float(produce_qty), reason=f'Production{res_suffix}'):
-        add_ready_stock(product_name, product_color, float(produce_qty), 0, reason=f'Production{res_suffix}')

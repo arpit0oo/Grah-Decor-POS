@@ -4,7 +4,6 @@
 {% block content %}
 <div class="page-header">
     <h1>Inventory</h1>
-    <button class="btn btn-primary" onclick="openProduceModal()">⚙ Produce</button>
 </div>
 
 <!-- Tabs -->
@@ -241,7 +240,7 @@
                 {% endfor %}
                 {% if not ready_stock %}
                 <tr>
-                    <td colspan="8" class="empty-state">No ready stock. Add items or use Produce.</td>
+                    <td colspan="8" class="empty-state">No ready stock. Add items.</td>
                 </tr>
                 {% endif %}
             </tbody>
@@ -342,64 +341,7 @@
     </div>
 </div>
 
-<!-- ── PRODUCE MODAL ───────────────────────────────────── -->
-<div class="modal-overlay hidden" id="produceModal">
-    <div class="modal">
-        <div class="modal-header">
-            <h3>Produce — Convert Raw → Ready</h3>
-            <button class="modal-close" onclick="closeModal('produceModal')">×</button>
-        </div>
-        <form autocomplete="off" method="POST" action="{{ url_for('inventory.produce') }}">
-            <p class="text-muted" style="margin-bottom:1rem">Select raw materials to consume and the finished product to
-                add.</p>
 
-            <h4>Raw Materials Used</h4>
-            <div id="rawMaterialRows">
-                <div class="form-grid form-grid-2 raw-row">
-                    <div class="form-group">
-                        <label>Material</label>
-                        <select name="raw_name_0" class="raw-material-select">
-                            {% for m in raw_materials %}
-                            <option value="{{ m.name }}">{{ m.name }} ({{ m.quantity }} {{ m.unit }})</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Qty Used</label>
-                        <input type="number" name="raw_qty_0" step="1" value="1" min="0">
-                    </div>
-                </div>
-            </div>
-            <button type="button" class="btn btn-xs" onclick="addRawRow()" style="margin-bottom:1.5rem">+ Another
-                Material</button>
-
-            <h4>Finished Product</h4>
-            <div class="form-grid form-grid-3">
-                <div class="form-group">
-                    <label>Product Name *</label>
-                    <input type="text" name="product_name" required placeholder="e.g. A4 Frame">
-                </div>
-                <div class="form-group">
-                    <label>Color</label>
-                    <input type="text" name="product_color" placeholder="e.g. Black">
-                </div>
-                <div class="form-group">
-                    <label>Quantity Produced</label>
-                    <input type="number" name="produce_qty" value="1" min="1">
-                </div>
-                <div class="form-group" style="grid-column: span 3; margin-top: 0.5rem;">
-                    <label>Production Reason / Notes</label>
-                    <input type="text" name="produce_reason" placeholder="e.g. Regular Batch, Diwali Prep, etc.">
-                </div>
-            </div>
-
-            <div class="form-actions">
-                <button type="submit" class="btn btn-primary">Produce</button>
-                <button type="button" class="btn btn-ghost" onclick="closeModal('produceModal')">Cancel</button>
-            </div>
-        </form>
-    </div>
-</div>
 
 <!-- ── HISTORY MODAL ───────────────────────────────────── -->
 <div class="modal-overlay hidden" id="historyModal">
@@ -661,26 +603,7 @@
         input.focus();
     }
 
-    let rawRowCount = 1;
-    function addRawRow() {
-        const container = document.getElementById('rawMaterialRows');
-        const options = document.querySelector('.raw-material-select').innerHTML;
-        const html = `
-    <div class="form-grid form-grid-2 raw-row">
-        <div class="form-group">
-            <select name="raw_name_${rawRowCount}" class="raw-material-select">${options}</select>
-        </div>
-        <div class="form-group">
-            <input type="number" name="raw_qty_${rawRowCount}" step="1" value="1" min="0">
-        </div>
-    </div>`;
-        container.insertAdjacentHTML('beforeend', html);
-        rawRowCount++;
-    }
 
-    function openProduceModal() {
-        document.getElementById('produceModal').classList.remove('hidden');
-    }
 
     function switchTab(tab) {
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));

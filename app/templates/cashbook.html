@@ -7,21 +7,21 @@
     <button class="btn btn-primary" onclick="openExpenseModal()">+ Add Expense</button>
 </div>
 
-<!-- Today's Summary Cards -->
+<!-- Summary Cards -->
 <div class="dashboard-cards">
     <div class="dash-card card-inflow">
-        <div class="dash-card-label">Today's Inflow</div>
-        <div class="dash-card-value">₹ {{ "%.2f"|format(today_inflow) }}</div>
+        <div class="dash-card-label">Period Inflow</div>
+        <div class="dash-card-value">₹ {{ "%.2f"|format(filtered_inflow) }}</div>
         <div class="dash-card-icon">↗</div>
     </div>
     <div class="dash-card card-outflow">
-        <div class="dash-card-label">Today's Outflow</div>
-        <div class="dash-card-value">₹ {{ "%.2f"|format(today_outflow) }}</div>
+        <div class="dash-card-label">Period Outflow</div>
+        <div class="dash-card-value">₹ {{ "%.2f"|format(filtered_outflow) }}</div>
         <div class="dash-card-icon">↘</div>
     </div>
     <div class="dash-card card-net">
-        <div class="dash-card-label">Today's Net</div>
-        <div class="dash-card-value">₹ {{ "%.2f"|format(today_net) }}</div>
+        <div class="dash-card-label">Period Net</div>
+        <div class="dash-card-value">₹ {{ "%.2f"|format(filtered_net) }}</div>
         <div class="dash-card-icon">⇄</div>
     </div>
     <div class="dash-card card-balance">
@@ -33,9 +33,25 @@
 
 <!-- Date Filter -->
 <div class="filter-bar">
-    <form autocomplete="off" method="GET" action="{{ url_for('cashbook.dashboard') }}" class="filter-form">
-        <input type="date" name="date_from" value="{{ date_from }}" placeholder="From">
-        <input type="date" name="date_to" value="{{ date_to }}" placeholder="To">
+    <form autocomplete="off" method="GET" action="{{ url_for('cashbook.dashboard') }}" class="filter-form"
+        id="cashbook-filter-form">
+        <select id="month-filter" onchange="applyMonthFilter()" style="width: 140px; background: #fff;">
+            <option value="">Month</option>
+            <option value="1">January</option>
+            <option value="2">February</option>
+            <option value="3">March</option>
+            <option value="4">April</option>
+            <option value="5">May</option>
+            <option value="6">June</option>
+            <option value="7">July</option>
+            <option value="8">August</option>
+            <option value="9">September</option>
+            <option value="10">October</option>
+            <option value="11">November</option>
+            <option value="12">December</option>
+        </select>
+        <input type="date" name="date_from" id="filter-date-from" value="{{ date_from }}" placeholder="From">
+        <input type="date" name="date_to" id="filter-date-to" value="{{ date_to }}" placeholder="To">
         <button type="submit" class="btn btn-sm">Filter</button>
         <a href="{{ url_for('cashbook.dashboard') }}" class="btn btn-sm btn-ghost">Clear</a>
     </form>
@@ -127,6 +143,28 @@
     function openExpenseModal() {
         document.getElementById('expenseDate').valueAsDate = new Date();
         document.getElementById('expenseModal').classList.remove('hidden');
+    }
+
+    function applyMonthFilter() {
+        const monthDropdown = document.getElementById('month-filter');
+        const month = parseInt(monthDropdown.value);
+        if (!month) return;
+
+        const year = new Date().getFullYear();
+
+        // Last day of the selected month
+        const lastDay = new Date(year, month, 0).getDate();
+
+        const pad = (n) => n.toString().padStart(2, '0');
+
+        const fromStr = `${year}-${pad(month)}-01`;
+        const toStr = `${year}-${pad(month)}-${pad(lastDay)}`;
+
+        document.getElementById('filter-date-from').value = fromStr;
+        document.getElementById('filter-date-to').value = toStr;
+
+        // Auto-submit
+        document.getElementById('cashbook-filter-form').submit();
     }
 </script>
 {% endblock %}

@@ -178,8 +178,9 @@ body {
 .btn {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 0.4rem;
-    padding: 0.55rem 1rem;
+    padding: 0.5rem 1rem;
     font-size: 0.85rem;
     font-weight: 500;
     font-family: var(--font);
@@ -188,19 +189,41 @@ body {
     background: var(--bg-card);
     color: var(--text);
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     text-decoration: none;
+    line-height: 1.2;
 }
 
-.btn:hover { background: var(--bg); box-shadow: var(--shadow-sm); }
+.btn:hover { background: #f8fafc; border-color: #cbd5e1; box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+
 .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
-.btn-primary:hover { background: var(--primary-hover); }
+.btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); color: #fff; }
+
 .btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
-.btn-danger:hover { background: var(--danger-hover); }
+.btn-danger:hover { background: var(--danger-hover); border-color: var(--danger-hover); color: #fff; }
+
 .btn-ghost { background: transparent; border-color: transparent; color: var(--text-secondary); }
-.btn-ghost:hover { background: var(--bg); color: var(--text); }
-.btn-sm { padding: 0.35rem 0.7rem; font-size: 0.8rem; }
-.btn-xs { padding: 0.2rem 0.5rem; font-size: 0.75rem; }
+.btn-ghost:hover { background: #f1f5f9; color: var(--text); border-color: transparent; }
+
+.btn-outline-success { background: transparent; border-color: var(--success); color: var(--success); }
+.btn-outline-success:hover { background: var(--success); color: #fff; border-color: var(--success); }
+
+.btn-outline-primary { background: transparent; border-color: var(--primary); color: var(--primary); }
+.btn-outline-primary:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+.btn-outline-danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+.btn-outline-danger:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+.btn-sm { padding: 0.3rem 0.6rem; font-size: 0.8rem; }
+.btn-xs { 
+    padding: 0.25rem 0.5rem; 
+    font-size: 0.72rem; 
+    font-weight: 600;
+    border-radius: 20px; 
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
 
 /* ── Flash Messages ────────────────────────────────────────── */
 .flash-container { margin-bottom: 1rem; }

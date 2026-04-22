@@ -3,7 +3,7 @@ from app.services.inventory_service import (
     get_all_raw_materials, add_raw_material, update_raw_material, delete_raw_material,
     get_all_ready_stock, get_ready_stock_grouped, add_ready_stock, add_ready_stock_variant,
     update_ready_stock, delete_ready_stock, adjust_ready_stock_qty,
-    produce_item, get_inventory_logs, get_product_inventory_logs
+    get_inventory_logs, get_product_inventory_logs
 )
 
 inventory_bp = Blueprint('inventory', __name__, url_prefix='/inventory')
@@ -181,34 +181,7 @@ def ready_add_variant(parent_id):
     return redirect(url_for('inventory.inventory_list', tab='ready'))
 
 
-# ── Produce ────────────────────────────────────────────────────
 
-@inventory_bp.route('/produce', methods=['POST'])
-def produce():
-    product_name = request.form.get('product_name', '').strip()
-    product_color = request.form.get('product_color', '').strip()
-    produce_qty = request.form.get('produce_qty', 1)
-    produce_reason = request.form.get('produce_reason', '').strip()
-
-    # Collect raw materials used (dynamic form fields)
-    raw_items = []
-    i = 0
-    while True:
-        mat_name = request.form.get(f'raw_name_{i}')
-        mat_qty = request.form.get(f'raw_qty_{i}')
-        if mat_name is None:
-            break
-        if mat_name.strip() and mat_qty:
-            raw_items.append({'name': mat_name.strip(), 'quantity_used': float(mat_qty)})
-        i += 1
-
-    if product_name and raw_items:
-        produce_item(raw_items, product_name, product_color, produce_qty, reason=produce_reason)
-        flash(f'Produced {produce_qty} x {product_name}.', 'success')
-    else:
-        flash('Please fill in product and raw materials.', 'error')
-
-    return redirect(url_for('inventory.inventory_list', tab='ready'))
 
 
 # ── API endpoints for JS ───────────────────────────────────────

@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for
 from datetime import datetime
-from app.services.cashbook_service import get_today_transactions, get_all_transactions, get_running_balance, add_cashbook_entry
+from app.services.cashbook_service import get_all_transactions, get_running_balance, add_cashbook_entry
 
 cashbook_bp = Blueprint('cashbook', __name__, url_prefix='/cashbook')
 
@@ -28,19 +28,18 @@ def dashboard():
     else:
         transactions = get_all_transactions()
 
-    today_txns = get_today_transactions()
     balance = get_running_balance()
 
-    today_inflow = sum(t['amount'] for t in today_txns if t['type'] == 'inflow')
-    today_outflow = sum(t['amount'] for t in today_txns if t['type'] == 'outflow')
-    today_net = today_inflow - today_outflow
+    filtered_inflow = sum(t['amount'] for t in transactions if t.get('type') == 'inflow')
+    filtered_outflow = sum(t['amount'] for t in transactions if t.get('type') == 'outflow')
+    filtered_net = filtered_inflow - filtered_outflow
 
     return render_template('cashbook.html',
                            transactions=transactions,
                            balance=balance,
-                           today_inflow=today_inflow,
-                           today_outflow=today_outflow,
-                           today_net=today_net,
+                           filtered_inflow=filtered_inflow,
+                           filtered_outflow=filtered_outflow,
+                           filtered_net=filtered_net,
                            date_from=date_from or '',
                            date_to=date_to or '')
 

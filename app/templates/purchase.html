@@ -36,7 +36,6 @@
             <div id="po-item-error" class="text-danger hidden" style="font-size:0.8rem; margin-top:0.25rem;">Duplicate materials selected! Please select unique materials.</div>
         </div>
         <div class="form-row">
-        <div class="form-row">
             <div class="settlement-display">
                 Total Cost: <strong id="purchase-total-display">₹ 0.00</strong>
             </div>
@@ -111,7 +110,7 @@
                 </td>
                 <td>{{ p.vendor_name }}</td>
                 <td>
-                    {% set po_items = p.get('items', []) %}
+                    {% set po_items = p.get('items') or [] %}
                     {% if not po_items and p.get('item') %}
                         {{ p.item }}
                     {% elif po_items|length > 0 %}
@@ -121,7 +120,7 @@
                     {% endif %}
                 </td>
                 <td class="text-right">
-                    {% set po_items = p.get('items', []) %}
+                    {% set po_items = p.get('items') or [] %}
                     {% if po_items|length > 0 %}
                         {{ po_items | sum(attribute='quantity') }}
                     {% else %}
@@ -133,32 +132,35 @@
                     {% if p.payment_id %}<small class="text-muted">Txn: {{ p.payment_id }}</small>{% endif %}
                 </td>
                 <td class="actions-cell">
-                    <div style="display:flex; gap:0.5rem; justify-content:flex-end;">
+                    <div style="display:grid; grid-template-columns: 85px 85px 70px; gap:0.35rem; align-items:center; justify-items:start;">
                         {% if p.status == 'Draft' %}
-                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_sent', po_id=p.id) }}" style="margin:0;">
-                            <button type="submit" class="btn btn-xs btn-primary">Mark Sent</button>
+                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_sent', po_id=p.id) }}" style="margin:0; width:100%;">
+                            <button type="submit" class="btn btn-xs btn-primary" style="width:100%;">Sent</button>
                         </form>
-                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0;" onsubmit="return confirm('Are you sure you want to cancel this PO? This action cannot be undone.');">
-                            <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--danger)">Cancel</button>
+                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0; width:100%;" onsubmit="return confirm('Are you sure you want to cancel this PO? This action cannot be undone.');">
+                            <button type="submit" class="btn btn-xs btn-outline-danger" style="width:100%;">Cancel</button>
                         </form>
                         {% elif p.status == 'Sent' %}
-                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_received', po_id=p.id) }}" style="margin:0;">
-                            <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--success); border-color:var(--success);" onclick="return confirm('Receive items and increment inventory?')">Receive</button>
+                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_received', po_id=p.id) }}" style="margin:0; width:100%;">
+                            <button type="submit" class="btn btn-xs btn-outline-success" style="width:100%;" onclick="return confirm('Receive items and increment inventory?')">Receive</button>
                         </form>
-                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0;" onsubmit="return confirm('Are you sure you want to cancel this PO? This action cannot be undone.');">
-                            <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--danger)">Cancel</button>
+                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0; width:100%;" onsubmit="return confirm('Are you sure you want to cancel this PO? This action cannot be undone.');">
+                            <button type="submit" class="btn btn-xs btn-outline-danger" style="width:100%;">Cancel</button>
                         </form>
                         {% elif p.status == 'Received' %}
-                        <button type="button" class="btn btn-xs btn-ghost" style="color:var(--primary); border-color:var(--primary);" onclick="openPayModal('{{ p.id }}', '{{ p.po_number }}')">Pay</button>
-                        <button type="button" class="btn btn-xs btn-ghost" style="color:var(--danger);" onclick="openReturnModal('{{ p.id }}', '{{ p.po_number }}', 'Received')">Return</button>
+                        <button type="button" class="btn btn-xs btn-outline-primary" style="width:100%;" onclick="openPayModal('{{ p.id }}', '{{ p.po_number }}')">Pay</button>
+                        <button type="button" class="btn btn-xs btn-outline-danger" style="width:100%;" onclick="openReturnModal('{{ p.id }}', '{{ p.po_number }}', 'Received')">Return</button>
                         {% elif p.status == 'Paid' %}
-                        <button type="button" class="btn btn-xs btn-ghost" style="color:var(--danger);" onclick="openReturnModal('{{ p.id }}', '{{ p.po_number }}', 'Paid')">Return</button>
+                        <div></div>
+                        <button type="button" class="btn btn-xs btn-outline-danger" style="width:100%;" onclick="openReturnModal('{{ p.id }}', '{{ p.po_number }}', 'Paid')">Return</button>
                         {% elif p.status == 'Returned' %}
-                        <span class="text-danger text-bold" style="font-size: 0.8rem; padding: 0.2rem 0;">RETURNED</span>
+                        <div></div>
+                        <span style="font-size: 0.65rem; font-weight: 800; color: #991b1b; background: #fee2e2; padding: 0.2rem 0.4rem; border-radius: 4px; width:100%; text-align:center; text-transform: uppercase;">Returned</span>
                         {% elif p.status == 'Cancelled' %}
-                        <span class="text-danger text-bold" style="font-size: 0.8rem; padding: 0.2rem 0;">CANCELLED</span>
+                        <div></div>
+                        <span style="font-size: 0.65rem; font-weight: 800; color: #991b1b; background: #fee2e2; padding: 0.2rem 0.4rem; border-radius: 4px; width:100%; text-align:center; text-transform: uppercase;">Cancelled</span>
                         {% endif %}
-                        <button type="button" class="btn btn-xs btn-ghost" style="color:var(--text-secondary);" data-po="{{ p|tojson|forceescape }}" onclick="openViewPoModal(this)">History</button>
+                        <button type="button" class="btn btn-xs btn-ghost" style="width:100%;" data-po="{{ p|tojson|forceescape }}" onclick="openViewPoModal(this)">History</button>
                     </div>
                 </td>
             </tr>
