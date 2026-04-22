@@ -4,6 +4,7 @@
 {% block content %}
 <div class="page-header">
     <h1>Cash Book</h1>
+    <button class="btn btn-primary" onclick="openExpenseModal()">+ Add Expense</button>
 </div>
 
 <!-- Today's Summary Cards -->
@@ -71,9 +72,61 @@
             </tr>
             {% endfor %}
             {% if not transactions %}
-            <tr><td colspan="5" class="empty-state">No transactions yet. They appear automatically when you log orders or purchases.</td></tr>
+            <tr>
+                <td colspan="5" class="empty-state">No transactions yet. They appear automatically when you log orders
+                    or purchases.</td>
+            </tr>
             {% endif %}
         </tbody>
     </table>
 </div>
+<!-- Modal: Add Expense -->
+<div class="modal-overlay hidden" id="expenseModal">
+    <div class="modal" style="max-width:400px;">
+        <div class="modal-header">
+            <h3>Add Manual Expense</h3>
+            <button class="modal-close" onclick="closeModal('expenseModal')">×</button>
+        </div>
+        <form id="expenseForm" method="POST" action="{{ url_for('cashbook.add_expense') }}">
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label>Date *</label>
+                <input type="date" name="date" id="expenseDate" required>
+            </div>
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label>Amount ₹ *</label>
+                <input type="number" name="amount" step="1" min="1" required placeholder="0">
+            </div>
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label>Category *</label>
+                <select name="category" required>
+                    <option value="Electricity">Electricity</option>
+                    <option value="Travel">Travel</option>
+                    <option value="Packaging">Packaging</option>
+                    <option value="Office Supplies">Office Supplies</option>
+                    <option value="Misc">Misc</option>
+                    <option value="Other" selected>Other</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom:1.5rem;">
+                <label>Notes</label>
+                <textarea name="notes" rows="2" placeholder="Brief description (optional)" class="inline-input"
+                    style="width:100%; border:1px solid var(--border); border-radius: var(--radius); padding: 0.5rem;"></textarea>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Log
+                    Expense</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function openExpenseModal() {
+        document.getElementById('expenseDate').valueAsDate = new Date();
+        document.getElementById('expenseModal').classList.remove('hidden');
+    }
+</script>
 {% endblock %}

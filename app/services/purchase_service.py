@@ -120,7 +120,7 @@ def mark_po_paid(po_id, payment_id):
     po_number = data.get('po_number', po_id)
     vendor = data.get('vendor_name', 'Unknown')
     
-    desc = f"PO {po_number} Paid to {vendor}"
+    desc = f"{po_number} Paid to {vendor}"
     if payment_id:
         desc += f" - Txn: {payment_id}"
         
@@ -190,7 +190,7 @@ def revert_cancelled_to_paid(po_id, payment_id):
         add_raw_material(item, quantity, 'pcs', unit_cost, reason=reason)
     
     # Log cash outflow
-    desc = f"PO {po_number} Paid to {vendor}"
+    desc = f"{po_number} Paid to {vendor}"
     if payment_id:
         desc += f" - Txn: {payment_id}"
         

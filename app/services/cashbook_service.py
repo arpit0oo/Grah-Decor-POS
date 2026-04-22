@@ -63,16 +63,29 @@ def get_running_balance():
     return balance
 
 
-def add_cashbook_entry(entry_type, category, description, amount, reference_id=''):
+def add_cashbook_entry(entry_type, category, description, amount, reference_id='', source='', entry_date=None):
     db = get_db()
     now = datetime.now(timezone.utc)
+    
+    if entry_date:
+        if isinstance(entry_date, str):
+            try:
+                dt = datetime.strptime(entry_date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+            except (ValueError, TypeError):
+                dt = now
+        else:
+            dt = entry_date
+    else:
+        dt = now
+
     db.collection('cashbook').add({
-        'date': now,
+        'date': dt,
         'type': entry_type,
         'category': category,
         'description': description,
         'amount': float(amount),
         'reference_id': reference_id,
+        'source': source,
         'created_at': now,
     })
 
