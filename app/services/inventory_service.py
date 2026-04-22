@@ -44,18 +44,21 @@ def get_all_raw_materials():
 
 def add_raw_material(name, quantity, unit, price=0, reason='Manual Add'):
     db = get_db()
+    qty = int(float(quantity))
     db.collection('raw_materials').add({
         'name': name,
-        'quantity': float(quantity),
+        'quantity': qty,
         'unit': unit,
         'price': float(price),
         'updated_at': datetime.now(timezone.utc),
     })
-    log_inventory_transaction('Raw Material', name, '', quantity, reason)
+    log_inventory_transaction('Raw Material', name, '', qty, reason)
 
 
 def update_raw_material(doc_id, data):
     db = get_db()
+    if 'quantity' in data:
+        data['quantity'] = int(float(data['quantity']))
     data['updated_at'] = datetime.now(timezone.utc)
     db.collection('raw_materials').document(doc_id).update(data)
 
@@ -76,13 +79,14 @@ def adjust_raw_material_qty(name, delta, reason='Manual Adjustment', ref_id=''):
     )
     if docs:
         doc = docs[0]
-        current = doc.to_dict().get('quantity', 0)
-        new_qty = max(0, current + float(delta))
+        current = int(float(doc.to_dict().get('quantity', 0)))
+        adjusted_delta = int(float(delta))
+        new_qty = max(0, current + adjusted_delta)
         db.collection('raw_materials').document(doc.id).update({
             'quantity': new_qty,
             'updated_at': datetime.now(timezone.utc),
         })
-        log_inventory_transaction('Raw Material', name, '', delta, reason, ref_id)
+        log_inventory_transaction('Raw Material', name, '', adjusted_delta, reason, ref_id)
         return True
     return False
 
