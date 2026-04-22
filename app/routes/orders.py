@@ -107,9 +107,36 @@ def order_edit(doc_id):
 
 
 @orders_bp.route('/delete/<doc_id>', methods=['POST'])
-def order_delete(doc_id):
+def orders_delete(doc_id):
     if delete_order(doc_id):
-        flash('Order deleted and stock/cashbook reversed.', 'success')
+        flash('Order and related records deleted.', 'success')
     else:
         flash('Order not found.', 'error')
+    return redirect(url_for('orders.orders_list'))
+
+@orders_bp.route('/bulk_action', methods=['POST'])
+def orders_bulk_action():
+    action = request.form.get('action')
+    order_ids = request.form.getlist('order_ids')
+    
+    if not order_ids or not action:
+        flash('No orders selected or action specified.', 'error')
+        return redirect(url_for('orders.orders_list'))
+        
+    success_count = 0
+    if action == 'delete':
+        for doc_id in order_ids:
+            if delete_order(doc_id):
+                success_count += 1
+        flash(f'Successfully deleted {success_count} orders.', 'success')
+    elif action.startswith('status_'):
+        new_status = action.replace('status_', '')
+        for doc_id in order_ids:
+            # Reusing robust update_order which correctly handles stock recalculations
+            update_order(doc_id, {'status': new_status})
+            success_count += 1
+        flash(f'Successfully changed status of {success_count} orders to {new_status}.', 'success')
+    else:
+        flash('Invalid action requested.', 'error')
+        
     return redirect(url_for('orders.orders_list'))

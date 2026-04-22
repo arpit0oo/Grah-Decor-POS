@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from app import get_db
 from app.services.inventory_service import adjust_ready_stock_qty
+from app.services.cashbook_service import add_cashbook_entry, update_cashbook_entry_by_ref
 from google.cloud.firestore_v1 import FieldFilter
 
 
@@ -145,7 +146,16 @@ def update_order(doc_id, data):
     update_data['updated_at'] = datetime.now(timezone.utc)
     db.collection('orders').document(doc_id).update(update_data)
 
-    # Adjust stock if product, color, or status changed
+    # 1. Sync financial/text changes automatically to the Cashbook
+    if 'bank_settlement' in update_data or 'product' in update_data or 'order_id' in update_data or 'platform' in update_data:
+        amount = update_data.get('bank_settlement', old_data.get('bank_settlement', 0))
+        o_id = update_data.get('order_id', old_data.get('order_id', ''))
+        prod = update_data.get('product', old_data.get('product', ''))
+        plat = update_data.get('platform', old_data.get('platform', ''))
+        desc = f"Order {o_id} — {prod} ({plat})"
+        update_cashbook_entry_by_ref(doc_id, amount=amount if amount > 0 else 0, description=desc)
+
+    # 2. Adjust stock if product, color, or status changed
     old_product = old_data.get('product', '')
     old_color = old_data.get('color', '')
     old_status = old_data.get('status', 'Pending')

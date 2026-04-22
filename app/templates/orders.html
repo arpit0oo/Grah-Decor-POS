@@ -163,10 +163,15 @@
 </div>
 
 <!-- Orders Table -->
+<form id="bulkForm" method="POST" action="{{ url_for('orders.orders_bulk_action') }}">
+<input type="hidden" name="action" id="bulkActionInput" value="">
 <div class="table-wrapper">
     <table class="data-table" id="ordersTable">
         <thead>
             <tr>
+                <th style="width: 40px; text-align: center;">
+                    <input type="checkbox" id="selectAllCheckbox" onclick="toggleAll(this)">
+                </th>
                 <th>Date</th>
                 <th>Order ID</th>
                 <th>Customer</th>
@@ -183,25 +188,28 @@
             </tr>
         </thead>
         <tbody>
-            {% for o in orders %}
+            {% for order in orders %}
             <tr>
-                <td>{{ o.date.strftime('%d/%m/%Y') if o.date and o.date.strftime else '-' }}</td>
-                <td class="text-mono">{{ o.order_id or '-' }}</td>
-                <td>{{ o.customer }}</td>
-                <td>{{ o.product }}</td>
-                <td>{{ o.color or '-' }}</td>
-                <td><span class="badge badge-platform">{{ o.platform }}</span></td>
-                <td class="text-right">{{ "%.2f"|format(o.selling_price) }}</td>
-                <td class="text-right">{{ "%.2f"|format(o.shipping) }}</td>
-                <td class="text-right">{{ "%.2f"|format(o.tax) }}</td>
-                <td class="text-right">{{ "%.2f"|format(o.marketplace_fee) }}</td>
-                <td class="text-right text-bold">{{ "%.2f"|format(o.bank_settlement) }}</td>
+                <td style="text-align: center;">
+                    <input type="checkbox" class="row-checkbox" name="order_ids" value="{{ order.id }}" onclick="updateBulkBar()">
+                </td>
+                <td>{{ order.date.strftime('%d/%m/%Y') if order.date and order.date.strftime else '-' }}</td>
+                <td class="text-mono">{{ order.order_id or '-' }}</td>
+                <td>{{ order.customer }}</td>
+                <td>{{ order.product }}</td>
+                <td>{{ order.color or '-' }}</td>
+                <td><span class="badge badge-platform">{{ order.platform }}</span></td>
+                <td class="text-right">{{ "%.2f"|format(order.selling_price) }}</td>
+                <td class="text-right">{{ "%.2f"|format(order.shipping) }}</td>
+                <td class="text-right">{{ "%.2f"|format(order.tax) }}</td>
+                <td class="text-right">{{ "%.2f"|format(order.marketplace_fee) }}</td>
+                <td class="text-right text-bold">{{ "%.2f"|format(order.bank_settlement) }}</td>
                 <td>
-                    <span class="badge badge-{{ o.status|lower|replace(' ', '-') }}">{{ o.status }}</span>
+                    <span class="badge badge-{{ order.status|lower|replace(' ', '-') }}">{{ order.status }}</span>
                 </td>
                 <td class="actions-cell">
-                    <button class="btn btn-xs btn-ghost" data-id="{{ o.id }}" data-order="{{ o|tojson|forceescape }}" onclick="openEditModalFromBtn(this)">Edit</button>
-                    <form method="POST" action="{{ url_for('orders.order_delete', doc_id=o.id) }}" style="display:inline"
+                    <button type="button" class="btn btn-xs btn-ghost" data-id="{{ order.id }}" data-order="{{ order|tojson|forceescape }}" onclick="openEditModalFromBtn(this)">Edit</button>
+                    <form method="POST" action="{{ url_for('orders.orders_delete', doc_id=order.id) }}" style="display:inline"
                           onsubmit="return confirm('Delete this order?')">
                         <button type="submit" class="btn btn-xs btn-danger">Del</button>
                     </form>
@@ -209,10 +217,27 @@
             </tr>
             {% endfor %}
             {% if not orders %}
-            <tr><td colspan="13" class="empty-state">No orders found. Click "+ New Order" to add one.</td></tr>
+            <tr><td colspan="14" class="empty-state">No orders found. Click "+ New Order" to add one.</td></tr>
             {% endif %}
         </tbody>
     </table>
+</div>
+</form>
+
+<!-- Floating Bulk Actions Bar -->
+<div id="bulkActionBar" class="bulk-action-bar hidden">
+    <span id="bulkCount">0 orders selected</span>
+    <select id="bulkActionSelect" class="bulk-select">
+        <option value="" disabled selected>Choose action...</option>
+        <option value="status_Pending">Mark Pending</option>
+        <option value="status_Shipped">Mark Shipped</option>
+        <option value="status_Delivered">Mark Delivered</option>
+        <option value="status_RTO">Mark RTO</option>
+        <option value="status_Customer Return">Mark Return</option>
+        <option value="status_Exchange">Mark Exchange</option>
+        <option value="delete">Delete Selected</option>
+    </select>
+    <button type="button" class="btn btn-primary btn-sm" onclick="submitBulk()">Apply to Selected</button>
 </div>
 
 <!-- Edit Modal -->
@@ -323,6 +348,41 @@
 
 {% block scripts %}
 <script>
+function toggleAll(source) {
+    const checkboxes = document.querySelectorAll('.row-checkbox');
+    checkboxes.forEach(cb => cb.checked = source.checked);
+    updateBulkBar();
+}
+
+function updateBulkBar() {
+    const checkedCount = document.querySelectorAll('.row-checkbox:checked').length;
+    const bar = document.getElementById('bulkActionBar');
+    const span = document.getElementById('bulkCount');
+    if (checkedCount > 0) {
+        bar.classList.remove('hidden');
+        span.textContent = `${checkedCount} order${checkedCount > 1 ? 's' : ''} selected`;
+    } else {
+        bar.classList.add('hidden');
+    }
+}
+
+function submitBulk() {
+    const select = document.getElementById('bulkActionSelect');
+    const action = select.value;
+    if (!action) {
+        alert("Please choose an action first.");
+        return;
+    }
+    if (action === 'delete') {
+        if (!confirm("Are you sure you want to permanently delete all selected orders?")) return;
+    } else {
+        if (!confirm(`Are you sure you want to apply this status to all selected orders?`)) return;
+    }
+    
+    document.getElementById('bulkActionInput').value = action;
+    document.getElementById('bulkForm').submit();
+}
+
 function handleDropdownOther(selectElem, customInputId) {
     const customInput = document.getElementById(customInputId);
     if (selectElem.value === '__other__') {

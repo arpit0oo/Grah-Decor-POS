@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from google.cloud.firestore_v1 import FieldFilter
 from app import get_db
 
 
@@ -74,3 +75,21 @@ def add_cashbook_entry(entry_type, category, description, amount, reference_id='
         'reference_id': reference_id,
         'created_at': now,
     })
+
+def update_cashbook_entry_by_ref(ref_id, amount=None, description=None):
+    """Update connected cashbook entries (amount or description) based on the origin reference_id."""
+    if not ref_id:
+        return
+    db = get_db()
+    docs = list(db.collection('cashbook').where(
+        filter=FieldFilter('reference_id', '==', ref_id)
+    ).stream())
+    
+    updates = {'updated_at': datetime.now(timezone.utc)}
+    if amount is not None:
+        updates['amount'] = float(amount)
+    if description is not None:
+        updates['description'] = description
+        
+    for d in docs:
+        db.collection('cashbook').document(d.id).update(updates)
