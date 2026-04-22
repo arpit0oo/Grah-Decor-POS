@@ -101,12 +101,9 @@ VIEW: NEW AUDIT FORM
                 <tr>
                     <td class="text-bold">
                         {{ m.name }}
-<<<<<<< HEAD
                         {% if m.color %}
                             <span class="text-muted" style="font-size:0.85em;">({{ m.color }})</span>
                         {% endif %}
-=======
->>>>>>> e71db85f26f16bb5ffc9c8e95edae0ca6407df17
                         <input type="hidden" name="doc_id[]" value="{{ m.id }}">
                         <input type="hidden" name="name[]" value="{{ m.name }}">
                         <input type="hidden" name="unit[]" value="{{ m.unit }}">
@@ -215,16 +212,12 @@ VIEW: SINGLE AUDIT REPORT
             {% set v_purchased = item.purchased if item.purchased is defined else item.actual_qty %}
             {% set v_closing = item.closing_stock if item.closing_stock is defined else item.variance %}
             <tr class="{% if v_closing < 0 %}row-warning{% endif %}">
-<<<<<<< HEAD
                 <td class="text-bold">
                     {{ item.name }}
                     {% if item.color %}
                         <span class="text-muted" style="font-size:0.85em;">({{ item.color }})</span>
                     {% endif %}
                 </td>
-=======
-                <td class="text-bold">{{ item.name }}</td>
->>>>>>> e71db85f26f16bb5ffc9c8e95edae0ca6407df17
                 <td class="text-muted">{{ item.unit }}</td>
                 <td class="text-right">{{ item.unit_cost|int }}</td>
                 <td class="text-right">{{ v_opening|int }}</td>

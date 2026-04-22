@@ -38,11 +38,10 @@ def get_all_purchase_orders(date_from=None, date_to=None):
         results.append(entry)
     return results
 
-def add_purchase_order(vendor_name, item, quantity, unit_cost):
+def add_purchase_order(vendor_name, items):
     db = get_db()
-    quantity = float(quantity)
-    unit_cost = float(unit_cost)
-    total_cost = quantity * unit_cost
+    
+    total_cost = sum(float(item['quantity']) * float(item['unit_cost']) for item in items)
     now = datetime.now(timezone.utc)
 
     po_number = generate_po_number()
@@ -51,9 +50,7 @@ def add_purchase_order(vendor_name, item, quantity, unit_cost):
     _, doc_ref = db.collection('purchase_orders').add({
         'po_number': po_number,
         'vendor_name': vendor_name,
-        'item': item,
-        'quantity': quantity,
-        'unit_cost': unit_cost,
+        'items': items,
         'total_cost': total_cost,
         'status': 'Draft',
         'vendor_invoice_number': '',
@@ -93,14 +90,18 @@ def mark_po_received(po_id):
     })
     
     # Increment inventory
-    item = data.get('item')
-    quantity = data.get('quantity')
     po_number = data.get('po_number', po_id)
-    unit_cost = data.get('unit_cost', 0)
-    
     reason = f"PO {po_number} Received"
-    if not adjust_raw_material_qty(item, quantity, reason=reason):
-        add_raw_material(item, quantity, 'pcs', reason=reason)
+    
+    items = data.get('items', [])
+    if not items and data.get('item'):
+        items = [{'item': data.get('item'), 'quantity': data.get('quantity')}]
+        
+    for it in items:
+        item_name = it.get('item')
+        qty = float(it.get('quantity', 0))
+        if not adjust_raw_material_qty(item_name, qty, reason=reason):
+            add_raw_material(item_name, qty, 'pcs', reason=reason)
         
     return True
 
@@ -162,10 +163,16 @@ def cancel_po(po_id):
     # If it was received or paid, reverse inventory
     if old_status in ['Received', 'Paid']:
         po_number = data.get('po_number', po_id)
-        item = data.get('item')
-        quantity = data.get('quantity')
         reason = f"PO {po_number} Cancelled (Reversal)"
-        adjust_raw_material_qty(item, -quantity, reason=reason)
+        
+        items = data.get('items', [])
+        if not items and data.get('item'):
+            items = [{'item': data.get('item'), 'quantity': data.get('quantity')}]
+            
+        for it in items:
+            item_name = it.get('item')
+            qty = float(it.get('quantity', 0))
+            adjust_raw_material_qty(item_name, -qty, reason=reason)
         
         # If it was explicitly paid, reverse the cash outflow by logging a refund (inflow)
         if old_status == 'Paid':
@@ -176,6 +183,51 @@ def cancel_po(po_id):
                 category='Refund',
                 description=f"Refund: {po_number} Cancelled (from {vendor})",
                 amount=data.get('total_cost', 0),
+                reference_id=po_id,
+            )
+
+    return True
+
+def return_po(po_id, refund_amount=0):
+    db = get_db()
+    doc = db.collection('purchase_orders').document(po_id).get()
+    if not doc.exists:
+        return False
+    data = doc.to_dict()
+    
+    status = data.get('status')
+    if status not in ['Received', 'Paid']:
+        return False
+        
+    now = datetime.now(timezone.utc)
+    db.collection('purchase_orders').document(po_id).update({
+        'status': 'Returned',
+        'updated_at': now,
+        'status_history': ArrayUnion([{'status': 'Returned', 'timestamp': now.isoformat()}])
+    })
+    
+    po_number = data.get('po_number', po_id)
+    reason = f"PO {po_number} Returned"
+    
+    items = data.get('items', [])
+    if not items and data.get('item'):
+        items = [{'item': data.get('item'), 'quantity': data.get('quantity')}]
+        
+    for it in items:
+        item_name = it.get('item')
+        qty = float(it.get('quantity', 0))
+        adjust_raw_material_qty(item_name, -qty, reason=reason)
+        
+    if status == 'Paid':
+        from app.services.cashbook_service import add_cashbook_entry
+        vendor = data.get('vendor_name', 'Unknown')
+        refund = float(refund_amount)
+        if refund > 0:
+            add_cashbook_entry(
+                entry_type='inflow',
+                category='Refund',
+                description=f"Refund: {po_number} Returned (from {vendor})",
+                amount=refund,
                 reference_id=po_id,
             )
 

@@ -204,11 +204,7 @@
                         {% if is_terminal %}
                             <span class="badge badge-{{ order.status|lower|replace(' ', '-') }}">{{ order.status }}</span>
                         {% else %}
-<<<<<<< HEAD
                             <select class="badge badge-{{ order.status|lower|replace(' ', '-') }}" style="padding-right:1rem; cursor:pointer; outline:none; border:none; appearance:auto; text-align:center; font-family:var(--font); font-weight:600; min-width:85px; background-color:transparent;" onchange="inlineUpdateStatus('{{ order.id }}', this.value, this)">
-=======
-                            <select class="badge badge-{{ order.status|lower|replace(' ', '-') }}" style="padding-right:1rem; cursor:pointer; outline:none; border:none; appearance:auto; text-align:center; font-family:var(--font); font-weight:600; min-width:85px; background-color:transparent;" onchange="inlineUpdateStatus('{{ order.id }}', this.value)">
->>>>>>> e71db85f26f16bb5ffc9c8e95edae0ca6407df17
                                 {% if order.status == 'Pending' %}
                                     <option value="Pending" selected>Pending</option>
                                     <option value="Shipped">Shipped</option>
@@ -536,11 +532,7 @@
                         <input type="number" name="quantity[]" class="item-qty" value="1" min="1" step="1" oninput="calcSettlement('${prefix}')">
                     </div>
                     <div class="form-group">
-<<<<<<< HEAD
                         <label>Selling Price ₹</label>
-=======
-                        <label>Unit Price ₹</label>
->>>>>>> e71db85f26f16bb5ffc9c8e95edae0ca6407df17
                         <input type="number" name="price[]" class="item-price" value="0" min="0" step="0.01" oninput="calcSettlement('${prefix}')">
                     </div>
                 </div>
@@ -645,14 +637,10 @@
                 sellingPrice += lineTotal;
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-<<<<<<< HEAD
                     <td>
                         ${item.product || '-'}
                         ${item.color ? `<span class="text-muted" style="font-size:0.85em;">(${item.color})</span>` : ''}
                     </td>
-=======
-                    <td>${item.product || '-'}</td>
->>>>>>> e71db85f26f16bb5ffc9c8e95edae0ca6407df17
                     <td>${item.color || '-'}</td>
                     <td class="text-right">${qty}</td>
                     <td class="text-right">₹ ${parseFloat(price).toFixed(2)}</td>
@@ -823,7 +811,6 @@
         if (el) el.textContent = '\u20b9 ' + settlement.toFixed(2);
     }
 
-<<<<<<< HEAD
     function inlineUpdateStatus(orderId, newStatus, selectEl) {
         if (!confirm(`Are you sure you want to change the order status to ${newStatus}? This action cannot be undone.`)) {
             if (selectEl) {
@@ -836,9 +823,6 @@
             }
             return;
         }
-=======
-    function inlineUpdateStatus(orderId, newStatus) {
->>>>>>> e71db85f26f16bb5ffc9c8e95edae0ca6407df17
         submitInlineAction(orderId, 'status_' + newStatus);
     }
     

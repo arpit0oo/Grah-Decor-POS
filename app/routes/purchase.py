@@ -6,7 +6,8 @@ from app.services.purchase_service import (
     mark_po_sent,
     mark_po_received,
     mark_po_paid,
-    cancel_po
+    cancel_po,
+    return_po
 )
 from app.services.inventory_service import get_all_raw_materials
 
@@ -40,15 +41,29 @@ def purchase_list():
 @purchase_bp.route('/add', methods=['POST'])
 def purchase_add():
     vendor_name = request.form.get('vendor_name', '').strip()
-    item = request.form.get('item', '').strip()
-    quantity = request.form.get('quantity', 0)
-    unit_cost = request.form.get('unit_cost', 0)
     
-    if not (vendor_name and item and float(quantity) > 0):
-        flash('Invalid purchase details.', 'error')
+    items = []
+    item_names = request.form.getlist('item[]')
+    quantities = request.form.getlist('quantity[]')
+    unit_costs = request.form.getlist('unit_cost[]')
+    
+    for i in range(len(item_names)):
+        name = item_names[i].strip()
+        if not name:
+            continue
+        qty = quantities[i] if i < len(quantities) else 0
+        cost = unit_costs[i] if i < len(unit_costs) else 0
+        items.append({
+            'item': name,
+            'quantity': float(qty),
+            'unit_cost': float(cost)
+        })
+    
+    if not vendor_name or not items:
+        flash('Invalid purchase details. At least one valid item is required.', 'error')
         return redirect(url_for('purchase.purchase_list'))
         
-    add_purchase_order(vendor_name, item, quantity, unit_cost)
+    add_purchase_order(vendor_name, items)
     flash('Draft Purchase Order created.', 'success')
     return redirect(url_for('purchase.purchase_list'))
 
@@ -85,6 +100,15 @@ def purchase_cancel(po_id):
         flash('Purchase Order cancelled.', 'success')
     else:
         flash('Failed to cancel PO.', 'error')
+    return redirect(url_for('purchase.purchase_list'))
+
+@purchase_bp.route('/return/<po_id>', methods=['POST'])
+def purchase_return(po_id):
+    refund_amount = request.form.get('refund_amount', 0)
+    if return_po(po_id, refund_amount=refund_amount):
+        flash('Purchase Order returned successfully.', 'success')
+    else:
+        flash('Failed to return PO.', 'error')
     return redirect(url_for('purchase.purchase_list'))
 
 
