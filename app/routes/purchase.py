@@ -6,8 +6,7 @@ from app.services.purchase_service import (
     mark_po_sent,
     mark_po_received,
     mark_po_paid,
-    cancel_po,
-    revert_cancelled_to_paid
+    cancel_po
 )
 from app.services.inventory_service import get_all_raw_materials
 
@@ -88,16 +87,4 @@ def purchase_cancel(po_id):
         flash('Failed to cancel PO.', 'error')
     return redirect(url_for('purchase.purchase_list'))
 
-@purchase_bp.route('/revert_to_paid/<po_id>', methods=['POST'])
-def purchase_revert_to_paid(po_id):
-    payment_id = request.form.get('payment_id', '').strip()
-    
-    if not payment_id:
-        flash('Payment ID or UTR is required to revert and mark as paid.', 'error')
-        return redirect(url_for('purchase.purchase_list'))
-        
-    if revert_cancelled_to_paid(po_id, payment_id):
-        flash('Purchase Order forcefully reverted to Paid. Inventory and cash amounts logged.', 'success')
-    else:
-        flash('Could not revert PO.', 'error')
-    return redirect(url_for('purchase.purchase_list'))
+

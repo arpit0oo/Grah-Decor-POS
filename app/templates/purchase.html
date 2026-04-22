@@ -105,29 +105,30 @@
                     {% if p.payment_id %}<small class="text-muted">Txn: {{ p.payment_id }}</small>{% endif %}
                 </td>
                 <td class="actions-cell">
-                    {% if p.status == 'Draft' %}
-                    <form method="POST" action="{{ url_for('purchase.purchase_sent', po_id=p.id) }}" style="display:inline;">
-                        <button type="submit" class="btn btn-xs btn-primary">Mark Sent</button>
-                    </form>
-                    <form method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="display:inline;">
-                        <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--danger)">Cancel</button>
-                    </form>
-                    {% elif p.status == 'Sent' %}
-                    <form method="POST" action="{{ url_for('purchase.purchase_received', po_id=p.id) }}" style="display:inline;">
-                        <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--success); border-color:var(--success);" onclick="return confirm('Receive items and increment inventory?')">Receive It</button>
-                    </form>
-                    <form method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="display:inline;">
-                        <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--danger)">Cancel</button>
-                    </form>
-                    {% elif p.status == 'Received' %}
-                    <button type="button" class="btn btn-xs btn-ghost" style="color:var(--primary); border-color:var(--primary);" onclick="openPayModal('{{ p.id }}', '{{ p.po_number }}')">Pay Vendor</button>
-                    <form method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="display:inline;">
-                        <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--danger)">Cancel</button>
-                    </form>
-                    {% elif p.status == 'Cancelled' %}
-                    <span class="text-danger text-bold" style="font-size: 0.8em; margin-left:1rem; display:block; margin-bottom:0.5rem;">CANCELLED</span>
-                    <button type="button" class="btn btn-xs btn-ghost" style="color:var(--primary); border-color:var(--primary); width: 100%;" onclick="openRevertModal('{{ p.id }}', '{{ p.po_number }}')">Revert to Paid</button>
-                    {% endif %}
+                    <div style="display:flex; gap:0.5rem; justify-content:flex-end;">
+                        {% if p.status == 'Draft' %}
+                        <form method="POST" action="{{ url_for('purchase.purchase_sent', po_id=p.id) }}" style="margin:0;">
+                            <button type="submit" class="btn btn-xs btn-primary">Mark Sent</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0;">
+                            <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--danger)">Cancel</button>
+                        </form>
+                        {% elif p.status == 'Sent' %}
+                        <form method="POST" action="{{ url_for('purchase.purchase_received', po_id=p.id) }}" style="margin:0;">
+                            <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--success); border-color:var(--success);" onclick="return confirm('Receive items and increment inventory?')">Receive</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0;">
+                            <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--danger)">Cancel</button>
+                        </form>
+                        {% elif p.status == 'Received' %}
+                        <button type="button" class="btn btn-xs btn-ghost" style="color:var(--primary); border-color:var(--primary);" onclick="openPayModal('{{ p.id }}', '{{ p.po_number }}')">Pay</button>
+                        <form method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0;">
+                            <button type="submit" class="btn btn-xs btn-ghost" style="color:var(--danger)">Cancel</button>
+                        </form>
+                        {% elif p.status == 'Cancelled' %}
+                        <span class="text-danger text-bold" style="font-size: 0.8rem; padding: 0.2rem 0;">CANCELLED</span>
+                        {% endif %}
+                    </div>
                 </td>
             </tr>
             {% endfor %}
@@ -159,25 +160,7 @@
     </div>
 </div>
 
-<!-- Modal: Revert to Paid -->
-<div class="modal-overlay hidden" id="revertModal">
-    <div class="modal" style="max-width:400px;">
-        <div class="modal-header">
-            <h3>Revert to Paid</h3>
-            <button class="modal-close" onclick="closeModal('revertModal')">×</button>
-        </div>
-        <p class="text-muted mb-4" style="font-size:0.85em; margin-bottom:1rem;">Forcefully restore this cancelled PO. This will recreate the inventory and log the cash outflow.</p>
-        <form id="revertForm" method="POST" action="">
-            <div class="form-group" style="margin-bottom:1.5rem;">
-                <label>Payment ID / Cash Payment *</label>
-                <input type="text" name="payment_id" required placeholder="e.g. HDFC-1002">
-            </div>
-            <div class="form-actions">
-                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Force Settle & Revert</button>
-            </div>
-        </form>
-    </div>
-</div>
+
 
 {% endblock %}
 
@@ -195,9 +178,5 @@ function openPayModal(id, poId) {
     document.getElementById('payModal').classList.remove('hidden');
 }
 
-function openRevertModal(id, poId) {
-    document.getElementById('revertForm').action = "/purchases/revert_to_paid/" + id;
-    document.getElementById('revertModal').classList.remove('hidden');
-}
 </script>
 {% endblock %}

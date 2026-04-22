@@ -157,49 +157,19 @@ def cancel_po(po_id):
         quantity = data.get('quantity')
         reason = f"PO {po_number} Cancelled (Reversal)"
         adjust_raw_material_qty(item, -quantity, reason=reason)
+        
+        # If it was explicitly paid, reverse the cash outflow by logging a refund (inflow)
+        if old_status == 'Paid':
+            from app.services.cashbook_service import add_cashbook_entry
+            vendor = data.get('vendor_name', 'Unknown')
+            add_cashbook_entry(
+                entry_type='inflow',
+                category='Refund',
+                description=f"Refund: {po_number} Cancelled (from {vendor})",
+                amount=data.get('total_cost', 0),
+                reference_id=po_id,
+            )
 
     return True
 
-def revert_cancelled_to_paid(po_id, payment_id):
-    from app.services.cashbook_service import add_cashbook_entry
-    db = get_db()
-    
-    doc = db.collection('purchase_orders').document(po_id).get()
-    if not doc.exists:
-        return False
-    data = doc.to_dict()
-    
-    if data.get('status') != 'Cancelled':
-        return False
-        
-    db.collection('purchase_orders').document(po_id).update({
-        'status': 'Paid',
-        'payment_id': payment_id,
-        'updated_at': datetime.now(timezone.utc)
-    })
-    
-    po_number = data.get('po_number', po_id)
-    item = data.get('item')
-    quantity = data.get('quantity')
-    unit_cost = data.get('unit_cost', 0)
-    vendor = data.get('vendor_name', 'Unknown')
-    
-    # Increment inventory
-    reason = f"PO {po_number} Reverted to Paid"
-    if not adjust_raw_material_qty(item, quantity, reason=reason):
-        add_raw_material(item, quantity, 'pcs', unit_cost, reason=reason)
-    
-    # Log cash outflow
-    desc = f"{po_number} Paid to {vendor}"
-    if payment_id:
-        desc += f" - Txn: {payment_id}"
-        
-    add_cashbook_entry(
-        entry_type='outflow',
-        category='Purchase',
-        description=desc,
-        amount=data.get('total_cost', 0),
-        reference_id=po_id,
-    )
-    
-    return True
+

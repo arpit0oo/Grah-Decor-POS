@@ -12,3 +12,4 @@ firebase-adminsdk.json
 # Local database/logs files if any
 *.sqlite3
 *.log
+wipe_firebase.py
