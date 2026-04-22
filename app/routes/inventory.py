@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from app.services.inventory_service import (
     get_all_raw_materials, add_raw_material, update_raw_material, delete_raw_material,
     get_all_ready_stock, add_ready_stock, update_ready_stock, delete_ready_stock,
-    produce_item, get_inventory_logs
+    produce_item, get_inventory_logs, get_product_inventory_logs
 )
 
 inventory_bp = Blueprint('inventory', __name__, url_prefix='/inventory')
@@ -165,3 +165,18 @@ def api_raw_list():
 @inventory_bp.route('/api/ready', methods=['GET'])
 def api_ready_list():
     return jsonify(get_all_ready_stock())
+
+
+@inventory_bp.route('/api/product-logs', methods=['GET'])
+def api_product_logs():
+    name = request.args.get('name')
+    color = request.args.get('color')
+    if not name:
+        return jsonify({'error': 'Name is required'}), 400
+    
+    logs = get_product_inventory_logs(name, color)
+    # Serialize datetime for JSON
+    for log in logs:
+        if log.get('date'):
+            log['date'] = log['date'].isoformat()
+    return jsonify(logs)
