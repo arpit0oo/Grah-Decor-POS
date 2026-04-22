@@ -18,7 +18,12 @@
             </div>
             <div class="form-group">
                 <label for="p-item">Item / Material *</label>
-                <input type="text" id="p-item" name="item" required placeholder="e.g. MDF Sheet">
+                <select id="p-item" name="item" required>
+                    <option value="" disabled selected>Select Raw Material</option>
+                    {% for m in raw_materials %}
+                    <option value="{{ m.name }}">{{ m.name }} ({{ m.quantity|int }} {{ m.unit }} in stock)</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="form-group">
                 <label for="p-qty">Quantity *</label>

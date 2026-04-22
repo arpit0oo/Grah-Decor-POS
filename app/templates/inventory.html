@@ -15,22 +15,20 @@
             onclick="switchTab('raw')">Raw Materials ({{ raw_materials|length }})</button>
     <button class="tab {% if active_tab == 'logs' %}active{% endif %}"
             onclick="switchTab('logs')">Inventory Log</button>
+    <a href="{{ url_for('audit.audit_list') }}" class="tab" style="text-decoration:none;">🔍 Stock Audit</a>
 </div>
 
 <!-- ── RAW MATERIALS TAB ───────────────────────────────── -->
 <div class="tab-content {% if active_tab != 'raw' %}hidden{% endif %}" id="tab-raw">
     <!-- Add Form -->
     <div class="form-card hidden" id="rawForm">
-        <h3>Add Raw Material</h3>
+        <h3>Register New Raw Material</h3>
+        <p class="text-muted" style="font-size:0.85em; margin-bottom:1rem;">Initial quantity is always <strong>0</strong>. Stock enters the system exclusively via the Purchase Book.</p>
         <form method="POST" action="{{ url_for('inventory.raw_add') }}">
-            <div class="form-grid form-grid-4">
+            <div class="form-grid form-grid-3">
                 <div class="form-group">
                     <label for="raw-name">Material Name *</label>
                     <input type="text" id="raw-name" name="name" required placeholder="e.g. MDF Sheet">
-                </div>
-                <div class="form-group">
-                    <label for="raw-qty">Quantity</label>
-                    <input type="number" id="raw-qty" name="quantity" step="1" value="0">
                 </div>
                 <div class="form-group">
                     <label for="raw-unit">Unit</label>
@@ -48,8 +46,9 @@
                     <input type="number" id="raw-price" name="price" step="1" value="0" placeholder="0">
                 </div>
             </div>
+            <input type="hidden" name="quantity" value="0">
             <div class="form-actions">
-                <button type="submit" class="btn btn-primary">Add Material</button>
+                <button type="submit" class="btn btn-primary">Register Material</button>
                 <button type="button" class="btn btn-ghost" onclick="toggleForm('rawForm')">Cancel</button>
             </div>
         </form>
@@ -75,10 +74,11 @@
                 <tr>
                     <td>
                         <form method="POST" action="{{ url_for('inventory.raw_edit', doc_id=m.id) }}" class="inline-edit-form">
+                            <input type="hidden" name="quantity" value="{{ m.quantity }}">
                             <input type="text" name="name" value="{{ m.name }}" class="inline-input">
                     </td>
-                    <td>
-                            <input type="number" name="quantity" value="{{ m.quantity }}" step="1" class="inline-input inline-input-sm">
+                    <td class="text-right text-bold">
+                        {{ m.quantity|int }}
                     </td>
                     <td>
                             <select name="unit" class="inline-input inline-input-sm">
@@ -94,7 +94,7 @@
                             <input type="number" name="price" value="{{ m.price if m.price else 0 }}" step="1" class="inline-input inline-input-sm">
                     </td>
                     <td class="text-right text-bold">
-                        {{ "%.2f"|format((m.price or 0) * (m.quantity or 0)) }}
+                        {{ "%.0f"|format((m.price or 0) * (m.quantity or 0)) }}
                     </td>
                     <td class="text-muted">{{ m.updated_at.strftime('%d/%m/%Y %H:%M') if m.updated_at and m.updated_at.strftime else '-' }}</td>
                     <td class="actions-cell">
@@ -111,10 +111,10 @@
     </div>
 </div>
 
-<!-- ── READY STOCK TAB ─────────────────────────────────── -->
+<!-- ── READY STOCK TAB ───────────────────────────── -->
 <div class="tab-content {% if active_tab != 'ready' %}hidden{% endif %}" id="tab-ready">
     <div class="form-card hidden" id="readyForm">
-        <h3>Add Ready Stock</h3>
+        <h3>Add Product / Parent</h3>
         <form method="POST" action="{{ url_for('inventory.ready_add') }}">
             <div class="form-grid form-grid-4">
                 <div class="form-group">
@@ -122,20 +122,20 @@
                     <input type="text" id="ready-name" name="name" required placeholder="e.g. A4 Frame">
                 </div>
                 <div class="form-group">
-                    <label for="ready-color">Color</label>
-                    <input type="text" id="ready-color" name="color" placeholder="e.g. Black">
+                    <label for="ready-color">Color (optional)</label>
+                    <input type="text" id="ready-color" name="color" placeholder="Leave blank if using Variants">
                 </div>
                 <div class="form-group">
-                    <label for="ready-qty">Quantity</label>
+                    <label for="ready-qty">Initial Quantity</label>
                     <input type="number" id="ready-qty" name="quantity" step="1" min="0" value="0">
                 </div>
                 <div class="form-group">
                     <label for="ready-cost">Cost / Unit ₹</label>
-                    <input type="number" id="ready-cost" name="cost_price" step="0.01" min="0" value="0">
+                    <input type="number" id="ready-cost" name="cost_price" step="1" min="0" value="0">
                 </div>
             </div>
             <div class="form-actions">
-                <button type="submit" class="btn btn-primary">Add Item</button>
+                <button type="submit" class="btn btn-primary">Add Product</button>
                 <button type="button" class="btn btn-ghost" onclick="toggleForm('readyForm')">Cancel</button>
             </div>
         </form>
@@ -147,8 +147,8 @@
         <table class="data-table">
             <thead>
                 <tr>
-                    <th>Product Name</th>
-                    <th>Color</th>
+                    <th style="width:30px"></th>
+                    <th>Product / Variant</th>
                     <th>Quantity</th>
                     <th>Reserved</th>
                     <th>Available</th>
@@ -160,33 +160,63 @@
             <tbody>
                 {% for s in ready_stock %}
                 {% set avail = s.quantity - (s.reserved_quantity or 0) %}
-                <tr class="{% if avail <= 0 %}row-danger{% elif avail < 5 %}row-warning{% endif %}">
+                {# ── PARENT ROW ── #}
+                <tr class="{% if s.variants %}parent-row{% endif %} {% if not s.variants and avail <= 0 %}row-danger{% elif not s.variants and avail < 5 %}row-warning{% endif %}" style="{% if s.variants %}background: var(--surface);{% endif %}">
+                    <td style="text-align:center; cursor:pointer;" {% if s.variants %}onclick="toggleVariants('{{ s.id }}')"{% endif %}>
+                        {% if s.variants %}<span id="icon-{{ s.id }}" style="font-size:0.8em;">&#9654;</span>{% endif %}
+                    </td>
                     <td>
                         <form method="POST" action="{{ url_for('inventory.ready_edit', doc_id=s.id) }}" class="inline-edit-form">
-                            <input type="text" name="name" value="{{ s.name }}" class="inline-input">
+                            <strong><input type="text" name="name" value="{{ s.name }}" class="inline-input"></strong>
                     </td>
                     <td>
-                            <input type="text" name="color" value="{{ s.color }}" class="inline-input inline-input-sm">
+                        {% if s.variants %}
+                            <span class="text-muted" style="font-size:0.85em;">{{ s.quantity|int }} total</span>
+                            <input type="hidden" name="quantity" value="{{ s.quantity }}">
+                        {% else %}
+                            <input type="number" name="quantity" value="{{ s.quantity }}" step="1" min="{{ s.quantity|int }}" class="inline-input inline-input-sm" style="width:60px">
+                        {% endif %}
                     </td>
+                    <td class="text-warning text-bold">{{ s.reserved_quantity or 0 }}</td>
+                    <td class="{% if avail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">{{ avail|int }}</td>
                     <td>
-                            <input type="number" name="quantity" value="{{ s.quantity }}" step="1" min="{{ s.quantity }}" class="inline-input inline-input-sm" style="width:60px">
+                        <input type="number" name="cost_price" value="{{ s.cost_price or 0 }}" step="1" class="inline-input inline-input-sm">
                     </td>
-                    <td class="text-warning text-bold">
-                        {{ s.reserved_quantity or 0 }}
-                    </td>
-                    <td class="text-success text-bold">
-                        {{ avail }}
-                    </td>
-                    <td>
-                            <input type="number" name="cost_price" value="{{ s.cost_price }}" step="0.01" class="inline-input inline-input-sm">
-                    </td>
-                    <td class="text-muted">{{ s.updated_at.strftime('%d/%m/%Y %H:%M') if s.updated_at and s.updated_at.strftime else '-' }}</td>
+                    <td class="text-muted">{{ s.updated_at.strftime('%d/%m/%Y') if s.updated_at and s.updated_at.strftime else '-' }}</td>
                     <td class="actions-cell">
                         <button type="submit" class="btn btn-xs">Save</button>
                         </form>
-                        <button type="button" class="btn btn-xs btn-ghost" onclick="openHistoryModal('{{ s.name|escape }}', '{{ s.color|escape }}')">History</button>
+                        <button type="button" class="btn btn-xs btn-ghost" onclick="openHistoryModal('{{ s.name|escape }}', '')">History</button>
+                        <button type="button" class="btn btn-xs btn-ghost" style="color:var(--primary); border-color:var(--primary);" onclick="openVariantModal('{{ s.id }}', '{{ s.name|escape }}')">+ Variant</button>
                     </td>
                 </tr>
+
+                {# ── VARIANT ROWS ── #}
+                {% for v in s.variants %}
+                {% set vavail = v.quantity - (v.reserved_quantity or 0) %}
+                <tr class="variant-row hidden" id="variant-{{ s.id }}" style="background:#f8f8ff;">
+                    <td></td>
+                    <td style="padding-left:2rem;">
+                        <form method="POST" action="{{ url_for('inventory.ready_edit', doc_id=v.id) }}" class="inline-edit-form">
+                            <input type="hidden" name="name" value="{{ v.name }}">
+                            <span class="text-muted" style="font-size:0.8em;">&#9492;</span>
+                            <input type="text" name="color" value="{{ v.color }}" class="inline-input inline-input-sm" placeholder="Variant name">
+                    </td>
+                    <td>
+                        <input type="number" name="quantity" value="{{ v.quantity }}" step="1" min="{{ v.quantity|int }}" class="inline-input inline-input-sm" style="width:60px">
+                    </td>
+                    <td class="text-warning text-bold">{{ v.reserved_quantity or 0 }}</td>
+                    <td class="{% if vavail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">{{ vavail|int }}</td>
+                    <td class="text-muted" colspan="1" style="font-size:0.8em;">Inherits parent</td>
+                    <td class="text-muted">{{ v.updated_at.strftime('%d/%m/%Y') if v.updated_at and v.updated_at.strftime else '-' }}</td>
+                    <td class="actions-cell">
+                        <button type="submit" class="btn btn-xs">Save</button>
+                        </form>
+                        <button type="button" class="btn btn-xs btn-ghost" onclick="openHistoryModal('{{ v.name|escape }}', '{{ v.color|escape }}')" >History</button>
+                    </td>
+                </tr>
+                {% endfor %}
+
                 {% endfor %}
                 {% if not ready_stock %}
                 <tr><td colspan="8" class="empty-state">No ready stock. Add items or use Produce.</td></tr>
@@ -336,6 +366,31 @@
         </div>
     </div>
 </div>
+
+<!-- ── ADD VARIANT MODAL ─────────────────────────── -->
+<div class="modal-overlay hidden" id="variantModal">
+    <div class="modal" style="max-width:360px;">
+        <div class="modal-header">
+            <h3>Add Variant</h3>
+            <button class="modal-close" onclick="closeModal('variantModal')">×</button>
+        </div>
+        <p class="text-muted" style="font-size:0.85em; margin-bottom:1rem;">Adding a variant to: <strong id="variantParentName"></strong></p>
+        <form id="variantForm" method="POST" action="">
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label>Variant Name (e.g. Black, Gold) *</label>
+                <input type="text" name="variant_name" required placeholder="e.g. Black">
+            </div>
+            <div class="form-group" style="margin-bottom:1.5rem;">
+                <label>Initial Quantity</label>
+                <input type="number" name="quantity" step="1" min="0" value="0">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Add Variant</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -366,6 +421,20 @@ function switchTab(tab) {
     document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
     event.target.classList.add('active');
     document.getElementById('tab-' + tab).classList.remove('hidden');
+}
+
+function toggleVariants(parentId) {
+    const rows = document.querySelectorAll('#variant-' + parentId);
+    const icon = document.getElementById('icon-' + parentId);
+    const hidden = rows[0] && rows[0].classList.contains('hidden');
+    rows.forEach(r => r.classList.toggle('hidden', !hidden));
+    if (icon) icon.textContent = hidden ? '\u25BE' : '\u25B6';
+}
+
+function openVariantModal(parentId, parentName) {
+    document.getElementById('variantParentName').textContent = parentName;
+    document.getElementById('variantForm').action = '/inventory/ready/add_variant/' + parentId;
+    document.getElementById('variantModal').classList.remove('hidden');
 }
 
 async function openHistoryModal(name, color) {

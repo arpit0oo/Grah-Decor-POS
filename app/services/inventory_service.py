@@ -99,6 +99,44 @@ def get_all_ready_stock():
     return [{'id': d.id, **d.to_dict()} for d in docs]
 
 
+def get_ready_stock_grouped():
+    """
+    Returns a list of parent items, each with an optional 'variants' list.
+    Parents with variants get quantity = sum of variant quantities.
+    Simple items (no variants) work unchanged.
+    """
+    db = get_db()
+    all_docs = [{'id': d.id, **d.to_dict()} for d in db.collection('ready_stock').order_by('name').stream()]
+
+    # Normalise every doc so Jinja dot-access never fails
+    for doc in all_docs:
+        doc.setdefault('quantity', 0)
+        doc.setdefault('reserved_quantity', 0)
+        doc.setdefault('cost_price', 0)
+        doc.setdefault('color', '')
+        doc.setdefault('name', '')
+
+    parents = []
+    variants_by_parent = {}
+
+    for doc in all_docs:
+        if doc.get('parent_id'):
+            pid = doc['parent_id']
+            variants_by_parent.setdefault(pid, []).append(doc)
+        else:
+            parents.append(doc)
+
+    for parent in parents:
+        children = variants_by_parent.get(parent['id'], [])
+        if children:
+            parent['variants'] = children
+            parent['quantity'] = sum(v.get('quantity', 0) for v in children)
+        else:
+            parent['variants'] = []
+
+    return parents
+
+
 def add_ready_stock(name, color, quantity, cost_price, reason='Manual Add'):
     db = get_db()
     db.collection('ready_stock').add({
@@ -135,13 +173,38 @@ def delete_ready_stock(doc_id):
     db.collection('ready_stock').document(doc_id).delete()
 
 
+def add_ready_stock_variant(parent_id, parent_name, variant_name, quantity):
+    """Add a colour/variant child under an existing parent product."""
+    db = get_db()
+    qty = int(float(quantity))
+    db.collection('ready_stock').add({
+        'parent_id': parent_id,
+        'name': parent_name,
+        'color': variant_name,
+        'quantity': qty,
+        'reserved_quantity': 0,
+        'updated_at': datetime.now(timezone.utc),
+    })
+    log_inventory_transaction('Ready Stock', parent_name, variant_name, qty, 'Variant Added')
+
+
 def adjust_ready_stock_qty(name, color, delta=0, reserved_delta=0, reason='Manual Adjustment', ref_id=''):
-    """Adjust ready stock quantity by product name + color."""
+    """Adjust ready stock quantity by product name + color.
+    If color is provided and a matching variant doc exists, targets that variant.
+    Otherwise falls back to a parent/simple doc matching by name only.
+    """
     db = get_db()
     query = db.collection('ready_stock').where(filter=FieldFilter('name', '==', name))
     if color:
         query = query.where(filter=FieldFilter('color', '==', color))
     docs = list(query.limit(1).stream())
+    if not docs and color:
+        # Fallback: try matching just by name (simple item with no color field)
+        docs = list(
+            db.collection('ready_stock')
+            .where(filter=FieldFilter('name', '==', name))
+            .limit(1).stream()
+        )
     if docs:
         doc = docs[0]
         data = doc.to_dict()

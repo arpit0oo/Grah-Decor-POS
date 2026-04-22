@@ -99,15 +99,10 @@
         <!-- Section 4: Financials -->
         <div class="form-section">
             <div class="form-section-title">Financial Breakdown</div>
-            <div class="form-grid form-grid-4">
+            <div class="form-grid form-grid-3">
                 <div class="form-group">
                     <label for="add-shipping">Shipping ₹</label>
                     <input type="number" id="add-shipping" name="shipping" step="0.01" min="0" value="0"
-                        oninput="calcSettlement('add')">
-                </div>
-                <div class="form-group">
-                    <label for="add-refund">Refund ₹</label>
-                    <input type="number" id="add-refund" name="refund" step="0.01" min="0" value="0"
                         oninput="calcSettlement('add')">
                 </div>
                 <div class="form-group">
@@ -390,15 +385,10 @@
             <!-- Section 4: Financials -->
             <div class="form-section">
                 <div class="form-section-title">Financial Breakdown</div>
-                <div class="form-grid form-grid-4">
+                <div class="form-grid form-grid-3">
                     <div class="form-group">
                         <label>Shipping ₹</label>
                         <input type="number" name="shipping" id="edit-shipping" step="0.01" min="0"
-                            oninput="calcSettlement('edit')">
-                    </div>
-                    <div class="form-group">
-                        <label>Refund ₹</label>
-                        <input type="number" name="refund" id="edit-refund" step="0.01" min="0"
                             oninput="calcSettlement('edit')">
                     </div>
                     <div class="form-group">
@@ -498,7 +488,7 @@
                 <div class="form-grid form-grid-4">
                     <div class="form-group">
                         <label>Product *</label>
-                        <select name="product[]" class="item-product" required onchange="handleDropdownOther(this); calcSettlement('${prefix}');">
+                        <select name="product[]" class="item-product" required onchange="handleDropdownOther(this); fetchVariants(this); calcSettlement('${prefix}');">
                             <option value="" disabled selected>Select Product</option>
                             {% for p in products %}
                             <option value="{{ p }}">{{ p }}</option>
@@ -508,9 +498,9 @@
                         <input type="text" class="item-product-custom hidden" placeholder="Custom product" style="margin-top:0.5rem" oninput="calcSettlement('${prefix}')">
                     </div>
                     <div class="form-group">
-                        <label>Color</label>
+                        <label>Variant / Color</label>
                         <select name="color[]" class="item-color" onchange="handleDropdownOther(this)">
-                            <option value="">No Color</option>
+                            <option value="">No Variant</option>
                             {% for c in colors %}
                             <option value="{{ c }}">{{ c }}</option>
                             {% endfor %}
@@ -533,6 +523,35 @@
 
     function addOrderItemRow(containerId, prefix) {
         document.getElementById(containerId).insertAdjacentHTML('beforeend', getOrderItemRowHtml(prefix));
+    }
+
+    async function fetchVariants(selectEl) {
+        const productName = selectEl.value;
+        if (!productName || productName === '__other__') return;
+        const colorSel = selectEl.closest('.order-item-row').querySelector('.item-color');
+        if (!colorSel) return;
+
+        try {
+            const res = await fetch('/inventory/api/variants?name=' + encodeURIComponent(productName));
+            const variants = await res.json();
+            if (variants.length > 0) {
+                // Replace colour options with fetched variants
+                colorSel.innerHTML = '<option value="">Select Variant</option>';
+                variants.forEach(v => {
+                    const opt = document.createElement('option');
+                    opt.value = v.color;
+                    opt.textContent = v.color + ' (' + v.quantity + ' in stock)';
+                    colorSel.appendChild(opt);
+                });
+                const otherOpt = document.createElement('option');
+                otherOpt.value = '__other__';
+                otherOpt.textContent = 'Other (Custom)...';
+                colorSel.appendChild(otherOpt);
+            }
+            // If no variants, leave colour dropdown as generic list
+        } catch (e) {
+            console.warn('Could not fetch variants:', e);
+        }
     }
 
     function openViewModalFromBtn(btn) {
@@ -641,7 +660,6 @@
         document.getElementById('edit-platform').value = data.platform || '';
         document.getElementById('edit-status').value = data.status || 'Pending';
         document.getElementById('edit-shipping').value = data.shipping || 0;
-        document.getElementById('edit-refund').value = data.refund || 0;
         document.getElementById('edit-tax').value = data.tax || 0;
         document.getElementById('edit-marketplace_fee').value = data.marketplace_fee || 0;
         document.getElementById('edit-reviews').value = data.reviews || '';
@@ -667,13 +685,12 @@
         
         const sp = totalItemsPrice;
         const sh = parseFloat(document.getElementById(prefix + '-shipping')?.value || 0);
-        const rf = parseFloat(document.getElementById(prefix + '-refund')?.value || 0);
         const tx = parseFloat(document.getElementById(prefix + '-tax')?.value || 0);
         const mf = parseFloat(document.getElementById(prefix + '-marketplace_fee')?.value || document.getElementById(prefix + '-marketplace-fee')?.value || 0);
         
-        const settlement = sp - sh - rf - tx - mf;
+        const settlement = sp - sh - tx - mf;
         const el = document.getElementById(prefix + '-settlement-display');
-        if (el) el.textContent = '₹ ' + settlement.toFixed(2);
+        if (el) el.textContent = '\u20b9 ' + settlement.toFixed(2);
     }
     
     document.addEventListener('DOMContentLoaded', () => {

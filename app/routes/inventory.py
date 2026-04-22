@@ -1,7 +1,8 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from app.services.inventory_service import (
     get_all_raw_materials, add_raw_material, update_raw_material, delete_raw_material,
-    get_all_ready_stock, add_ready_stock, update_ready_stock, delete_ready_stock,
+    get_all_ready_stock, get_ready_stock_grouped, add_ready_stock, add_ready_stock_variant,
+    update_ready_stock, delete_ready_stock,
     produce_item, get_inventory_logs, get_product_inventory_logs
 )
 
@@ -41,7 +42,7 @@ def inventory_list():
 
     tab = request.args.get('tab', 'ready')
     return render_template('inventory.html', 
-                           raw_materials=raw, ready_stock=ready, logs=logs, active_tab=tab,
+                           raw_materials=raw, ready_stock=get_ready_stock_grouped(), logs=logs, active_tab=tab,
                            today_in=today_in, today_out=today_out, 
                            today_produced=today_produced, today_shipped=today_shipped)
 
@@ -124,8 +125,29 @@ def ready_edit(doc_id):
 
 @inventory_bp.route('/ready/delete/<doc_id>', methods=['POST'])
 def ready_delete(doc_id):
-    delete_ready_stock(doc_id)
-    flash('Ready stock item deleted.', 'success')
+    # Deletions disabled — inventory records are permanent
+    flash('Inventory records cannot be deleted. Set quantity to 0 to zero it out.', 'error')
+    return redirect(url_for('inventory.inventory_list', tab='ready'))
+
+
+@inventory_bp.route('/ready/add_variant/<parent_id>', methods=['POST'])
+def ready_add_variant(parent_id):
+    from app.services.inventory_service import get_all_ready_stock
+    db_docs = get_all_ready_stock()
+    parent = next((d for d in db_docs if d['id'] == parent_id), None)
+    if not parent:
+        flash('Parent product not found.', 'error')
+        return redirect(url_for('inventory.inventory_list', tab='ready'))
+    
+    variant_name = request.form.get('variant_name', '').strip()
+    quantity = request.form.get('quantity', 0)
+    
+    if not variant_name:
+        flash('Variant name is required.', 'error')
+        return redirect(url_for('inventory.inventory_list', tab='ready'))
+    
+    add_ready_stock_variant(parent_id, parent['name'], variant_name, quantity)
+    flash(f'Variant "{variant_name}" added to {parent["name"]}.', 'success')
     return redirect(url_for('inventory.inventory_list', tab='ready'))
 
 
@@ -168,6 +190,22 @@ def api_raw_list():
 @inventory_bp.route('/api/ready', methods=['GET'])
 def api_ready_list():
     return jsonify(get_all_ready_stock())
+
+
+@inventory_bp.route('/api/variants', methods=['GET'])
+def api_variants():
+    """Return variants (children) for a given parent product name."""
+    name = request.args.get('name', '')
+    if not name:
+        return jsonify([])
+    all_docs = get_all_ready_stock()
+    # Find parent doc
+    parent = next((d for d in all_docs if d.get('name') == name and not d.get('parent_id')), None)
+    if not parent:
+        return jsonify([])
+    # Find children
+    children = [d for d in all_docs if d.get('parent_id') == parent['id']]
+    return jsonify([{'id': c['id'], 'color': c.get('color', ''), 'quantity': c.get('quantity', 0)} for c in children])
 
 
 @inventory_bp.route('/api/product-logs', methods=['GET'])

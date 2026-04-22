@@ -9,6 +9,7 @@ from app.services.purchase_service import (
     cancel_po,
     revert_cancelled_to_paid
 )
+from app.services.inventory_service import get_all_raw_materials
 
 purchase_bp = Blueprint('purchase', __name__, url_prefix='/purchases')
 
@@ -32,8 +33,10 @@ def purchase_list():
 
     purchases = get_all_purchase_orders(date_from=df, date_to=dt)
     total_spent = sum(p.get('total_cost', 0) for p in purchases if p.get('status') != 'Cancelled')
+    raw_materials = get_all_raw_materials()
     
-    return render_template('purchase.html', purchases=purchases, total_spent=total_spent)
+    return render_template('purchase.html', purchases=purchases, total_spent=total_spent,
+                           raw_materials=raw_materials, date_from=date_from or '', date_to=date_to or '')
 
 @purchase_bp.route('/add', methods=['POST'])
 def purchase_add():
