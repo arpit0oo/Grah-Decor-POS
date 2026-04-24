@@ -61,13 +61,6 @@
                 </a>
             </li>
             <li>
-                <a href="{{ url_for('audit.audit_list') }}"
-                   class="nav-link {% if request.path.startswith('/audit') %}active{% endif %}">
-                    <span class="nav-icon">🔍</span>
-                    <span class="nav-label">Stock Audit</span>
-                </a>
-            </li>
-            <li>
                 {% if current_user.is_authenticated %}
                 <a href="{{ url_for('auth.logout') }}" class="nav-link">
                     <span class="nav-icon">🔒</span>

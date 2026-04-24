@@ -57,16 +57,14 @@ def create_app():
     from app.routes.orders import orders_bp
     from app.routes.cashbook import cashbook_bp
     from app.routes.settlements import settlements_bp
-    from app.routes.audit import audit_bp
     from app.routes.contact import contact_bp
-
+    
     app.register_blueprint(auth_bp)
     app.register_blueprint(inventory_bp)
     app.register_blueprint(purchase_bp)
     app.register_blueprint(orders_bp)
     app.register_blueprint(cashbook_bp)
     app.register_blueprint(settlements_bp)
-    app.register_blueprint(audit_bp)
     app.register_blueprint(contact_bp)
 
     # Root redirect
