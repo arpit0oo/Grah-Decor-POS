@@ -28,106 +28,90 @@
 <div class="form-card hidden" id="orderForm">
     <h3>Log New Order</h3>
     <form autocomplete="off" method="POST" action="{{ url_for('orders.order_add') }}">
-        <!-- Section 1: Order Identity -->
-        <div class="form-section">
-            <div class="form-section-title">Order Identity</div>
-            <div class="form-grid form-grid-3">
-                <div class="form-group">
-                    <label for="add-date">Date</label>
-                    <input type="date" id="add-date" name="date" required>
-                </div>
-                <div class="form-group">
-                    <label for="add-order-id">Order ID</label>
-                    <input type="text" id="add-order-id" name="order_id" placeholder="Platform order ID">
-                </div>
-                <div class="form-group">
-                    <label for="add-platform">Platform</label>
-                    <select id="add-platform" name="platform">
-                        {% for p in platforms %}
-                        <option value="{{ p }}">{{ p }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
+
+        <!-- Row 1: Order Identity -->
+        <div class="order-form-row">
+            <div class="form-group">
+                <label for="add-date">Date</label>
+                <input type="date" id="add-date" name="date" required>
+            </div>
+            <div class="form-group">
+                <label for="add-order-id">Order ID</label>
+                <input type="text" id="add-order-id" name="order_id" placeholder="Platform order ID">
+            </div>
+            <div class="form-group">
+                <label for="add-platform">Platform</label>
+                <select id="add-platform" name="platform">
+                    {% for p in platforms %}
+                    <option value="{{ p }}">{{ p }}</option>
+                    {% endfor %}
+                </select>
             </div>
         </div>
 
-        <!-- Section 2: Customer & Fulfillment -->
-        <div class="form-section">
-            <div class="form-section-title">Customer Details</div>
-            <div class="form-group" style="margin-bottom: 1rem;">
-                <label>
-                    <input type="radio" name="customer_mode" value="existing" checked onchange="toggleCustomerMode('add')"> Existing Customer
-                </label>
-                <label style="margin-left: 1rem;">
-                    <input type="radio" name="customer_mode" value="new" onchange="toggleCustomerMode('add')"> Create New Customer
-                </label>
-            </div>
-            
-            <!-- Existing Customer Select -->
-            <div id="add-existing-customer-group" class="form-group">
+        <!-- Row 2: Customer -->
+        <div class="order-form-section-label">Customer</div>
+        <div style="margin-bottom:0.6rem; display:flex; gap:1.5rem; align-items:center;">
+            <label style="font-size:0.875rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                <input type="radio" name="customer_mode" value="existing" onchange="toggleCustomerMode('add')"> Existing
+            </label>
+            <label style="font-size:0.875rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                <input type="radio" name="customer_mode" value="new" checked onchange="toggleCustomerMode('add')"> New Customer
+            </label>
+        </div>
+        <div id="add-existing-customer-group" class="order-form-row hidden" style="grid-template-columns:1fr;">
+            <div class="form-group" style="margin:0;">
                 <label for="add-existing-customer">Select Customer *</label>
-                <select id="add-existing-customer" name="existing_customer" required style="width: 100%;">
+                <select id="add-existing-customer" name="existing_customer" style="width: 100%;">
                     <option value="" disabled selected>Select a customer...</option>
                     {% for c in customers %}
                     <option value="{{ c.customer_id }} - {{ c.name }}">{{ c.customer_id }} - {{ c.name }} ({{ c.phone_numbers[0] if c.phone_numbers else 'No phone' }})</option>
                     {% endfor %}
                 </select>
             </div>
-            
-            <!-- New Customer Fields (Hidden by default) -->
-            <div id="add-new-customer-group" class="form-grid form-grid-2 hidden">
-                <div class="form-group">
-                    <label for="add-new-customer-name">New Customer Name *</label>
-                    <input type="text" id="add-new-customer-name" name="new_customer_name" placeholder="Customer name">
-                </div>
-                <div class="form-group">
-                    <label for="add-new-customer-phone">Phone / Number</label>
-                    <input type="tel" id="add-new-customer-phone" name="new_customer_phone" placeholder="10-digit number" 
-                        pattern="[0-9]{10}" maxlength="10" 
-                        oninput="this.value = this.value.replace(/[^0-9]/g, '');"
-                        title="Please enter a 10-digit phone number without country code">
-                </div>
+        </div>
+        <div id="add-new-customer-group" class="order-form-row" style="grid-template-columns:1fr 1fr;">
+            <div class="form-group" style="margin:0;">
+                <label for="add-new-customer-name">New Customer Name *</label>
+                <input type="text" id="add-new-customer-name" name="new_customer_name" placeholder="Customer name" required>
+            </div>
+            <div class="form-group" style="margin:0;">
+                <label for="add-new-customer-phone">Phone</label>
+                <input type="tel" id="add-new-customer-phone" name="new_customer_phone" placeholder="10-digit number"
+                    pattern="[0-9]{10}" maxlength="10"
+                    oninput="this.value = this.value.replace(/[^0-9]/g, '');">
             </div>
         </div>
 
-        <!-- Section 3: Order Items -->
-        <div class="form-section">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-                <div class="form-section-title" style="margin-bottom:0;">Order Items</div>
-                <button type="button" class="btn btn-xs btn-ghost" onclick="addOrderItemRow('add-order-items', 'add')">+ Add Item</button>
+        <!-- Row 3: Order Items -->
+        <div class="order-form-section-label" style="display:flex; justify-content:space-between; align-items:center;">
+            <span>Order Items</span>
+            <button type="button" class="btn btn-xs btn-ghost" onclick="addOrderItemRow('add-order-items', 'add')">+ Add Item</button>
+        </div>
+        <div id="add-order-items"></div>
+        <div style="text-align:right; margin-top:0.5rem; font-weight:700; font-size:0.95em; color:var(--primary);">
+            Items Total: <span id="add-selling-price-display">₹ 0.00</span>
+        </div>
+
+        <!-- Row 4: Financial Breakdown -->
+        <div class="order-form-section-label">Financials</div>
+        <div class="order-form-row" style="grid-template-columns: repeat(3, 1fr);">
+            <div class="form-group" style="margin:0;">
+                <label for="add-shipping">Shipping ₹</label>
+                <input type="number" id="add-shipping" name="shipping" step="0.01" min="0" value="0" oninput="calcSettlement('add')">
             </div>
-            <div id="add-order-items">
-                <!-- Javascript will populate rows here -->
+            <div class="form-group" style="margin:0;">
+                <label for="add-tax">Tax ₹</label>
+                <input type="number" id="add-tax" name="tax" step="0.01" min="0" value="0" oninput="calcSettlement('add')">
             </div>
-            <div style="text-align: right; margin-top: 1rem; font-weight: bold; font-size: 1.1em;">
-                Selling Price (Items Total): <span id="add-selling-price-display">₹ 0.00</span>
+            <div class="form-group" style="margin:0;">
+                <label for="add-marketplace-fee">Mkt Fee ₹</label>
+                <input type="number" id="add-marketplace-fee" name="marketplace_fee" step="0.01" min="0" value="0" oninput="calcSettlement('add')">
             </div>
         </div>
 
-        <!-- Section 4: Financial Breakdown -->
-        <div class="form-section" style="margin-bottom:0;">
-            <div class="form-section-title">Financial Breakdown</div>
-            <div class="form-grid form-grid-3">
-                <div class="form-group">
-                    <label for="add-shipping">Shipping ₹</label>
-                    <input type="number" id="add-shipping" name="shipping" step="0.01" min="0" value="0"
-                        oninput="calcSettlement('add')">
-                </div>
-                <div class="form-group">
-                    <label for="add-tax">Tax ₹</label>
-                    <input type="number" id="add-tax" name="tax" step="0.01" min="0" value="0"
-                        oninput="calcSettlement('add')">
-                </div>
-                <div class="form-group">
-                    <label for="add-marketplace-fee">Mkt Fee ₹</label>
-                    <input type="number" id="add-marketplace-fee" name="marketplace_fee" step="0.01" min="0" value="0"
-                        oninput="calcSettlement('add')">
-                </div>
-            </div>
-        </div>
-
-        <div class="form-footer"
-            style="display:flex; justify-content:space-between; align-items:center; margin-top:1.5rem; padding-top:1.5rem; border-top: 1px solid var(--border)">
+        <!-- Row 5: Footer -->
+        <div class="order-form-footer">
             <div class="settlement-display" id="add-settlement-card">
                 <span>Net Settlement</span>
                 <strong id="add-settlement-display">₹ 0.00</strong>
@@ -366,85 +350,71 @@
             <button class="modal-close" onclick="closeModal('editModal')">×</button>
         </div>
         <form autocomplete="off" method="POST" id="editForm">
-            <!-- Section 1: Order Identity -->
-            <div class="form-section">
-                <div class="form-section-title">Order Identity</div>
-                <div class="form-grid form-grid-3">
-                    <div class="form-group">
-                        <label>Date</label>
-                        <input type="date" name="date" id="edit-date">
-                    </div>
-                    <div class="form-group">
-                        <label>Order ID</label>
-                        <input type="text" name="order_id" id="edit-order_id">
-                    </div>
-                    <div class="form-group">
-                        <label>Platform</label>
-                        <select name="platform" id="edit-platform">
-                            {% for p in platforms %}
-                            <option value="{{ p }}">{{ p }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
+
+            <!-- Row 1: Order Identity -->
+            <div class="order-form-row">
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="date" name="date" id="edit-date">
+                </div>
+                <div class="form-group">
+                    <label>Order ID</label>
+                    <input type="text" name="order_id" id="edit-order_id">
+                </div>
+                <div class="form-group">
+                    <label>Platform</label>
+                    <select name="platform" id="edit-platform">
+                        {% for p in platforms %}
+                        <option value="{{ p }}">{{ p }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
             </div>
 
-            <!-- Section 2: Customer & Fulfillment -->
-            <div class="form-section">
-                <div class="form-section-title">Customer & Fulfillment</div>
-                <div class="form-grid form-grid-2">
-                    <div class="form-group">
-                        <label>Customer Name</label>
-                        <input type="text" name="customer" id="edit-customer">
-                    </div>
-                    <div class="form-group">
-                        <label>Phone</label>
-                        <input type="tel" name="number" id="edit-number" 
-                            pattern="[0-9]{10}" maxlength="10" 
-                            oninput="this.value = this.value.replace(/[^0-9]/g, '');"
-                            title="Please enter a 10-digit phone number without country code">
-                    </div>
+            <!-- Row 2: Customer -->
+            <div class="order-form-section-label">Customer</div>
+            <div class="order-form-row" style="grid-template-columns:1fr 1fr;">
+                <div class="form-group" style="margin:0;">
+                    <label>Customer Name</label>
+                    <input type="text" name="customer" id="edit-customer">
+                </div>
+                <div class="form-group" style="margin:0;">
+                    <label>Phone</label>
+                    <input type="tel" name="number" id="edit-number"
+                        pattern="[0-9]{10}" maxlength="10"
+                        oninput="this.value = this.value.replace(/[^0-9]/g, '');">
                 </div>
             </div>
 
-            <!-- Section 3: Order Items -->
-            <div class="form-section">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-                    <div class="form-section-title" style="margin-bottom:0;">Order Items</div>
-                    <button type="button" class="btn btn-xs btn-ghost" onclick="addOrderItemRow('edit-order-items', 'edit')">+ Add Item</button>
+            <!-- Row 3: Order Items -->
+            <div class="order-form-section-label" style="display:flex; justify-content:space-between; align-items:center;">
+                <span>Order Items</span>
+                <button type="button" class="btn btn-xs btn-ghost" onclick="addOrderItemRow('edit-order-items', 'edit')">+ Add Item</button>
+            </div>
+            <div id="edit-order-items"></div>
+            <div style="text-align:right; margin-top:0.5rem; font-weight:700; font-size:0.95em; color:var(--primary);">
+                Items Total: <span id="edit-selling-price-display">₹ 0.00</span>
+            </div>
+
+            <!-- Row 4: Financial Breakdown -->
+            <div class="order-form-section-label">Financials</div>
+            <div class="order-form-row" style="grid-template-columns: repeat(3, 1fr);">
+                <div class="form-group" style="margin:0;">
+                    <label>Shipping ₹</label>
+                    <input type="number" name="shipping" id="edit-shipping" step="0.01" min="0" oninput="calcSettlement('edit')">
                 </div>
-                <div id="edit-order-items">
-                    <!-- Javascript will populate rows here -->
+                <div class="form-group" style="margin:0;">
+                    <label>Tax ₹</label>
+                    <input type="number" name="tax" id="edit-tax" step="0.01" min="0" oninput="calcSettlement('edit')">
                 </div>
-                <div style="text-align: right; margin-top: 1rem; font-weight: bold; font-size: 1.1em;">
-                    Selling Price (Items Total): <span id="edit-selling-price-display">₹ 0.00</span>
+                <div class="form-group" style="margin:0;">
+                    <label>Mkt Fee ₹</label>
+                    <input type="number" name="marketplace_fee" id="edit-marketplace_fee" step="0.01" min="0" oninput="calcSettlement('edit')">
                 </div>
             </div>
 
-            <!-- Section 4: Financials -->
-            <div class="form-section">
-                <div class="form-section-title">Financial Breakdown</div>
-                <div class="form-grid form-grid-3">
-                    <div class="form-group">
-                        <label>Shipping ₹</label>
-                        <input type="number" name="shipping" id="edit-shipping" step="0.01" min="0"
-                            oninput="calcSettlement('edit')">
-                    </div>
-                    <div class="form-group">
-                        <label>Tax ₹</label>
-                        <input type="number" name="tax" id="edit-tax" step="0.01" min="0"
-                            oninput="calcSettlement('edit')">
-                    </div>
-                    <div class="form-group">
-                        <label>Mkt Fee ₹</label>
-                        <input type="number" name="marketplace_fee" id="edit-marketplace_fee" step="0.01" min="0"
-                            oninput="calcSettlement('edit')">
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-footer"
-                style="display:flex; justify-content:space-between; align-items:center; margin-top:1.5rem; padding-top:1.5rem;">
+            <!-- Footer -->
+            <div class="order-form-footer">
                 <div class="settlement-display card-variant" id="edit-settlement-card">
                     <span>Net Settlement</span>
                     <strong id="edit-settlement-display">₹ 0.00</strong>
@@ -522,39 +492,40 @@
 
     function getOrderItemRowHtml(prefix) {
         return `
-            <div class="order-item-row" style="border: 1px dashed var(--border); padding: 1rem; position: relative; margin-bottom: 0.5rem; background: #fafafa; border-radius: 4px;">
-                <button type="button" style="position:absolute; top:8px; right:8px; background:var(--danger); color:white; border:none; border-radius:4px; padding:2px 6px; cursor:pointer;" onclick="this.parentElement.remove(); calcSettlement('${prefix}');">Remove</button>
-                <div class="form-grid form-grid-4">
-                    <div class="form-group">
-                        <label>Product *</label>
-                        <select name="product[]" class="item-product" required onchange="handleDropdownOther(this); fetchVariants(this); calcSettlement('${prefix}');">
-                            <option value="" disabled selected>Select Product</option>
-                            {% for p in products %}
-                            <option value="{{ p }}">{{ p }}</option>
-                            {% endfor %}
-                            <option value="__other__">Other (Custom)...</option>
-                        </select>
-                        <input type="text" class="item-product-custom hidden" placeholder="Custom product" style="margin-top:0.5rem" oninput="calcSettlement('${prefix}')">
-                    </div>
-                    <div class="form-group">
-                        <label>Variant / Color</label>
-                        <select name="color[]" class="item-color" onchange="handleDropdownOther(this); if(checkDuplicates(this.closest('.order-item-row'))) { alert('This product and variant combination is already added. Please adjust the quantity of the existing item instead.'); this.value=''; }">
-                            <option value="">No Variant</option>
-                            {% for c in colors %}
-                            <option value="{{ c }}">{{ c }}</option>
-                            {% endfor %}
-                            <option value="__other__">Other (Custom)...</option>
-                        </select>
-                        <input type="text" class="item-color-custom hidden" placeholder="Custom color" style="margin-top:0.5rem">
-                    </div>
-                    <div class="form-group">
-                        <label>Quantity</label>
-                        <input type="number" name="quantity[]" class="item-qty" value="1" min="1" step="1" oninput="calcSettlement('${prefix}')">
-                    </div>
-                    <div class="form-group">
-                        <label>Selling Price ₹</label>
-                        <input type="number" name="price[]" class="item-price" value="0" min="0" step="0.01" oninput="calcSettlement('${prefix}')">
-                    </div>
+            <div class="order-item-row">
+                <div class="item-field item-field-product">
+                    <label>Product *</label>
+                    <select name="product[]" class="item-product" required onchange="handleDropdownOther(this); fetchVariants(this); calcSettlement('${prefix}');">
+                        <option value="" disabled selected>Select…</option>
+                        {% for p in products %}
+                        <option value="{{ p }}">{{ p }}</option>
+                        {% endfor %}
+                        <option value="__other__">Other…</option>
+                    </select>
+                    <input type="text" class="item-product-custom hidden" placeholder="Custom product" oninput="calcSettlement('${prefix}')">
+                </div>
+                <div class="item-field item-field-color">
+                    <label>Variant</label>
+                    <select name="color[]" class="item-color" onchange="handleDropdownOther(this); if(checkDuplicates(this.closest('.order-item-row'))) { alert('Already added. Adjust quantity instead.'); this.value=''; }">
+                        <option value="">None</option>
+                        {% for c in colors %}
+                        <option value="{{ c }}">{{ c }}</option>
+                        {% endfor %}
+                        <option value="__other__">Other…</option>
+                    </select>
+                    <input type="text" class="item-color-custom hidden" placeholder="Custom color">
+                </div>
+                <div class="item-field item-field-qty">
+                    <label>Qty</label>
+                    <input type="number" name="quantity[]" class="item-qty" value="1" min="1" step="1" oninput="calcSettlement('${prefix}')">
+                </div>
+                <div class="item-field item-field-price">
+                    <label>Price ₹</label>
+                    <input type="number" name="price[]" class="item-price" value="0" min="0" step="0.01" oninput="calcSettlement('${prefix}')">
+                </div>
+                <div class="item-field item-field-remove">
+                    <label>&nbsp;</label>
+                    <button type="button" class="btn btn-xs" style="background:var(--danger);color:white;border:none;" onclick="this.closest('.order-item-row').remove(); calcSettlement('${prefix}');">✕</button>
                 </div>
             </div>
         `;
