@@ -251,25 +251,6 @@
 <!-- ── INVENTORY LOGS TAB ──────────────────────────────── -->
 <div class="tab-content {% if active_tab != 'logs' %}hidden{% endif %}" id="tab-logs">
 
-    <div class="kpi-grid" style="margin-bottom: 2rem;">
-        <div class="kpi-card" style="border-left: 4px solid var(--primary)">
-            <h3>Transactions Logged (Today)</h3>
-            <p class="kpi-value text-primary">+{{ today_log_count|int }}</p>
-        </div>
-        <div class="kpi-card" style="border-left: 4px solid var(--accent)">
-            <h3>Total Shipped (Today)</h3>
-            <p class="kpi-value text-accent">-{{ today_shipped|int }}</p>
-        </div>
-        <div class="kpi-card" style="border-left: 4px solid var(--success)">
-            <h3>Total Stock IN (Today)</h3>
-            <p class="kpi-value text-success">+{{ today_in|int }}</p>
-        </div>
-        <div class="kpi-card" style="border-left: 4px solid var(--danger)">
-            <h3>Total Stock OUT (Today)</h3>
-            <p class="kpi-value text-danger">-{{ today_out|int }}</p>
-        </div>
-    </div>
-
     <!-- ── LOGS FILTER BAR ── -->
     <div class="card"
         style="margin-bottom:1rem; padding:1rem; display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; background:white;">

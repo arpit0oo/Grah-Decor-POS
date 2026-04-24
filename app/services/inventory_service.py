@@ -46,31 +46,25 @@ def get_all_raw_materials():
     docs = db.collection('raw_materials').order_by('name').stream()
     materials = [{'id': d.id, **d.to_dict()} for d in docs]
 
-    # Pre-fetch POs to calculate moving average cost
-    po_docs = db.collection('purchase_orders').where(filter=FieldFilter('status', 'in', ['Received', 'Paid'])).stream()
-    pos = [d.to_dict() for d in po_docs]
-
     for m in materials:
-        name = m.get('name', '').lower()
-        mat_pos = [po for po in pos if po.get('item', '').lower() == name]
+        # Use the price saved during mark_po_received, fallback to 0
+        price = float(m.get('price', 0))
+        qty = float(m.get('quantity', 0))
         
-        total_invested = sum(po.get('total_cost', 0) for po in mat_pos)
-        total_qty_purchased = sum(po.get('quantity', 0) for po in mat_pos)
-        
-        avg_price = total_invested / total_qty_purchased if total_qty_purchased > 0 else 0
-        m['calc_price'] = avg_price
-        m['calc_total_value'] = avg_price * float(m.get('quantity', 0))
+        m['calc_price'] = price
+        m['calc_total_value'] = price * qty
 
     return materials
 
 
-def add_raw_material(name, quantity, unit, reason='Manual Add'):
+def add_raw_material(name, quantity, unit, reason='Manual Add', price=0.0):
     db = get_db()
     qty = float(quantity or 0)
     db.collection('raw_materials').add({
         'name': name,
         'quantity': qty,
         'unit': unit,
+        'price': float(price),
         'updated_at': datetime.now(timezone.utc),
     })
     log_inventory_transaction('Raw Material', name, '', qty, reason)
@@ -89,7 +83,7 @@ def delete_raw_material(doc_id):
     db.collection('raw_materials').document(doc_id).delete()
 
 
-def adjust_raw_material_qty(name, delta, reason='Manual Adjustment', ref_id=''):
+def adjust_raw_material_qty(name, delta, reason='Manual Adjustment', ref_id='', price=None):
     """Increment (positive delta) or decrement (negative delta) quantity by material name."""
     db = get_db()
     docs = list(
@@ -103,10 +97,15 @@ def adjust_raw_material_qty(name, delta, reason='Manual Adjustment', ref_id=''):
         current = int(float(doc.to_dict().get('quantity', 0)))
         adjusted_delta = int(float(delta))
         new_qty = max(0, current + adjusted_delta)
-        db.collection('raw_materials').document(doc.id).update({
+        
+        update_data = {
             'quantity': new_qty,
             'updated_at': datetime.now(timezone.utc),
-        })
+        }
+        if price is not None:
+            update_data['price'] = float(price)
+            
+        db.collection('raw_materials').document(doc.id).update(update_data)
         log_inventory_transaction('Raw Material', name, '', adjusted_delta, reason, ref_id)
         return True
     return False

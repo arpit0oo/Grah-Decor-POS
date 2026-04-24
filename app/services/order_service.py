@@ -331,4 +331,11 @@ def delete_order(doc_id):
                 adjust_ready_stock_qty(prod, item.get('color', ''), -old_qty_delta * qty, -old_res_delta * qty, reason=reason, ref_id=doc_id)
                 
     db.collection('orders').document(doc_id).delete()
+    
+    # Fix 1: Delete orphaned cashbook entries if this order was logged in the legacy system
+    from google.cloud.firestore_v1 import FieldFilter
+    cashbook_docs = db.collection('cashbook').where(filter=FieldFilter('reference_id', '==', doc_id)).stream()
+    for c_doc in cashbook_docs:
+        db.collection('cashbook').document(c_doc.id).delete()
+
     return True

@@ -4,7 +4,8 @@ from app.services.settlement_service import (
     create_payment_settlement,
     get_settlement_batches,
     process_order_return,
-    get_returned_orders
+    get_returned_orders,
+    delete_settlement_batch
 )
 from app.services.order_service import PLATFORMS
 
@@ -93,3 +94,11 @@ def process_return():
         flash("Could not process return.", "error")
     
     return redirect(url_for('settlements.settlements_list'))
+
+@settlements_bp.route('/delete/<batch_id>', methods=['POST'])
+def delete_batch(batch_id):
+    if delete_settlement_batch(batch_id):
+        flash("Settlement batch deleted and orders reverted.", "success")
+    else:
+        flash("Could not delete settlement batch.", "error")
+    return redirect(url_for('settlements.settlements_list', tab='batches'))

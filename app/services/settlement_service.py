@@ -184,3 +184,48 @@ def get_returned_orders():
         reverse=True
     )
     return results
+
+
+def delete_settlement_batch(batch_id):
+    """
+    Reverse a settlement batch:
+    1. Revert all orders to 'Delivered' status
+    2. Delete the linked cashbook entry
+    3. Delete the batch document
+    """
+    db = get_db()
+    batch_ref = db.collection('settlement_batches').document(batch_id)
+    doc = batch_ref.get()
+    
+    if not doc.exists:
+        return False
+        
+    data = doc.to_dict()
+    order_ids = data.get('order_ids', [])
+    
+    # 1. Revert orders status
+    batch = db.batch()
+    now = datetime.now(timezone.utc)
+    for o_id in order_ids:
+        order_ref = db.collection('orders').document(o_id)
+        snap = order_ref.get()
+        if snap.exists:
+            history = snap.to_dict().get('status_history', [])
+            history.append({'status': 'Delivered', 'timestamp': now.isoformat()})
+            batch.update(order_ref, {
+                'payment_settled': False,
+                'settlement_batch_id': '',
+                'status': 'Delivered',
+                'status_history': history,
+                'updated_at': now
+            })
+    batch.commit()
+    
+    # 2. Delete linked cashbook entry
+    cashbook_docs = db.collection('cashbook').where(filter=FieldFilter('reference_id', '==', batch_id)).stream()
+    for c_doc in cashbook_docs:
+        db.collection('cashbook').document(c_doc.id).delete()
+        
+    # 3. Delete the batch document
+    batch_ref.delete()
+    return True

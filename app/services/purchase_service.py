@@ -95,14 +95,18 @@ def mark_po_received(po_id):
     
     items = data.get('items', [])
     if not items and data.get('item'):
-        items = [{'item': data.get('item'), 'quantity': data.get('quantity')}]
+        items = [{'item': data.get('item'), 'quantity': data.get('quantity'), 'unit_cost': data.get('unit_cost', 0)}]
         
+    from google.cloud.firestore_v1 import FieldFilter
+    
     for it in items:
         item_name = it.get('item')
         qty = float(it.get('quantity', 0))
-        if not adjust_raw_material_qty(item_name, qty, reason=reason):
-            add_raw_material(item_name, qty, 'pcs', reason=reason)
+        unit_cost = float(it.get('unit_cost', 0))
         
+        if not adjust_raw_material_qty(item_name, qty, reason=reason, price=unit_cost):
+            add_raw_material(item_name, qty, 'pcs', reason=reason, price=unit_cost)
+            
     return True
 
 def mark_po_paid(po_id, payment_id):
