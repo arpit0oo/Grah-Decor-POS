@@ -91,3 +91,16 @@ def update_customer_metadata(customer_doc_id, platform_used=None, recent_order_i
     if updates:
         updates['updated_at'] = datetime.now(timezone.utc)
         doc_ref.update(updates)
+
+def update_vendor(vendor_doc_id, name, phone_numbers):
+    db = get_db()
+    doc_ref = db.collection('vendors').document(vendor_doc_id)
+    
+    if not phone_numbers:
+        phone_numbers = ["Not available"]
+        
+    doc_ref.update({
+        'name': name,
+        'phone_numbers': phone_numbers,
+        'updated_at': datetime.now(timezone.utc)
+    })
