@@ -239,16 +239,15 @@
                                     <option value="Settled">Settled</option>
                                 {% endif %}
                             </select>
-                            <span style="position:absolute; right:8px; top:50%; transform:translateY(-50%); pointer-events:none; font-size:0.6em; color:currentColor; opacity:0.6;">▼</span>
                         {% endif %}
                     </td>
                     <td style="position:relative; text-align:center;">
-                        <select class="text-muted" style="cursor:pointer; outline:none; border:none; appearance:auto; background:transparent; font-family:var(--font); font-size:0.8rem; padding-right:1rem;" onchange="inlineUpdateReview('{{ order.id }}', this.value)">
+                        {% set review_val = order.reviews if order.reviews else 'Pending' %}
+                        <select class="badge badge-review-{{ review_val|lower|replace(' ', '-') }}" style="padding-right:1.25rem; cursor:pointer; outline:none; border:none; appearance:auto; text-align:center; font-family:var(--font); font-weight:600; min-width:110px; background-color:transparent;" onchange="inlineUpdateReview('{{ order.id }}', this.value, this)" {% if order.reviews == 'Done' %}disabled{% endif %}>
                             <option value="Pending" {% if order.reviews == 'Pending' or not order.reviews %}selected{% endif %}>Pending</option>
                             <option value="Not Responding" {% if order.reviews == 'Not Responding' %}selected{% endif %}>Not Responding</option>
                             <option value="Done" {% if order.reviews == 'Done' %}selected{% endif %}>Done</option>
                         </select>
-                        <span style="position:absolute; right:8px; top:50%; transform:translateY(-50%); pointer-events:none; font-size:0.6em; color:currentColor; opacity:0.6;">▼</span>
                     </td>
                     <td class="actions-cell">
                         <button type="button" class="btn btn-xs btn-ghost" style="color:var(--primary); border-color:var(--bg); background:var(--bg);" data-order="{{ order|tojson|forceescape }}"
@@ -865,7 +864,10 @@
         submitInlineAction(orderId, 'status_' + newStatus);
     }
     
-    function inlineUpdateReview(orderId, newReview) {
+    function inlineUpdateReview(orderId, newReview, selectEl) {
+        if (newReview === 'Done' && selectEl) {
+            selectEl.disabled = true;
+        }
         submitInlineAction(orderId, 'review_' + newReview);
     }
 
