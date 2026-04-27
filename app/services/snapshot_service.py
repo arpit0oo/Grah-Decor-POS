@@ -27,12 +27,11 @@ def _period_label(period_start_dt, period_end_dt=None):
 def get_all_snapshots():
     """Return all period snapshot docs, newest first (by period_start desc)."""
     db = get_db()
-    docs = (
-        db.collection('monthly_snapshots')
-        .order_by('period_start', direction='DESCENDING')
-        .stream()
-    )
-    return [{'id': d.id, **d.to_dict()} for d in docs]
+    docs = db.collection('monthly_snapshots').stream()
+    results = [{'id': d.id, **d.to_dict()} for d in docs]
+    # Sort in Python — avoids needing a Firestore composite index
+    results.sort(key=lambda s: s.get('period_start') or '', reverse=True)
+    return results
 
 
 def get_open_snapshot():
@@ -64,13 +63,14 @@ def get_latest_closed_snapshot():
     docs = list(
         db.collection('monthly_snapshots')
         .where('status', '==', 'closed')
-        .order_by('period_start', direction='DESCENDING')
-        .limit(1)
         .stream()
     )
-    if docs:
-        return {'id': docs[0].id, **docs[0].to_dict()}
-    return None
+    if not docs:
+        return None
+    # Sort in Python — avoids needing a Firestore composite index
+    results = [{'id': d.id, **d.to_dict()} for d in docs]
+    results.sort(key=lambda s: s.get('period_start') or '', reverse=True)
+    return results[0]
 
 
 # ── Opening Snapshot ───────────────────────────────────────────────────────────
