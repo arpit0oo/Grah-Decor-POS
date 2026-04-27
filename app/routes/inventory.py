@@ -229,27 +229,51 @@ def api_product_logs():
 
 @inventory_bp.route('/api/raw-purchase-history', methods=['GET'])
 def api_raw_purchase_history():
-    """Return all purchase orders for a given raw material name."""
+    """Return all purchase orders containing a given raw material name.
+    Handles both legacy single-item POs (po.item) and multi-item POs (po.items[]).
+    """
     name = request.args.get('name', '').strip()
     if not name:
         return jsonify({'error': 'Name is required'}), 400
 
     from app.services.purchase_service import get_all_purchase_orders
     all_pos = get_all_purchase_orders()
-    # Filter to matching item name (case-insensitive)
-    matched = [po for po in all_pos if (po.get('item') or '').lower() == name.lower()]
 
     result = []
-    for po in matched:
-        created = po.get('created_at')
+    for po in all_pos:
+        matched_qty  = 0
+        matched_cost = 0.0
+
+        # ── Multi-item POs: check the items[] array ────────────────────────
+        items = po.get('items', [])
+        if items:
+            for it in items:
+                if (it.get('item') or '').strip().lower() == name.lower():
+                    qty       = float(it.get('quantity', 0))
+                    unit_cost = float(it.get('unit_cost') or it.get('price', 0))
+                    matched_qty  += qty
+                    matched_cost += qty * unit_cost
+        else:
+            # ── Legacy single-item PO: check top-level item field ──────────
+            if (po.get('item') or '').strip().lower() == name.lower():
+                matched_qty  = float(po.get('quantity', 0))
+                unit_cost    = float(po.get('unit_cost', 0))
+                matched_cost = float(po.get('total_cost') or matched_qty * unit_cost)
+
+        if matched_qty == 0:
+            continue  # this PO doesn't involve the requested material
+
+        created  = po.get('created_at')
         date_str = created.strftime('%d/%m/%Y') if created and hasattr(created, 'strftime') else '-'
+
         result.append({
             'po_number':   po.get('po_number', '-'),
             'date':        date_str,
             'vendor_name': po.get('vendor_name', '-'),
-            'quantity':    po.get('quantity', 0),
-            'unit_cost':   po.get('unit_cost', 0),
-            'total_cost':  po.get('total_cost', 0),
+            'quantity':    matched_qty,
+            'unit_cost':   matched_cost / matched_qty if matched_qty else 0,
+            'total_cost':  matched_cost,
             'status':      po.get('status', '-'),
         })
+
     return jsonify(result)
