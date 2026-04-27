@@ -51,9 +51,13 @@ def get_product_inventory_logs(name, color=None, limit=100):
     query = db.collection('inventory_log').where(filter=FieldFilter('item_name', '==', name))
     if color:
         query = query.where(filter=FieldFilter('color', '==', color))
-    
-    docs = query.order_by('date', direction='DESCENDING').limit(limit).stream()
-    return [{'id': d.id, **d.to_dict()} for d in docs]
+    # No order_by — avoids requiring a Firestore composite index.
+    # Caller is responsible for sorting if needed.
+    docs = query.limit(limit).stream()
+    results = [{'id': d.id, **d.to_dict()} for d in docs]
+    # Sort newest-first in Python (matches previous behaviour)
+    results.sort(key=lambda r: r.get('date') or '', reverse=True)
+    return results
 
 # ── Raw Materials ──────────────────────────────────────────────
 
