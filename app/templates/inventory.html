@@ -432,7 +432,6 @@
                         <th>Type</th>
                         <th>Reference</th>
                         <th style="text-align:right;">Movement</th>
-                        <th style="text-align:right;">Balance</th>
                     </tr>
                 </thead>
                 <tbody id="rawHistoryTableBody">
@@ -504,7 +503,7 @@
         document.getElementById('rawHistoryTitle').textContent = name;
         const tbody   = document.getElementById('rawHistoryTableBody');
         const totalsDiv = document.getElementById('rawHistoryTotals');
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted" style="padding:2rem;">Loading…</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding:2rem;">Loading…</td></tr>';
         totalsDiv.textContent = 'Loading…';
         document.getElementById('rawHistoryModal').classList.remove('hidden');
 
@@ -514,12 +513,12 @@
             tbody.innerHTML = '';
 
             if (data.error) {
-                tbody.innerHTML = `<tr><td colspan="5" class="empty-state text-danger">${data.error}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="4" class="empty-state text-danger">${data.error}</td></tr>`;
                 totalsDiv.textContent = '';
                 return;
             }
             if (data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No stock movements found for this material.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No stock movements found for this material.</td></tr>';
                 totalsDiv.textContent = '';
                 return;
             }
@@ -546,16 +545,12 @@
                     ? `<span style="color:#059669;font-weight:700;">+${d.toLocaleString(undefined,{maximumFractionDigits:2})}</span>`
                     : `<span style="color:#dc2626;font-weight:700;">${d.toLocaleString(undefined,{maximumFractionDigits:2})}</span>`;
 
-                const bal = ev.running_balance ?? 0;
-                const balHtml = `<span style="font-weight:600;${bal < 0 ? 'color:#dc2626;' : ''}">${bal.toLocaleString(undefined,{maximumFractionDigits:2})}</span>`;
-
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td class="text-muted" style="white-space:nowrap;">${ev.date_str || '-'}</td>
                     <td>${badgeHtml}</td>
                     <td style="font-size:0.85em;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(ev.reference||'').replace(/"/g,"&quot;")}">  ${ev.reference || '-'}</td>
                     <td style="text-align:right;">${movHtml}</td>
-                    <td style="text-align:right;">${balHtml}</td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -563,9 +558,7 @@
             totalsDiv.innerHTML =
                 `Total In: <strong style="color:#059669;">+${totalIn.toLocaleString(undefined,{maximumFractionDigits:2})}</strong>
                 &nbsp;|&nbsp;
-                Total Out: <strong style="color:#dc2626;">−${totalOut.toLocaleString(undefined,{maximumFractionDigits:2})}</strong>
-                &nbsp;|&nbsp;
-                Net: <strong>${(totalIn - totalOut).toLocaleString(undefined,{maximumFractionDigits:2})}</strong>`;
+                Total Out: <strong style="color:#dc2626;">−${totalOut.toLocaleString(undefined,{maximumFractionDigits:2})}</strong>`;
 
         } catch (err) {
             console.error(err);

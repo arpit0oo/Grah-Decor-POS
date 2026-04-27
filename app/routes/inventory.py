@@ -318,13 +318,7 @@ def api_raw_stock_ledger():
             'delta':     delta,
         })
 
-    # ── 3. Sort oldest → newest, compute running balance ──────────────────
+    # ── 3. Sort oldest → newest, then reverse for newest-first display ────
     events.sort(key=lambda e: e['iso_date'])
-    balance = 0.0
-    for ev in events:
-        balance += ev['delta']
-        ev['running_balance'] = round(balance, 4)
-
-    # Return newest-first for display
     events.reverse()
     return jsonify(events)
