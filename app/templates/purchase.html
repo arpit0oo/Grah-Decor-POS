@@ -199,40 +199,37 @@
 </div>
 
 <!-- Modal: View PO History -->
-<div class="modal-overlay hidden" id="returnModal">
-    <div class="modal" style="max-width:400px;">
-        <div class="modal-header">
-            <h3>Return Purchase Order</h3>
-            <button class="modal-close" onclick="closeModal('returnModal')">×</button>
-        </div>
-        <p class="text-muted mb-4" style="font-size:0.85em; margin-bottom:1rem;">Returning this PO will deduct items from inventory and log an inflow (refund) if paid.</p>
-        <form autocomplete="off" id="returnForm" method="POST" action="">
-            <div class="form-group" style="margin-bottom:1.5rem;" id="return-refund-group">
-                <label>Refund Amount Received ₹ *</label>
-                <input type="number" name="refund_amount" id="return-refund-input" step="0.01" min="0" placeholder="0.00">
-            </div>
-            <div class="form-actions">
-                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; background-color:var(--danger); border-color:var(--danger);">Confirm Return</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Modal: View PO History -->
 <div class="modal-overlay hidden" id="poViewModal">
-    <div class="modal" style="max-width: 500px;">
+    <div class="modal" style="max-width:680px;">
         <div class="modal-header">
-            <h3>PO Details & History</h3>
-            <button class="modal-close" onclick="closeModal('poViewModal')">×</button>
+            <h3>PO Details &amp; History</h3>
+            <button class="modal-close" onclick="closeModal('poViewModal')">&#x00D7;</button>
         </div>
-        <div style="margin-bottom:1rem; border:1px solid var(--border); border-radius:var(--radius); padding:1rem; background:var(--bg-card); display:grid; grid-template-columns:1fr 1fr; gap:0.5rem 1rem; font-size:0.9em;">
-            <div class="text-muted">PO Number</div><div id="view-po-number" class="text-bold text-mono"></div>
-            <div class="text-muted">Vendor</div><div id="view-po-vendor" class="text-bold"></div>
-            <div class="text-muted">Item</div><div id="view-po-item" class="text-bold"></div>
-            <div class="text-muted">Qty & Total</div><div id="view-po-qty" class="text-bold"></div>
+        <!-- Header strip -->
+        <div id="view-po-header" style="display:flex; gap:1.5rem; flex-wrap:wrap; margin-bottom:1.25rem; padding:0.75rem 1rem; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); font-size:0.88em;">
+            <div><span class="text-muted">PO #</span>&nbsp;<strong id="view-po-number" class="text-mono"></strong></div>
+            <div><span class="text-muted">Vendor</span>&nbsp;<strong id="view-po-vendor"></strong></div>
+            <div><span class="text-muted">Status</span>&nbsp;<span id="view-po-status"></span></div>
+            <div><span class="text-muted">Date</span>&nbsp;<strong id="view-po-date"></strong></div>
         </div>
-        <div style="margin-top:1.5rem; padding-top:1.25rem; border-top:1px solid var(--border);">
-            <div style="font-size:0.75em; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin-bottom:1rem; font-weight:600;">PO Journey Timeline</div>
+        <!-- Line items table -->
+        <div style="overflow-x:auto; margin-bottom:1.25rem;">
+            <table class="data-table" style="width:100%;">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th style="text-align:right;">Qty</th>
+                        <th style="text-align:right;">Unit Cost &#x20b9;</th>
+                        <th style="text-align:right;">Line Total &#x20b9;</th>
+                    </tr>
+                </thead>
+                <tbody id="view-po-items-body"></tbody>
+                <tfoot id="view-po-footer"></tfoot>
+            </table>
+        </div>
+        <!-- Timeline -->
+        <div style="padding-top:1rem; border-top:1px solid var(--border);">
+            <div style="font-size:0.72em; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-secondary); margin-bottom:1rem; font-weight:700;">PO Journey Timeline</div>
             <div id="view-po-timeline" style="display:flex; align-items:flex-start; gap:0; overflow-x:auto; padding-bottom:0.5rem;"></div>
         </div>
     </div>
@@ -317,26 +314,86 @@ function openReturnModal(id, poId, status) {
 
 function openViewPoModal(btn) {
     const data = JSON.parse(btn.getAttribute('data-po'));
+
+    // ── Header strip ──────────────────────────────────────────────────────
     document.getElementById('view-po-number').textContent = data.po_number || '-';
     document.getElementById('view-po-vendor').textContent = data.vendor_name || '-';
-    
+
+    const dateRaw = data.created_at;
+    let dateStr = '-';
+    if (dateRaw) {
+        try {
+            const d = new Date(dateRaw);
+            if (!isNaN(d)) dateStr = d.toLocaleDateString('en-GB');
+        } catch(e) {}
+    }
+    document.getElementById('view-po-date').textContent = dateStr;
+
+    const statusColors = {
+        'Draft': ['#fef3c7','#92400e','#fde68a'],
+        'Sent':  ['#e0f2fe','#0369a1','#bae6fd'],
+        'Received': ['#d1fae5','#065f46','#6ee7b7'],
+        'Paid':  ['#ede9fe','#5b21b6','#c4b5fd'],
+        'Cancelled': ['#fee2e2','#991b1b','#fca5a5'],
+        'Returned':  ['#ffedd5','#9a3412','#fdba74'],
+    };
+    const sc = statusColors[data.status] || ['#f3f4f6','#374151','#d1d5db'];
+    document.getElementById('view-po-status').innerHTML =
+        `<span class="badge" style="background:${sc[0]};color:${sc[1]};border:1px solid ${sc[2]};">${data.status || '-'}</span>`;
+
+    // ── Line items table ───────────────────────────────────────────────────
+    const tbody  = document.getElementById('view-po-items-body');
+    const tfoot  = document.getElementById('view-po-footer');
+    tbody.innerHTML = '';
+    tfoot.innerHTML = '';
+
     const items = data.items || [];
+    let grandTotal = 0;
+
     if (items.length > 0) {
-        document.getElementById('view-po-item').innerHTML = items.map(it => `${it.item}`).join('<br>');
-        document.getElementById('view-po-qty').innerHTML = items.map(it => `${it.quantity} @ ₹${parseFloat(it.unit_cost||0).toFixed(2)}`).join('<br>') + `<br><strong>Total: ₹${parseFloat(data.total_cost||0).toFixed(2)}</strong>`;
+        items.forEach(it => {
+            const qty  = parseFloat(it.quantity  || 0);
+            const cost = parseFloat(it.unit_cost || 0);
+            const line = qty * cost;
+            grandTotal += line;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${it.item || '-'}</td>
+                <td style="text-align:right;">${qty.toLocaleString()}</td>
+                <td style="text-align:right;">${cost.toFixed(2)}</td>
+                <td style="text-align:right; font-weight:600;">${line.toFixed(2)}</td>
+            `;
+            tbody.appendChild(tr);
+        });
     } else {
-        document.getElementById('view-po-item').textContent = data.item || '-';
-        document.getElementById('view-po-qty').textContent = `${data.quantity} @ ₹${parseFloat(data.unit_cost||0).toFixed(2)} = ₹${parseFloat(data.total_cost||0).toFixed(2)}`;
+        // Legacy single-item PO
+        const qty  = parseFloat(data.quantity  || 0);
+        const cost = parseFloat(data.unit_cost || 0);
+        grandTotal = parseFloat(data.total_cost || qty * cost);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${data.item || '-'}</td>
+            <td style="text-align:right;">${qty.toLocaleString()}</td>
+            <td style="text-align:right;">${cost.toFixed(2)}</td>
+            <td style="text-align:right; font-weight:600;">${grandTotal.toFixed(2)}</td>
+        `;
+        tbody.appendChild(tr);
     }
 
-    const history = data.status_history || [];
+    // Grand total footer row
+    tfoot.innerHTML = `
+        <tr style="border-top:2px solid var(--border);">
+            <td colspan="3" style="text-align:right; font-weight:700; padding-top:0.5rem;">Grand Total</td>
+            <td style="text-align:right; font-weight:700; color:var(--primary); padding-top:0.5rem;">&#x20b9; ${grandTotal.toFixed(2)}</td>
+        </tr>
+    `;
+
+    // ── Timeline ───────────────────────────────────────────────────────────
+    const history  = data.status_history || [];
     const timeline = document.getElementById('view-po-timeline');
     timeline.innerHTML = '';
 
-    const statusColors = {
-        'Draft': '#f59e0b', 'Sent': '#3b82f6', 'Received': '#10b981',
-        'Paid': '#6366f1', 'Cancelled': '#ef4444'
-    };
+    const tlColors = { 'Draft':'#f59e0b','Sent':'#3b82f6','Received':'#10b981','Paid':'#6366f1','Cancelled':'#ef4444','Returned':'#f97316' };
 
     if (history.length === 0) {
         timeline.innerHTML = '<span class="text-muted" style="font-size:0.85em;">No status history available.</span>';
@@ -347,25 +404,19 @@ function openViewPoModal(btn) {
             if (hop.timestamp) {
                 try {
                     const d = new Date(hop.timestamp);
-                    if (!isNaN(d)) timeStr = d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-                } catch (e) {}
+                    if (!isNaN(d)) timeStr = d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+                } catch(e) {}
             }
-            const color = statusColors[hop.status] || '#6b7280';
+            const color = tlColors[hop.status] || '#6b7280';
             const node = document.createElement('div');
-            node.style.display = 'flex';
-            node.style.flexDirection = 'column';
-            node.style.alignItems = 'flex-start';
-            node.style.position = 'relative';
-            node.style.minWidth = '110px';
-            node.style.paddingRight = '15px';
-
+            node.style.cssText = 'display:flex;flex-direction:column;align-items:flex-start;position:relative;min-width:110px;padding-right:15px;';
             node.innerHTML = `
-                <div style="font-size:0.75em; color:var(--text-muted); margin-bottom:4px;">${timeStr}</div>
-                <div style="display:flex; align-items:center; width:100%;">
-                    <div style="width:12px; height:12px; border-radius:50%; background:${color}; z-index:2;"></div>
-                    ${!isLast ? `<div style="height:2px; background:var(--border); flex:1; margin-left:-2px; z-index:1;"></div>` : ''}
+                <div style="font-size:0.75em;color:var(--text-muted);margin-bottom:4px;">${timeStr}</div>
+                <div style="display:flex;align-items:center;width:100%;">
+                    <div style="width:12px;height:12px;border-radius:50%;background:${color};z-index:2;"></div>
+                    ${!isLast ? `<div style="height:2px;background:var(--border);flex:1;margin-left:-2px;z-index:1;"></div>` : ''}
                 </div>
-                <div style="font-size:0.85em; font-weight:600; color:${color}; margin-top:6px;">${hop.status}</div>
+                <div style="font-size:0.85em;font-weight:600;color:${color};margin-top:6px;">${hop.status}</div>
             `;
             timeline.appendChild(node);
         });
