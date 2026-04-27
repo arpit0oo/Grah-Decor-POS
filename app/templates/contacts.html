@@ -31,11 +31,13 @@
             <tbody>
                 {% for v in vendors %}
                 <tr>
-                    <form method="POST" action="{{ url_for('contact.update_vendor_route', vendor_id=v.id) }}" style="display: contents;">
+                    <form method="POST" action="{{ url_for('contact.update_vendor_route', vendor_id=v.id) }}"
+                        style="display: contents;">
                         <td class="text-mono">{{ v.vendor_id }}</td>
                         <td>
                             <span class="view-mode-{{ v.id }} text-bold">{{ v.name }}</span>
-                            <input type="text" name="name" class="edit-mode-{{ v.id }} hidden inline-input" value="{{ v.name }}" required>
+                            <input type="text" name="name" class="edit-mode-{{ v.id }} hidden inline-input"
+                                value="{{ v.name }}" required>
                         </td>
                         <td>
                             <span class="view-mode-{{ v.id }} text-muted">
@@ -45,14 +47,19 @@
                                 Not available
                                 {% endif %}
                             </span>
-                            <input type="text" name="phone_numbers" class="edit-mode-{{ v.id }} hidden inline-input" value="{{ v.phone_numbers|join(', ') if v.phone_numbers else '' }}" placeholder="Comma separated numbers">
+                            <input type="text" name="phone_numbers" class="edit-mode-{{ v.id }} hidden inline-input"
+                                value="{{ v.phone_numbers|join(', ') if v.phone_numbers else '' }}"
+                                placeholder="Comma separated numbers">
                         </td>
                         <td class="text-muted">{{ v.created_at.strftime('%d/%m/%Y') if v.created_at and
                             v.created_at.strftime else '-' }}</td>
                         <td class="actions-cell">
-                            <button type="button" class="btn btn-xs btn-outline-primary view-mode-{{ v.id }}" onclick="toggleEdit('{{ v.id }}')">Edit</button>
-                            <button type="submit" class="btn btn-xs btn-primary edit-mode-{{ v.id }} hidden">Save</button>
-                            <button type="button" class="btn btn-xs btn-ghost edit-mode-{{ v.id }} hidden" onclick="toggleEdit('{{ v.id }}')">Cancel</button>
+                            <button type="button" class="btn btn-xs btn-outline-primary view-mode-{{ v.id }}"
+                                onclick="toggleEdit('{{ v.id }}')">Edit</button>
+                            <button type="submit"
+                                class="btn btn-xs btn-primary edit-mode-{{ v.id }} hidden">Save</button>
+                            <button type="button" class="btn btn-xs btn-ghost edit-mode-{{ v.id }} hidden"
+                                onclick="toggleEdit('{{ v.id }}')">Cancel</button>
                         </td>
                     </form>
                 </tr>
@@ -78,28 +85,49 @@
                     <th>Phone Numbers</th>
                     <th>Platform Used</th>
                     <th>Recent Order ID</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for c in customers %}
                 <tr>
-                    <td class="text-mono">{{ c.customer_id }}</td>
-                    <td class="text-bold">{{ c.name }}</td>
-                    <td class="text-muted">
-                        {% if c.phone_numbers %}
-                        {{ c.phone_numbers | join(', ') }}
-                        {% else %}
-                        Not available
-                        {% endif %}
-                    </td>
-                    <td><span class="badge" style="background:#e0e7ff; color:#3730a3; border: 1px solid #c7d2fe;">{{
-                            c.platform_used or 'Unknown' }}</span></td>
-                    <td class="text-mono">{{ c.recent_order_id or '-' }}</td>
+                    <form method="POST" action="{{ url_for('contact.update_customer_route', customer_id=c.id) }}"
+                        style="display: contents;">
+                        <td class="text-mono">{{ c.customer_id }}</td>
+                        <td>
+                            <span class="view-mode-{{ c.id }} text-bold">{{ c.name }}</span>
+                            <input type="text" name="name" class="edit-mode-{{ c.id }} hidden inline-input"
+                                value="{{ c.name }}" required>
+                        </td>
+                        <td>
+                            <span class="view-mode-{{ c.id }} text-muted">
+                                {% if c.phone_numbers %}
+                                {{ c.phone_numbers | join(', ') }}
+                                {% else %}
+                                Not available
+                                {% endif %}
+                            </span>
+                            <input type="text" name="phone_numbers" class="edit-mode-{{ c.id }} hidden inline-input"
+                                value="{{ c.phone_numbers|join(', ') if c.phone_numbers else '' }}"
+                                placeholder="Comma separated numbers">
+                        </td>
+                        <td><span class="badge" style="background:#e0e7ff; color:#3730a3; border: 1px solid #c7d2fe;">{{
+                                c.platform_used or 'Unknown' }}</span></td>
+                        <td class="text-mono">{{ c.recent_order_id or '-' }}</td>
+                        <td class="actions-cell">
+                            <button type="button" class="btn btn-xs btn-outline-primary view-mode-{{ c.id }}"
+                                onclick="toggleEdit('{{ c.id }}')">Edit</button>
+                            <button type="submit"
+                                class="btn btn-xs btn-primary edit-mode-{{ c.id }} hidden">Save</button>
+                            <button type="button" class="btn btn-xs btn-ghost edit-mode-{{ c.id }} hidden"
+                                onclick="toggleEdit('{{ c.id }}')">Cancel</button>
+                        </td>
+                    </form>
                 </tr>
                 {% endfor %}
                 {% if not customers %}
                 <tr>
-                    <td colspan="5" class="empty-state">No customers yet. Customers are added during order creation.
+                    <td colspan="6" class="empty-state">No customers yet. Customers are added during order creation.
                     </td>
                 </tr>
                 {% endif %}
@@ -124,11 +152,14 @@
             <div id="phoneInputsContainer">
                 <div class="form-group" style="margin-bottom: 0.5rem;">
                     <label>Phone Number(s)</label>
-                    <input type="text" name="phone_1" placeholder="e.g. 9876543210" pattern="\d{10}" maxlength="10" title="Please enter a 10-digit phone number" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                    <input type="text" name="phone_1" placeholder="e.g. 9876543210" pattern="\d{10}" maxlength="10"
+                        title="Please enter a 10-digit phone number"
+                        oninput="this.value = this.value.replace(/[^0-9]/g, '')">
                 </div>
             </div>
 
-            <button type="button" id="addPhoneBtn" class="btn btn-xs btn-ghost" onclick="addPhoneRow()" style="margin-bottom: 1.5rem;">+
+            <button type="button" id="addPhoneBtn" class="btn btn-xs btn-ghost" onclick="addPhoneRow()"
+                style="margin-bottom: 1.5rem;">+
                 Add another number</button>
 
             <div class="form-actions">
@@ -157,7 +188,7 @@
     let phoneCount = 1;
     function addPhoneRow() {
         if (phoneCount >= 2) return;
-        
+
         phoneCount++;
         const container = document.getElementById('phoneInputsContainer');
         const div = document.createElement('div');
@@ -174,7 +205,7 @@
     function toggleEdit(id) {
         const viewElements = document.querySelectorAll(`.view-mode-${id}`);
         const editElements = document.querySelectorAll(`.edit-mode-${id}`);
-        
+
         viewElements.forEach(el => el.classList.toggle('hidden'));
         editElements.forEach(el => el.classList.toggle('hidden'));
     }

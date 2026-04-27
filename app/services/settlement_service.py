@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from google.cloud.firestore_v1 import FieldFilter
 from app import get_db
 from app.services.cashbook_service import add_cashbook_entry
-from app.services.inventory_service import adjust_ready_stock_qty
+from app.services.inventory_service import adjust_ready_stock_qty, log_inventory_note
 
 
 def get_unsettled_orders(platform=None):
@@ -143,8 +143,20 @@ def process_order_return(order_id, return_type, penalty_amount, item_condition):
         'updated_at':     now,
     }
     
+    o_id = order_data.get('order_id', '')
+    order_label = f"Order {o_id}" if o_id else "Order"
+
     if return_type == 'customer_return' and penalty_amount:
-        update['penalty_amount'] = float(penalty_amount)
+        p_amt = float(penalty_amount)
+        if p_amt > 0:
+            update['penalty_amount'] = p_amt
+            add_cashbook_entry(
+                entry_type='outflow',
+                category='Penalty',
+                description=f"Customer Return Penalty — {order_label}",
+                amount=p_amt,
+                reference_id=order_id
+            )
 
     # Append to status_history
     existing_history = order_data.get('status_history', [])
@@ -153,18 +165,25 @@ def process_order_return(order_id, return_type, penalty_amount, item_condition):
 
     db.collection('orders').document(order_id).update(update)
     
-    # Restock items if good condition
+    # Restock items if good condition; log damaged items for audit trail
+    order_items = order_data.get('order_items', [])
+
     if item_condition == 'restock':
-        order_items = order_data.get('order_items', [])
-        o_id = order_data.get('order_id', '')
         for item in order_items:
             product = item.get('product', '')
             color = item.get('color', '')
             qty = float(item.get('quantity', 1))
             if product:
-                label = f"Order {o_id} " if o_id else "Order "
-                reason = f"{label}returned - restocked ({new_status})"
+                reason = f"{order_label} returned - restocked ({new_status})"
                 adjust_ready_stock_qty(product, color, qty, 0, reason=reason, ref_id=order_id)
+    else:
+        # Damaged — stock was already deducted at dispatch; write an audit note per item
+        for item in order_items:
+            product = item.get('product', '')
+            color = item.get('color', '')
+            if product:
+                reason = f"{order_label} {new_status} — Damaged (not restocked)"
+                log_inventory_note('Ready Stock', product, color, reason, reference_id=order_id)
     
     return True
 

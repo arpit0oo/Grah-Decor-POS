@@ -25,6 +25,22 @@ def log_inventory_transaction(item_type, item_name, color, delta, reason, refere
         'reference_id': reference_id
     })
 
+def log_inventory_note(item_type, item_name, color, reason, reference_id=''):
+    """Write an informational audit entry with delta=0 (no quantity change).
+    Used for events like damaged returns where stock was already deducted
+    but an audit trail entry is still required.
+    """
+    db = get_db()
+    db.collection('inventory_log').add({
+        'date': datetime.now(timezone.utc),
+        'item_type': item_type,
+        'item_name': item_name,
+        'color': color,
+        'delta': 0,
+        'reason': reason,
+        'reference_id': reference_id
+    })
+
 def get_inventory_logs(limit=100):
     db = get_db()
     docs = db.collection('inventory_log').order_by('date', direction='DESCENDING').limit(limit).stream()

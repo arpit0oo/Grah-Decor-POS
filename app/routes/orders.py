@@ -87,12 +87,16 @@ def order_add():
     platform = request.form.get('platform', '')
     
     # Handle Customer Logic
-    customer_mode = request.form.get('customer_mode', 'existing')
+    customer_mode = request.form.get('customer_mode', 'new')
     customer_name = ''
     customer_id = ''
     phone_number = request.form.get('number', '').strip()
     
-    if customer_mode == 'existing':
+    if customer_mode == 'unknown':
+        customer_name = 'Unknown'
+        phone_number = ''
+        customer_id = add_customer(customer_name, [], platform_used=platform, recent_order_id=order_id)
+    elif customer_mode == 'existing':
         cust_val = request.form.get('existing_customer', '')
         if cust_val:
             parts = cust_val.split(' - ', 1)
@@ -105,14 +109,12 @@ def order_add():
             if c_doc:
                 update_customer_metadata(c_doc['id'], platform_used=platform, recent_order_id=order_id)
                 phone_number = c_doc['phone_numbers'][0] if c_doc['phone_numbers'] else phone_number
-    else:
+    else:  # 'new'
         customer_name = request.form.get('new_customer_name', '').strip()
         phone_number = request.form.get('new_customer_phone', '').strip()
         phones = [phone_number] if phone_number else []
         if customer_name:
             c_doc_id = add_customer(customer_name, phones, platform_used=platform, recent_order_id=order_id)
-            # The add_customer returns the customer_id string, wait, no it returns the ID string (GDC-XXX)
-            # We need to make sure contact_service returns the generated ID.
             customer_id = c_doc_id
 
     data = {
@@ -153,21 +155,57 @@ def order_edit(doc_id):
             return redirect(url_for('orders.orders_list'))
 
     order_items = parse_order_items(request.form)
+
+    # Handle customer re-assignment for Unknown orders
+    customer_name = request.form.get('customer', '').strip()
+    phone_number  = request.form.get('number', '').strip()
+    customer_id_field = request.form.get('customer_id', '').strip()
+    platform = request.form.get('platform', '')
+    order_id_field = request.form.get('order_id', '').strip()
+
+    edit_customer_mode = request.form.get('edit_customer_mode', '')
+    if edit_customer_mode == 'assign_existing':
+        cust_val = request.form.get('edit_existing_customer', '')
+        if cust_val:
+            parts = cust_val.split(' - ', 1)
+            customer_id_field = parts[0]
+            customer_name = parts[1] if len(parts) > 1 else parts[0]
+            customers = get_all_customers()
+            c_doc = next((c for c in customers if c['customer_id'] == customer_id_field), None)
+            if c_doc:
+                update_customer_metadata(c_doc['id'], platform_used=platform, recent_order_id=order_id_field)
+                phone_number = c_doc['phone_numbers'][0] if c_doc.get('phone_numbers') else phone_number
+    elif edit_customer_mode == 'assign_new':
+        new_name = request.form.get('edit_new_customer_name', '').strip()
+        new_phone = request.form.get('edit_new_customer_phone', '').strip()
+        if new_name:
+            phones = [new_phone] if new_phone else []
+            new_cid = add_customer(new_name, phones, platform_used=platform, recent_order_id=order_id_field)
+            customer_name = new_name
+            customer_id_field = new_cid
+            phone_number = new_phone
     
     data = {
-        'date': request.form.get('date', ''),
-        'order_id': request.form.get('order_id', '').strip(),
-        'customer': request.form.get('customer', '').strip(),
-        'number': request.form.get('number', '').strip(),
+        'date': order_id_field and request.form.get('date', ''),
+        'order_id': order_id_field,
+        'customer': customer_name,
+        'customer_id': customer_id_field,
+        'number': phone_number,
         'order_items': order_items,
-        'platform': request.form.get('platform', ''),
+        'platform': platform,
         'shipping': request.form.get('shipping', 0),
         'refund': request.form.get('refund', 0),
         'tax': request.form.get('tax', 0),
         'marketplace_fee': request.form.get('marketplace_fee', 0),
-        'status': request.form.get('status', 'Pending'),
         'reviews': request.form.get('reviews', '').strip(),
     }
+    
+    # Only update status if it's explicitly provided in the form (e.g. from bulk or a future field)
+    if 'status' in request.form:
+        data['status'] = request.form.get('status')
+
+    # Restore date (was accidentally set to falsy above)
+    data['date'] = request.form.get('date', '')
     update_order(doc_id, data)
     flash('Order updated.', 'success')
     return redirect(url_for('orders.orders_list'))

@@ -51,12 +51,15 @@
 
         <!-- Row 2: Customer -->
         <div class="order-form-section-label">Customer</div>
-        <div style="margin-bottom:0.6rem; display:flex; gap:1.5rem; align-items:center;">
+        <div style="margin-bottom:0.6rem; display:flex; gap:1.5rem; align-items:center; flex-wrap:wrap;">
             <label style="font-size:0.875rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
                 <input type="radio" name="customer_mode" value="existing" onchange="toggleCustomerMode('add')"> Existing
             </label>
             <label style="font-size:0.875rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
                 <input type="radio" name="customer_mode" value="new" checked onchange="toggleCustomerMode('add')"> New Customer
+            </label>
+            <label style="font-size:0.875rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                <input type="radio" name="customer_mode" value="unknown" onchange="toggleCustomerMode('add')"> Unknown / Walk-in
             </label>
         </div>
         <div id="add-existing-customer-group" class="order-form-row hidden" style="grid-template-columns:1fr;">
@@ -81,6 +84,9 @@
                     pattern="[0-9]{10}" maxlength="10"
                     oninput="this.value = this.value.replace(/[^0-9]/g, '');">
             </div>
+        </div>
+        <div id="add-unknown-customer-group" class="hidden" style="padding:0.5rem 0.75rem; background:#fffbeb; border:1px solid #fde68a; border-radius:6px; font-size:0.85rem; color:#92400e;">
+            🚶 Order will be saved with customer = <strong>Unknown</strong>. You can assign a customer later via Edit.
         </div>
 
         <!-- Row 3: Order Items -->
@@ -220,7 +226,6 @@
                                     <option value="Cancelled">Cancelled</option>
                                 {% elif order.status == 'Delivered' %}
                                     <option value="Delivered" selected>Delivered</option>
-                                    <option value="Settled">Settled</option>
                                 {% endif %}
                             </select>
                         {% endif %}
@@ -373,7 +378,8 @@
 
             <!-- Row 2: Customer -->
             <div class="order-form-section-label">Customer</div>
-            <div class="order-form-row" style="grid-template-columns:1fr 1fr;">
+            <!-- Standard name/phone fields (hidden when customer is Unknown) -->
+            <div id="edit-customer-standard" class="order-form-row" style="grid-template-columns:1fr 1fr;">
                 <div class="form-group" style="margin:0;">
                     <label>Customer Name</label>
                     <input type="text" name="customer" id="edit-customer">
@@ -383,6 +389,43 @@
                     <input type="tel" name="number" id="edit-number"
                         pattern="[0-9]{10}" maxlength="10"
                         oninput="this.value = this.value.replace(/[^0-9]/g, '');">
+                </div>
+            </div>
+            <!-- Reassignment panel — shown only when customer == Unknown -->
+            <div id="edit-unknown-banner" class="hidden" style="background:#fffbeb; border:1px solid #fde68a; border-radius:6px; padding:0.75rem; margin-bottom:0.5rem;">
+                <div style="font-size:0.82rem; color:#92400e; margin-bottom:0.6rem;">⚠ This order has no assigned customer. Assign one now (optional):</div>
+                <input type="hidden" name="edit_customer_mode" id="edit-customer-mode-input" value="">
+                <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+                    <label style="font-size:0.85rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                        <input type="radio" name="edit_customer_choice" value="none" checked onchange="toggleEditCustomerAssign('none')"> Keep Unknown
+                    </label>
+                    <label style="font-size:0.85rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                        <input type="radio" name="edit_customer_choice" value="assign_existing" onchange="toggleEditCustomerAssign('assign_existing')"> Link Existing Customer
+                    </label>
+                    <label style="font-size:0.85rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                        <input type="radio" name="edit_customer_choice" value="assign_new" onchange="toggleEditCustomerAssign('assign_new')"> Create New Customer
+                    </label>
+                </div>
+                <!-- Existing Customer Select -->
+                <div id="edit-assign-existing-group" class="hidden" style="margin-top:0.6rem;">
+                    <select name="edit_existing_customer" id="edit-assign-existing-select" style="width:100%;">
+                        <option value="" disabled selected>Select a customer...</option>
+                        {% for c in customers %}
+                        <option value="{{ c.customer_id }} - {{ c.name }}">{{ c.customer_id }} - {{ c.name }} ({{ c.phone_numbers[0] if c.phone_numbers else 'No phone' }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <!-- New Customer Fields -->
+                <div id="edit-assign-new-group" class="hidden order-form-row" style="margin-top:0.6rem; grid-template-columns:1fr 1fr;">
+                    <div class="form-group" style="margin:0;">
+                        <label>New Customer Name *</label>
+                        <input type="text" name="edit_new_customer_name" id="edit-assign-new-name" placeholder="Customer name">
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label>Phone</label>
+                        <input type="tel" name="edit_new_customer_phone" id="edit-assign-new-phone" placeholder="10-digit number"
+                            maxlength="10" oninput="this.value = this.value.replace(/[^0-9]/g, '');">
+                    </div>
                 </div>
             </div>
 
@@ -772,7 +815,22 @@
         document.getElementById('edit-shipping').value = data.shipping || 0;
         document.getElementById('edit-tax').value = data.tax || 0;
         document.getElementById('edit-marketplace_fee').value = data.marketplace_fee || 0;
-        
+
+        // Handle Unknown customer — show reassignment banner
+        const isUnknown = (data.customer || '').toLowerCase() === 'unknown';
+        const standardRow = document.getElementById('edit-customer-standard');
+        const unknownBanner = document.getElementById('edit-unknown-banner');
+        if (isUnknown) {
+            standardRow.classList.add('hidden');
+            unknownBanner.classList.remove('hidden');
+            // Reset the reassignment panel
+            document.querySelectorAll('input[name="edit_customer_choice"]').forEach(r => r.checked = (r.value === 'none'));
+            toggleEditCustomerAssign('none');
+        } else {
+            standardRow.classList.remove('hidden');
+            unknownBanner.classList.add('hidden');
+        }
+
         calcSettlement('edit');
         document.getElementById('editModal').classList.remove('hidden');
     }
@@ -780,19 +838,33 @@
     function toggleCustomerMode(prefix) {
         let mode = document.querySelector(`input[name="customer_mode"]:checked`).value;
         let existingGroup = document.getElementById(`${prefix}-existing-customer-group`);
-        let newGroup = document.getElementById(`${prefix}-new-customer-group`);
-        
+        let newGroup      = document.getElementById(`${prefix}-new-customer-group`);
+        let unknownGroup  = document.getElementById(`${prefix}-unknown-customer-group`);
+        let newNameInput  = document.getElementById(`${prefix}-new-customer-name`);
+        let existingInput = document.getElementById(`${prefix}-existing-customer`);
+
+        existingGroup.classList.add('hidden');
+        newGroup.classList.add('hidden');
+        if (unknownGroup) unknownGroup.classList.add('hidden');
+        if (newNameInput) newNameInput.required = false;
+        if (existingInput) existingInput.required = false;
+
         if (mode === 'existing') {
             existingGroup.classList.remove('hidden');
-            newGroup.classList.add('hidden');
-            document.getElementById(`${prefix}-existing-customer`).required = true;
-            document.getElementById(`${prefix}-new-customer-name`).required = false;
-        } else {
-            existingGroup.classList.add('hidden');
+            if (existingInput) existingInput.required = true;
+        } else if (mode === 'unknown') {
+            if (unknownGroup) unknownGroup.classList.remove('hidden');
+        } else { // 'new'
             newGroup.classList.remove('hidden');
-            document.getElementById(`${prefix}-existing-customer`).required = false;
-            document.getElementById(`${prefix}-new-customer-name`).required = true;
+            if (newNameInput) newNameInput.required = true;
         }
+    }
+
+    function toggleEditCustomerAssign(choice) {
+        document.getElementById('edit-assign-existing-group').classList.toggle('hidden', choice !== 'assign_existing');
+        document.getElementById('edit-assign-new-group').classList.toggle('hidden', choice !== 'assign_new');
+        document.getElementById('edit-customer-mode-input').value = choice === 'none' ? '' : choice;
+        document.getElementById('edit-assign-new-name').required = (choice === 'assign_new');
     }
 
     function calcSettlement(prefix) {

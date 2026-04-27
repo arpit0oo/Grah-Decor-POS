@@ -104,3 +104,16 @@ def update_vendor(vendor_doc_id, name, phone_numbers):
         'phone_numbers': phone_numbers,
         'updated_at': datetime.now(timezone.utc)
     })
+
+def update_customer(customer_doc_id, name, phone_numbers):
+    db = get_db()
+    doc_ref = db.collection('customers').document(customer_doc_id)
+
+    if not phone_numbers:
+        phone_numbers = ["Not available"]
+
+    doc_ref.update({
+        'name': name,
+        'phone_numbers': phone_numbers,
+        'updated_at': datetime.now(timezone.utc)
+    })
