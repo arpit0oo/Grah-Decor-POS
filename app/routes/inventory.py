@@ -303,12 +303,16 @@ def api_raw_stock_ledger():
         r_lower = reason.lower()
         if 'audit' in r_lower:
             ev_type = 'Audit Adjustment'
+        elif 'returned' in r_lower or 'cancelled' in r_lower or 'reversal' in r_lower:
+            ev_type = 'PO Return'
+        elif 'production' in r_lower or 'consumed' in r_lower or 'manufactured' in r_lower:
+            ev_type = 'Production'
         elif 'purchase' in r_lower or 'received' in r_lower:
             ev_type = 'PO Received'
         elif 'manual add' in r_lower or 'manual adjustment' in r_lower:
             ev_type = 'Manual'
         else:
-            ev_type = 'Production' if delta < 0 else 'Inflow'
+            ev_type = 'Inflow' if delta > 0 else 'Outflow'
 
         events.append({
             'iso_date':  iso,
