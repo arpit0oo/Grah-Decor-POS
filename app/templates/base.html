@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,6 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
+
 <body>
     {% if request.endpoint != 'auth.login' %}
     <!-- Sidebar -->
@@ -20,49 +22,49 @@
         <ul class="nav-list">
             <li>
                 <a href="{{ url_for('orders.orders_list') }}"
-                   class="nav-link {% if request.path.startswith('/orders') %}active{% endif %}">
+                    class="nav-link {% if request.path.startswith('/orders') %}active{% endif %}">
                     <span class="nav-icon">📋</span>
                     <span class="nav-label">Order Book</span>
                 </a>
             </li>
             <li>
                 <a href="{{ url_for('settlements.settlements_list') }}"
-                   class="nav-link {% if request.path.startswith('/settlements') %}active{% endif %}">
+                    class="nav-link {% if request.path.startswith('/settlements') %}active{% endif %}">
                     <span class="nav-icon">💳</span>
                     <span class="nav-label">Settlements</span>
                 </a>
             </li>
             <li>
                 <a href="{{ url_for('inventory.inventory_list') }}"
-                   class="nav-link {% if request.path.startswith('/inventory') %}active{% endif %}">
+                    class="nav-link {% if request.path.startswith('/inventory') %}active{% endif %}">
                     <span class="nav-icon">📦</span>
                     <span class="nav-label">Inventory</span>
                 </a>
             </li>
             <li>
                 <a href="{{ url_for('snapshots.snapshots_list') }}"
-                   class="nav-link {% if request.path.startswith('/snapshots') %}active{% endif %}">
+                    class="nav-link {% if request.path.startswith('/snapshots') %}active{% endif %}">
                     <span class="nav-icon">📅</span>
-                    <span class="nav-label">Snapshots</span>
+                    <span class="nav-label">Stock Audit</span>
                 </a>
             </li>
             <li>
                 <a href="{{ url_for('purchase.purchase_list') }}"
-                   class="nav-link {% if request.path.startswith('/purchases') %}active{% endif %}">
+                    class="nav-link {% if request.path.startswith('/purchases') %}active{% endif %}">
                     <span class="nav-icon">🛒</span>
                     <span class="nav-label">Purchase Book</span>
                 </a>
             </li>
             <li>
                 <a href="{{ url_for('contact.contacts_list') }}"
-                   class="nav-link {% if request.path.startswith('/contacts') %}active{% endif %}">
+                    class="nav-link {% if request.path.startswith('/contacts') %}active{% endif %}">
                     <span class="nav-icon">👥</span>
                     <span class="nav-label">Contacts</span>
                 </a>
             </li>
             <li>
                 <a href="{{ url_for('cashbook.dashboard') }}"
-                   class="nav-link {% if request.path.startswith('/cashbook') %}active{% endif %}">
+                    class="nav-link {% if request.path.startswith('/cashbook') %}active{% endif %}">
                     <span class="nav-icon">💰</span>
                     <span class="nav-label">Cash Book</span>
                 </a>
@@ -110,4 +112,5 @@
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>
+
 </html>
