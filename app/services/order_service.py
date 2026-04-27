@@ -83,6 +83,7 @@ def add_order(data):
         'date': order_date,
         'order_id': data.get('order_id', ''),
         'customer': data.get('customer', ''),
+        'customer_id': data.get('customer_id', ''),
         'number': data.get('number', ''),
         'order_items': order_items,
         'platform': data.get('platform', ''),

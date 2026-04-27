@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from datetime import datetime
 from app.services.order_service import (
     get_all_orders, add_order, update_order, delete_order,
@@ -261,3 +261,54 @@ def orders_bulk_action():
         flash('Invalid action requested.', 'error')
         
     return redirect(url_for('orders.orders_list'))
+
+
+# ── JSON API: full order document for modal / contacts page ────────────────
+@orders_bp.route('/api/order-detail/<order_id>')
+def api_order_detail(order_id):
+    """
+    Returns the full Firestore document for an order looked up by its
+    'order_id' field value (e.g. "test2312312313"), NOT the Firestore doc ID.
+    Timestamps are ISO-serialised so they are JSON-safe.
+    """
+    from app import get_db
+    from google.cloud.firestore_v1 import FieldFilter
+    db = get_db()
+
+    # Query by the user-facing order_id field
+    matches = list(
+        db.collection('orders')
+          .where(filter=FieldFilter('order_id', '==', order_id))
+          .limit(1)
+          .stream()
+    )
+    if not matches:
+        return jsonify({'error': 'Order not found', 'order_id': order_id}), 404
+
+    doc = matches[0]
+    data = {'doc_id': doc.id, **doc.to_dict()}
+
+    # Serialize all top-level datetime / Firestore timestamp fields
+    for key, val in list(data.items()):
+        if hasattr(val, 'isoformat'):
+            data[key] = val.isoformat()
+
+    # Serialize timestamps inside order_items too
+    serialised_items = []
+    for item in data.get('order_items', []):
+        serialised_item = {}
+        for k, v in item.items():
+            serialised_item[k] = v.isoformat() if hasattr(v, 'isoformat') else v
+        serialised_items.append(serialised_item)
+    data['order_items'] = serialised_items
+
+    # Serialize status_history timestamps
+    history = []
+    for entry in data.get('status_history', []):
+        history.append({
+            k: v.isoformat() if hasattr(v, 'isoformat') else v
+            for k, v in entry.items()
+        })
+    data['status_history'] = history
+
+    return jsonify(data)
