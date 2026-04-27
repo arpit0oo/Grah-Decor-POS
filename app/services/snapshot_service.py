@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from app import get_db
-from app.services.inventory_service import log_inventory_note, log_inventory_transaction
+from app.services.inventory_service import log_inventory_transaction
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -83,7 +83,7 @@ def take_opening_snapshot():
     - Only one OPEN period allowed at a time → returns ('already_open', None) if one exists.
     - First-ever period → reads current raw_materials quantities from the system.
     - Subsequent periods → carries forward the previous closing physical counts.
-    - Writes an informational inventory_log note (delta=0) for each material.
+    - Read-only operation: writes nothing to inventory_log.
 
     Returns ('ok', doc_id) on success, or an error string tuple.
     """
@@ -147,16 +147,6 @@ def take_opening_snapshot():
         'closing':       None,
         'created_at':    now,
     })
-
-    # Audit log — informational note per material
-    for m in materials:
-        log_inventory_note(
-            item_type='Raw Material',
-            item_name=m['name'],
-            color='',
-            reason='Stock Audit — Period Opened',
-            reference_id=doc_ref.id,
-        )
 
     return ('ok', doc_ref.id)
 
@@ -263,15 +253,6 @@ def take_closing_snapshot(doc_id, closing_counts):
                 item_name=name,
                 color='',
                 delta=adjustment,
-                reason=audit_reason,
-                reference_id=doc_id,
-            )
-        else:
-            # Write informational note even when no adjustment needed
-            log_inventory_note(
-                item_type='Raw Material',
-                item_name=name,
-                color='',
                 reason=audit_reason,
                 reference_id=doc_id,
             )
