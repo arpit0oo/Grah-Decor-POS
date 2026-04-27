@@ -227,53 +227,104 @@ def api_product_logs():
     return jsonify(logs)
 
 
-@inventory_bp.route('/api/raw-purchase-history', methods=['GET'])
-def api_raw_purchase_history():
-    """Return all purchase orders containing a given raw material name.
-    Handles both legacy single-item POs (po.item) and multi-item POs (po.items[]).
+@inventory_bp.route('/api/raw-stock-ledger', methods=['GET'])
+def api_raw_stock_ledger():
+    """
+    Return a combined chronological stock ledger for a raw material.
+
+    Inflows: purchase_orders where this material appears and status is Received or Paid.
+    Outflows + Adjustments: inventory_log entries for item_name == name (any delta != 0).
+
+    Response is sorted newest-first, with a running_balance column computed
+    from oldest to newest so the client can display it in either order.
+
+    Each entry shape:
+      { iso_date, date_str, type, reference, delta, running_balance }
     """
     name = request.args.get('name', '').strip()
     if not name:
         return jsonify({'error': 'Name is required'}), 400
 
     from app.services.purchase_service import get_all_purchase_orders
+    from app.services.inventory_service import get_product_inventory_logs
+
+    events = []  # list of {iso_date, date_str, type, reference, delta}
+
+    # ── 1. PO inflows (Received / Paid only) ──────────────────────────────
     all_pos = get_all_purchase_orders()
-
-    result = []
     for po in all_pos:
-        matched_qty  = 0
-        matched_cost = 0.0
+        status = po.get('status', '')
+        if status not in ('Received', 'Paid'):
+            continue
 
-        # ── Multi-item POs: check the items[] array ────────────────────────
+        matched_qty = 0.0
+
         items = po.get('items', [])
         if items:
             for it in items:
                 if (it.get('item') or '').strip().lower() == name.lower():
-                    qty       = float(it.get('quantity', 0))
-                    unit_cost = float(it.get('unit_cost') or it.get('price', 0))
-                    matched_qty  += qty
-                    matched_cost += qty * unit_cost
+                    matched_qty += float(it.get('quantity', 0))
         else:
-            # ── Legacy single-item PO: check top-level item field ──────────
             if (po.get('item') or '').strip().lower() == name.lower():
-                matched_qty  = float(po.get('quantity', 0))
-                unit_cost    = float(po.get('unit_cost', 0))
-                matched_cost = float(po.get('total_cost') or matched_qty * unit_cost)
+                matched_qty = float(po.get('quantity', 0))
 
         if matched_qty == 0:
-            continue  # this PO doesn't involve the requested material
+            continue
 
-        created  = po.get('created_at')
-        date_str = created.strftime('%d/%m/%Y') if created and hasattr(created, 'strftime') else '-'
+        # Use updated_at if available (when it was actually received), else created_at
+        dt = po.get('updated_at') or po.get('created_at')
+        iso = dt.isoformat() if dt and hasattr(dt, 'isoformat') else ''
+        date_str = dt.strftime('%d/%m/%Y') if dt and hasattr(dt, 'strftime') else '-'
+        vendor = po.get('vendor_name') or '-'
+        po_num = po.get('po_number') or '-'
 
-        result.append({
-            'po_number':   po.get('po_number', '-'),
-            'date':        date_str,
-            'vendor_name': po.get('vendor_name', '-'),
-            'quantity':    matched_qty,
-            'unit_cost':   matched_cost / matched_qty if matched_qty else 0,
-            'total_cost':  matched_cost,
-            'status':      po.get('status', '-'),
+        events.append({
+            'iso_date':  iso,
+            'date_str':  date_str,
+            'type':      'PO Received',
+            'reference': f'{po_num} — {vendor}',
+            'delta':     matched_qty,
         })
 
-    return jsonify(result)
+    # ── 2. inventory_log entries (all deltas != 0) ─────────────────────────
+    logs = get_product_inventory_logs(name, color=None, limit=500)
+    for log in logs:
+        delta = float(log.get('delta', 0))
+        if delta == 0:
+            continue  # informational notes — skip from ledger
+
+        dt = log.get('date')
+        iso = dt.isoformat() if dt and hasattr(dt, 'isoformat') else ''
+        date_str = dt.strftime('%d/%m/%Y') if dt and hasattr(dt, 'strftime') else '-'
+        reason = log.get('reason') or '-'
+        ref_id = log.get('reference_id') or ''
+
+        # Classify the type from the reason string
+        r_lower = reason.lower()
+        if 'audit' in r_lower:
+            ev_type = 'Audit Adjustment'
+        elif 'purchase' in r_lower or 'received' in r_lower:
+            ev_type = 'PO Received'
+        elif 'manual add' in r_lower or 'manual adjustment' in r_lower:
+            ev_type = 'Manual'
+        else:
+            ev_type = 'Production' if delta < 0 else 'Inflow'
+
+        events.append({
+            'iso_date':  iso,
+            'date_str':  date_str,
+            'type':      ev_type,
+            'reference': reason,
+            'delta':     delta,
+        })
+
+    # ── 3. Sort oldest → newest, compute running balance ──────────────────
+    events.sort(key=lambda e: e['iso_date'])
+    balance = 0.0
+    for ev in events:
+        balance += ev['delta']
+        ev['running_balance'] = round(balance, 4)
+
+    # Return newest-first for display
+    events.reverse()
+    return jsonify(events)

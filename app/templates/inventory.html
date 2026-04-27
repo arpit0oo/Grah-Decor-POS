@@ -416,11 +416,11 @@
     </div>
 </div>
 
-<!-- ── RAW MATERIAL PURCHASE HISTORY MODAL ───────────── -->
+<!-- ── RAW MATERIAL STOCK LEDGER MODAL ──────────────── -->
 <div class="modal-overlay hidden" id="rawHistoryModal">
-    <div class="modal" style="max-width:680px;">
+    <div class="modal" style="max-width:780px;">
         <div class="modal-header">
-            <h3>Purchase History: <span id="rawHistoryTitle" style="color:var(--primary);"></span></h3>
+            <h3>Stock Ledger: <span id="rawHistoryTitle" style="color:var(--primary);"></span></h3>
             <button class="modal-close" onclick="closeModal('rawHistoryModal')">&#x00D7;</button>
         </div>
         <p id="rawHistoryTotals" class="text-muted" style="font-size:0.85em; margin-bottom:1rem;">Loading...</p>
@@ -428,13 +428,11 @@
             <table class="data-table">
                 <thead>
                     <tr>
-                        <th>PO #</th>
                         <th>Date</th>
-                        <th>Vendor</th>
-                        <th>Qty</th>
-                        <th>Unit Cost &#x20b9;</th>
-                        <th>Total &#x20b9;</th>
-                        <th>Status</th>
+                        <th>Type</th>
+                        <th>Reference</th>
+                        <th style="text-align:right;">Movement</th>
+                        <th style="text-align:right;">Balance</th>
                     </tr>
                 </thead>
                 <tbody id="rawHistoryTableBody">
@@ -504,53 +502,74 @@
 
     async function openRawHistoryModal(name) {
         document.getElementById('rawHistoryTitle').textContent = name;
-        const tbody = document.getElementById('rawHistoryTableBody');
+        const tbody   = document.getElementById('rawHistoryTableBody');
         const totalsDiv = document.getElementById('rawHistoryTotals');
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding:2rem;">Loading…</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted" style="padding:2rem;">Loading…</td></tr>';
         totalsDiv.textContent = 'Loading…';
         document.getElementById('rawHistoryModal').classList.remove('hidden');
 
         try {
-            const res = await fetch('/inventory/api/raw-purchase-history?name=' + encodeURIComponent(name));
+            const res  = await fetch('/inventory/api/raw-stock-ledger?name=' + encodeURIComponent(name));
             const data = await res.json();
             tbody.innerHTML = '';
 
             if (data.error) {
-                tbody.innerHTML = `<tr><td colspan="7" class="empty-state text-danger">${data.error}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" class="empty-state text-danger">${data.error}</td></tr>`;
                 totalsDiv.textContent = '';
                 return;
             }
             if (data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No purchase orders found for this material.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No stock movements found for this material.</td></tr>';
                 totalsDiv.textContent = '';
                 return;
             }
 
-            let totalQty = 0, totalSpent = 0;
-            const statusColors = {
-                'Draft': '#f59e0b', 'Sent': '#3b82f6', 'Received': '#10b981',
-                'Paid': '#6366f1', 'Cancelled': '#9ca3af'
+            // Type badge colours
+            const typeStyle = {
+                'PO Received':      { bg: '#d1fae5', color: '#065f46', border: '#6ee7b7' },
+                'Production':       { bg: '#fee2e2', color: '#991b1b', border: '#fca5a5' },
+                'Audit Adjustment': { bg: '#ede9fe', color: '#5b21b6', border: '#c4b5fd' },
+                'Manual':           { bg: '#fef3c7', color: '#92400e', border: '#fcd34d' },
+                'Inflow':           { bg: '#dbeafe', color: '#1e40af', border: '#93c5fd' },
             };
-            data.forEach(po => {
-                totalQty += po.quantity || 0;
-                if (po.status !== 'Cancelled') totalSpent += po.total_cost || 0;
-                const color = statusColors[po.status] || '#6b7280';
+
+            let totalIn = 0, totalOut = 0;
+            data.forEach(ev => {
+                const d = ev.delta || 0;
+                if (d > 0) totalIn  += d;
+                else       totalOut += Math.abs(d);
+
+                const s = typeStyle[ev.type] || { bg: '#f3f4f6', color: '#374151', border: '#d1d5db' };
+                const badgeHtml = `<span class="badge" style="background:${s.bg};color:${s.color};border:1px solid ${s.border};font-size:0.75em;">${ev.type}</span>`;
+
+                const movHtml = d > 0
+                    ? `<span style="color:#059669;font-weight:700;">+${d.toLocaleString(undefined,{maximumFractionDigits:2})}</span>`
+                    : `<span style="color:#dc2626;font-weight:700;">${d.toLocaleString(undefined,{maximumFractionDigits:2})}</span>`;
+
+                const bal = ev.running_balance ?? 0;
+                const balHtml = `<span style="font-weight:600;${bal < 0 ? 'color:#dc2626;' : ''}">${bal.toLocaleString(undefined,{maximumFractionDigits:2})}</span>`;
+
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td class="text-mono">${po.po_number || '-'}</td>
-                    <td class="text-muted">${po.date || '-'}</td>
-                    <td>${po.vendor_name || '-'}</td>
-                    <td class="text-bold text-right">${(po.quantity || 0).toLocaleString()}</td>
-                    <td class="text-right">${(po.unit_cost || 0).toFixed(2)}</td>
-                    <td class="text-right text-bold">${(po.total_cost || 0).toFixed(2)}</td>
-                    <td><span class="badge" style="background:${color}20;color:${color};border:1px solid ${color}60;">${po.status}</span></td>
+                    <td class="text-muted" style="white-space:nowrap;">${ev.date_str || '-'}</td>
+                    <td>${badgeHtml}</td>
+                    <td style="font-size:0.85em;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(ev.reference||'').replace(/"/g,"&quot;")}">  ${ev.reference || '-'}</td>
+                    <td style="text-align:right;">${movHtml}</td>
+                    <td style="text-align:right;">${balHtml}</td>
                 `;
                 tbody.appendChild(tr);
             });
-            totalsDiv.innerHTML = `Total Received: <strong>${totalQty.toLocaleString()} units</strong> &nbsp;|&nbsp; Total Spent (excl. Cancelled): <strong class="text-primary">&#x20b9; ${totalSpent.toFixed(2)}</strong>`;
+
+            totalsDiv.innerHTML =
+                `Total In: <strong style="color:#059669;">+${totalIn.toLocaleString(undefined,{maximumFractionDigits:2})}</strong>
+                &nbsp;|&nbsp;
+                Total Out: <strong style="color:#dc2626;">−${totalOut.toLocaleString(undefined,{maximumFractionDigits:2})}</strong>
+                &nbsp;|&nbsp;
+                Net: <strong>${(totalIn - totalOut).toLocaleString(undefined,{maximumFractionDigits:2})}</strong>`;
+
         } catch (err) {
             console.error(err);
-            tbody.innerHTML = '<tr><td colspan="7" class="empty-state text-danger">Failed to load history.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="empty-state text-danger">Failed to load ledger.</td></tr>';
             totalsDiv.textContent = '';
         }
     }
