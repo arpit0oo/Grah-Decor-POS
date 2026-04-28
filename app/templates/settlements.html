@@ -1,0 +1,529 @@
+{% extends "base.html" %}
+{% block title %}Settlements — Grah Decor POS{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Platform Settlements</h1>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+    <button class="tab {% if active_tab not in ['logs','returns'] %}active{% endif %}" id="btn-tab-unsettled"
+        onclick="switchSettlementTab('unsettled')">Payment Pending ({{ orders|length }})</button>
+    <button class="tab {% if active_tab == 'logs' %}active{% endif %}" id="btn-tab-logs"
+        onclick="switchSettlementTab('logs')">Settlement Logs ({{ batches|length }})</button>
+    <button class="tab {% if active_tab == 'returns' %}active{% endif %}" id="btn-tab-returns"
+        onclick="switchSettlementTab('returns')">Returns &amp; RTOs ({{ returned_orders|length }})</button>
+</div>
+
+{# ═══════════════════════════════════════════════════════════
+TAB 1: UNSETTLED ORDERS
+═══════════════════════════════════════════════════════════ #}
+<div id="tab-unsettled" class="tab-content {% if active_tab not in ['logs','returns'] %}{% else %}hidden{% endif %}">
+
+    <div class="filter-bar">
+        <form autocomplete="off" method="get" action="{{ url_for('settlements.settlements_list') }}" class="filter-form">
+            <select name="platform" onchange="this.form.submit()">
+                <option value="">All Platforms</option>
+                {% for p in platforms %}
+                <option value="{{ p }}" {% if filter_platform==p %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+            </select>
+            <div style="flex:1"></div>
+            <div class="settlement-display" style="min-width: 250px;">
+                <span>Expected Unsettled:</span>
+                <strong>₹ {{ "%.2f"|format(total_expected) }}</strong>
+            </div>
+        </form>
+    </div>
+
+    <form autocomplete="off" id="settlementForm" method="post" action="{{ url_for('settlements.add_settlement') }}">
+        <div style="display:flex; gap: 1.5rem; align-items: flex-start; flex-wrap: wrap;">
+            <!-- Orders Table -->
+            <div style="flex: 1; min-width: 600px;">
+                <div class="table-wrapper" style="max-height: 600px; overflow-y: auto;">
+                    <table class="data-table">
+                        <thead style="position: sticky; top: 0; z-index: 10;">
+                            <tr>
+                                <th style="width: 40px; text-align: center;">
+                                    <input type="checkbox" id="selectAllOrders" onchange="toggleAllOrders(this)">
+                                </th>
+                                <th>Date</th>
+                                <th>Order ID</th>
+                                <th>Platform</th>
+                                <th>Items</th>
+                                <th class="text-right">Est. Settlement</th>
+                                <th style="text-align:center;">Return</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for order in orders %}
+                            <tr>
+                                <td style="text-align: center;">
+                                    <input type="checkbox" name="order_ids" value="{{ order.id }}"
+                                        class="order-checkbox" data-expected="{{ order.bank_settlement|default(0) }}"
+                                        data-platform="{{ order.platform }}"
+                                        onchange="updateSelectedTotal(this)">
+                                </td>
+                                <td>{{ order.date.strftime('%d/%m/%Y') if order.date and order.date.strftime else '-' }}
+                                </td>
+                                <td class="text-mono">{{ order.order_id or '-' }}</td>
+                                <td><span class="badge badge-platform">{{ order.platform }}</span></td>
+                                <td>{{ order.order_items|length if order.order_items else 0 }} Items</td>
+                                <td class="text-right text-bold text-green">₹ {{
+                                    "%.2f"|format(order.bank_settlement|default(0)) }}</td>
+                                <td style="text-align:center;">
+                                    <button type="button" class="btn btn-xs"
+                                        style="background:var(--danger); color:#fff; border:none; font-size:0.7em;"
+                                        onclick="openReturnModal('{{ order.id }}', '{{ order.order_id or order.id }}')">
+                                        ↩ Return
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            {% if not orders %}
+                            <tr>
+                                <td colspan="7" class="empty-state">No unsettled delivered orders found.</td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Settlement Actions Box -->
+            <div class="form-card" style="width: 320px; position: sticky; top: 1.5rem;">
+                <h3 style="margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+                    Process Settlement</h3>
+
+                <div style="margin-bottom: 1rem;">
+                    <small class="text-muted" style="text-transform: uppercase; font-size: 0.7em;">Selected
+                        Expected</small>
+                    <div id="selectedTotalDisplay" style="font-size: 1.5rem; font-weight: bold; color: var(--text);">₹
+                        0.00</div>
+                    <div id="selectedCountDisplay" style="font-size: 0.8em; color: var(--text-secondary);">0 orders
+                        selected</div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0.75rem;">
+                    <label>Confirm Platform *</label>
+                    <select name="platform" id="confirmPlatformSelect" required>
+                        <option value="">— auto-set when orders selected —</option>
+                        {% for p in platforms %}
+                        <option value="{{ p }}" {% if filter_platform==p %}selected{% endif %}>{{ p }}</option>
+                        {% endfor %}
+                    </select>
+                    <small id="platformWarning" style="color:var(--danger); font-size:0.78rem; display:none; margin-top:0.25rem;">
+                        ⚠ All selected orders must be from the same platform.
+                    </small>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0.75rem;">
+                    <label>Date *</label>
+                    <input type="date" name="settlement_date" id="settlement_date" required>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0.75rem;">
+                    <label>UTR Number (Txn ID) *</label>
+                    <input type="text" name="utr_number" placeholder="Enter bank reference" required>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0.75rem;">
+                    <label>Actual Amount Received ₹ *</label>
+                    <input type="number" name="amount_received" step="0.01" min="0" required id="amountReceivedInput" oninput="validateSettlement()">
+                </div>
+
+                <!-- Deductions (auto-shown when Actual < Expected) -->
+                <div id="deductionsPanel" class="hidden" style="margin-bottom: 0.75rem; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:0.65rem 0.75rem;">
+                    <label style="font-weight:500; font-size:0.85rem; margin-bottom:0.25rem; display:block;">Platform Deductions / Penalties ₹ *</label>
+                    <small class="text-muted" style="display:block; margin-bottom:0.4rem;">Must account for the difference. Saved for records only.</small>
+                    <input type="number" name="platform_deductions" step="0.01" min="0" value="0" id="deductionsInput"
+                        placeholder="₹ Penalty / TDS amount" style="width:100%;" oninput="validateSettlement()">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label>Notes (Optional)</label>
+                    <input type="text" name="notes" placeholder="Any remarks?">
+                </div>
+
+                <div id="settlementValidation" style="margin-bottom:0.75rem; font-size:0.85rem; font-weight:500; display:none;"></div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;"
+                    id="submitBtn" disabled>Settle Selected Orders</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+
+{# ═══════════════════════════════════════════════════════════
+TAB 2: SETTLEMENT LOGS (ACCORDION)
+═══════════════════════════════════════════════════════════ #}
+<div id="tab-logs" class="tab-content {% if active_tab != 'logs' %}hidden{% endif %}">
+
+    {% if batches %}
+    <div style="display:flex; flex-direction:column; gap:0.75rem;">
+        {% for batch in batches %}
+        {% set ts = batch.settlement_date or batch.created_at %}
+        <div class="accordion-item"
+            style="border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;">
+            <!-- Accordion Header -->
+            <div class="accordion-header" onclick="toggleAccordion(this)"
+                style="display:flex; justify-content:space-between; align-items:center; padding:1rem 1.25rem; cursor:pointer; background:var(--surface); transition: background 0.2s;">
+                <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+                    <span class="text-bold" style="font-size:1em;">
+                        {% if ts %}{{ ts.strftime('%d %b %Y') }}{% else %}—{% endif %}
+                    </span>
+                    <span class="badge badge-platform">{{ batch.platform }}</span>
+                    <span class="text-muted" style="font-size:0.85em;">UTR: {{ batch.utr_number }}</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:1rem;">
+                    <span class="text-bold text-green" style="font-size:1.1em;">₹ {{
+                        "%.2f"|format(batch.amount_received) }}</span>
+                    <span class="text-muted" style="font-size:0.85em;">({{ batch.order_count }} orders)</span>
+                    <span class="accordion-icon" style="font-size:1.2em; transition:transform 0.2s;">▸</span>
+                </div>
+            </div>
+            <!-- Accordion Body -->
+            <div class="accordion-body hidden" style="border-top:1px solid var(--border); padding:0;">
+                <table class="data-table" style="margin:0; border-radius:0;">
+                    <thead>
+                        <tr>
+                            <th>Order ID</th>
+                            <th>Customer</th>
+                            <th>Platform</th>
+                            <th class="text-right">Selling ₹</th>
+                            <th class="text-right">Settlement ₹</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for line in batch.order_lines %}
+                        <tr>
+                            <td class="text-mono">{{ line.order_id or '-' }}</td>
+                            <td>{{ line.customer or '-' }}</td>
+                            <td><span class="badge badge-platform">{{ line.platform }}</span></td>
+                            <td class="text-right">{{ "%.2f"|format(line.selling_price or 0) }}</td>
+                            <td class="text-right text-bold">{{ "%.2f"|format(line.bank_settlement or 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% if not batch.order_lines %}
+                        <tr>
+                            <td colspan="5" class="empty-state">No order data recorded.</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+                {% if batch.platform_deductions %}
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem 1.25rem; font-size:0.85em; border-top:1px solid var(--border); background:var(--bg);">
+                    <span style="color:var(--text-secondary);"><strong>Platform Deductions / Penalties:</strong></span>
+                    <span style="color:var(--danger); font-weight:600;">− ₹ {{ "%.2f"|format(batch.platform_deductions) }}</span>
+                </div>
+                {% endif %}
+                {% if batch.notes %}
+                <div
+                    style="padding:0.75rem 1.25rem; font-size:0.85em; color:var(--text-secondary); border-top:1px solid var(--border);">
+                    <strong>Notes:</strong> {{ batch.notes }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state"
+        style="padding:3rem; text-align:center; border:1px dashed var(--border); border-radius:var(--radius);">
+        <div style="font-size:2.5rem; margin-bottom:1rem;">💳</div>
+        <h3>No settlements yet</h3>
+        <p class="text-muted">Settled batches will appear here with their full order breakdown.</p>
+    </div>
+    {% endif %}
+</div>
+
+
+{# ═══════════════════════════════════════════════════════════
+   TAB 3: RETURNS & RTOs
+═══════════════════════════════════════════════════════════ #}
+<div id="tab-returns" class="tab-content {% if active_tab != 'returns' %}hidden{% endif %}">
+
+    <!-- Summary Metric Cards -->
+    <div class="summary-row" style="margin-bottom:1.5rem;">
+        <div class="summary-item" style="border-left:4px solid var(--danger);">
+            <span class="summary-label">Total Inventory Lost (Damaged)</span>
+            <span class="summary-value text-danger">{{ total_damaged }} item{{ 's' if total_damaged != 1 else '' }}</span>
+        </div>
+        <div class="summary-item" style="border-left:4px solid var(--warning);">
+            <span class="summary-label">Total Platform Penalties</span>
+            <span class="summary-value" style="color:var(--warning);">₹ {{ "%.2f"|format(total_penalties) }}</span>
+        </div>
+    </div>
+
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Order ID</th>
+                    <th>Platform</th>
+                    <th>Return Type</th>
+                    <th>Condition</th>
+                    <th class="text-right">Penalty ₹</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in returned_orders %}
+                {% set ret_date = order.updated_at or order.date %}
+                <tr>
+                    <td>{{ ret_date.strftime('%d/%m/%Y') if ret_date and ret_date.strftime else '-' }}</td>
+                    <td class="text-mono">{{ order.order_id or '-' }}</td>
+                    <td><span class="badge badge-platform">{{ order.platform }}</span></td>
+                    <td>
+                        {% if order.status == 'RTO' %}
+                        <span class="badge badge-rto">RTO</span>
+                        {% else %}
+                        <span class="badge badge-returned">Customer Return</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if order.item_condition == 'restock' %}
+                        <span style="color:var(--success); font-weight:500;">✓ Restocked</span>
+                        {% elif order.item_condition == 'damaged' %}
+                        <span style="color:var(--danger); font-weight:500;">✗ Damaged</span>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right text-bold">{{ "%.2f"|format(order.penalty_amount|default(0)) }}</td>
+                </tr>
+                {% endfor %}
+                {% if not returned_orders %}
+                <tr>
+                    <td colspan="6" class="empty-state">No returns or RTOs recorded yet.</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+{# ═══════════════════════════════════════════════════════════
+PROCESS RETURN MODAL
+═══════════════════════════════════════════════════════════ #}
+<div class="modal-overlay hidden" id="returnModal">
+    <div class="modal" style="max-width:460px;">
+        <div class="modal-header">
+            <h3>Process Return <span id="return-order-label" class="text-muted" style="font-size:0.85em;"></span></h3>
+            <button class="modal-close" onclick="closeReturnModal()">×</button>
+        </div>
+        <form autocomplete="off" method="POST" action="{{ url_for('settlements.process_return') }}">
+            <input type="hidden" name="order_id" id="return-order-id">
+
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label>Return Type *</label>
+                <select name="return_type" id="return-type" required onchange="togglePenalty()">
+                    <option value="rto">RTO (No Penalty)</option>
+                    <option value="customer_return">Customer Return (Penalty)</option>
+                </select>
+            </div>
+
+            <div class="form-group hidden" id="penalty-group" style="margin-bottom:1rem;">
+                <label>Penalty Amount ₹</label>
+                <input type="number" name="penalty_amount" id="penalty-amount" step="1" min="0" value="0"
+                    placeholder="0">
+            </div>
+
+            <div class="form-group" style="margin-bottom:1.5rem;">
+                <label>Item Condition *</label>
+                <select name="item_condition" required>
+                    <option value="restock">Good — Restock Inventory</option>
+                    <option value="damaged">Damaged — Do Not Restock</option>
+                </select>
+            </div>
+
+            <div style="display:flex; gap:0.75rem; justify-content:flex-end;">
+                <button type="button" class="btn btn-ghost" onclick="closeReturnModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary"
+                    onclick="return confirm('Process this return? The order will be locked as terminal.')">
+                    Confirm Return
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Date default
+    document.getElementById('settlement_date').valueAsDate = new Date();
+    let _selectedExpected = 0;
+
+    // ── Tab Switching ──
+    function switchSettlementTab(tab) {
+        ['unsettled', 'logs', 'returns'].forEach(t => {
+            document.getElementById('tab-' + t)?.classList.toggle('hidden', t !== tab);
+            document.getElementById('btn-tab-' + t)?.classList.toggle('active', t === tab);
+        });
+    }
+
+    // ── Settlement Selection ──
+    function toggleAllOrders(source) {
+        const checkboxes = document.querySelectorAll('.order-checkbox');
+        // When checking all, only allow if all share the same platform
+        if (source.checked) {
+            const platforms = [...checkboxes].map(cb => cb.getAttribute('data-platform'));
+            const unique = [...new Set(platforms)];
+            if (unique.length > 1) {
+                source.checked = false;
+                showPlatformWarning(true);
+                return;
+            }
+        }
+        checkboxes.forEach(cb => cb.checked = source.checked);
+        showPlatformWarning(false);
+        updateSelectedTotal();
+    }
+
+    function showPlatformWarning(show) {
+        document.getElementById('platformWarning').style.display = show ? 'block' : 'none';
+    }
+
+    function updateSelectedTotal(changedCb) {
+        const allBoxes   = document.querySelectorAll('.order-checkbox');
+        const platformSel = document.getElementById('confirmPlatformSelect');
+
+        // If a checkbox was just checked, enforce single-platform rule
+        if (changedCb && changedCb.checked) {
+            const newPlatform = changedCb.getAttribute('data-platform');
+            const alreadyChecked = [...allBoxes].filter(cb => cb !== changedCb && cb.checked);
+            const conflicting = alreadyChecked.filter(cb => cb.getAttribute('data-platform') !== newPlatform);
+            if (conflicting.length > 0) {
+                changedCb.checked = false;
+                showPlatformWarning(true);
+                return; // Exit — don't update anything
+            }
+        }
+
+        const checkedBoxes = [...allBoxes].filter(cb => cb.checked);
+        let total = 0;
+        checkedBoxes.forEach(cb => { total += parseFloat(cb.getAttribute('data-expected') || 0); });
+
+        document.getElementById('selectedTotalDisplay').textContent = '₹ ' + total.toFixed(2);
+        document.getElementById('selectedCountDisplay').textContent =
+            checkedBoxes.length + ' order' + (checkedBoxes.length !== 1 ? 's' : '') + ' selected';
+
+        // Auto-set platform from checked orders
+        if (checkedBoxes.length > 0) {
+            const detectedPlatform = checkedBoxes[0].getAttribute('data-platform');
+            platformSel.value = detectedPlatform;
+            platformSel.style.opacity = '0.75';
+            platformSel.style.pointerEvents = 'none'; // lock it
+            showPlatformWarning(false);
+        } else {
+            // Reset
+            platformSel.value = '';
+            platformSel.style.opacity = '1';
+            platformSel.style.pointerEvents = 'auto';
+            showPlatformWarning(false);
+        }
+
+        _selectedExpected = total;
+        validateSettlement();
+    }
+
+    function validateSettlement() {
+        const actual = parseFloat(document.getElementById('amountReceivedInput').value) || 0;
+        const hasValue = document.getElementById('amountReceivedInput').value.trim() !== '';
+        const deductionsInput = document.getElementById('deductionsInput');
+        const deductionsPanel = document.getElementById('deductionsPanel');
+        const submitBtn = document.getElementById('submitBtn');
+        const msg = document.getElementById('settlementValidation');
+        const checkedCount = document.querySelectorAll('.order-checkbox:checked').length;
+
+        // No orders selected
+        if (checkedCount === 0) {
+            submitBtn.disabled = true;
+            msg.style.display = 'none';
+            deductionsPanel.classList.add('hidden');
+            return;
+        }
+
+        // No amount entered yet
+        if (!hasValue) {
+            submitBtn.disabled = true;
+            msg.style.display = 'none';
+            deductionsPanel.classList.add('hidden');
+            deductionsInput.value = '0';
+            return;
+        }
+
+        const expected = _selectedExpected;
+
+        if (actual > expected) {
+            // Actual > Expected → error
+            submitBtn.disabled = true;
+            deductionsPanel.classList.add('hidden');
+            deductionsInput.value = '0';
+            msg.style.display = 'block';
+            msg.style.color = 'var(--danger)';
+            msg.textContent = '⚠ Amount received (₹' + actual.toFixed(2) + ') exceeds expected (₹' + expected.toFixed(2) + ').';
+        } else if (Math.abs(actual - expected) < 0.01) {
+            // Actual ≈ Expected → perfect match
+            submitBtn.disabled = false;
+            deductionsPanel.classList.add('hidden');
+            deductionsInput.value = '0';
+            msg.style.display = 'block';
+            msg.style.color = 'var(--success)';
+            msg.textContent = '✓ Amount matches expected settlement.';
+        } else {
+            // Actual < Expected → show deductions, validate
+            const diff = expected - actual;
+            deductionsPanel.classList.remove('hidden');
+            const deductions = parseFloat(deductionsInput.value) || 0;
+
+            if (Math.abs(deductions - diff) < 0.01) {
+                submitBtn.disabled = false;
+                msg.style.display = 'block';
+                msg.style.color = 'var(--success)';
+                msg.textContent = '✓ Actual + Deductions = Expected (₹' + expected.toFixed(2) + ')';
+            } else {
+                submitBtn.disabled = true;
+                msg.style.display = 'block';
+                msg.style.color = 'var(--danger)';
+                msg.textContent = '⚠ Deductions must be ₹' + diff.toFixed(2) + ' so that Actual + Deductions = ₹' + expected.toFixed(2) + '.';
+            }
+        }
+    }
+
+    // ── Process Return Modal ──
+    function openReturnModal(docId, orderLabel) {
+        document.getElementById('return-order-id').value = docId;
+        document.getElementById('return-order-label').textContent = '— ' + orderLabel;
+        document.getElementById('return-type').value = 'rto';
+        document.getElementById('penalty-amount').value = '0';
+        document.getElementById('penalty-group').classList.add('hidden');
+        document.getElementById('returnModal').classList.remove('hidden');
+    }
+
+    function closeReturnModal() {
+        document.getElementById('returnModal').classList.add('hidden');
+    }
+
+    function togglePenalty() {
+        const type = document.getElementById('return-type').value;
+        document.getElementById('penalty-group').classList.toggle('hidden', type !== 'customer_return');
+    }
+
+    // ── Accordion ──
+    function toggleAccordion(header) {
+        const body = header.nextElementSibling;
+        const icon = header.querySelector('.accordion-icon');
+        body.classList.toggle('hidden');
+        if (body.classList.contains('hidden')) {
+            icon.style.transform = 'rotate(0deg)';
+        } else {
+            icon.style.transform = 'rotate(90deg)';
+        }
+    }
+</script>
+{% endblock %}

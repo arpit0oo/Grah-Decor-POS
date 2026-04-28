@@ -1,0 +1,429 @@
+{% extends "base.html" %}
+{% block title %}Procurement — Grah Decor POS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Procurement Lifecycle</h1>
+    <button class="btn btn-primary" onclick="toggleForm('purchaseForm')">+ New PO</button>
+</div>
+
+<!-- Add Purchase Form -->
+<div class="form-card hidden" id="purchaseForm">
+    <h3>Draft Purchase Order</h3>
+    <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_add') }}">
+        <div class="form-grid form-grid-2">
+            <div class="form-group">
+                <label for="p-vendor">Vendor Name *</label>
+                <select id="p-vendor" name="vendor_name" required>
+                    <option value="" disabled selected>Select Vendor</option>
+                    {% for v in vendors %}
+                    <option value="{{ v.vendor_id }} - {{ v.name }}">{{ v.vendor_id }} - {{ v.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="form-group" style="margin-top: 1rem;">
+            <label>Line Items *</label>
+            <div id="po-items-container" style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom: 0.5rem;">
+                <div class="po-item-row" style="display:flex; gap:0.5rem; align-items:center;">
+                    <select name="item[]" class="po-item-select" required style="flex:2;" onchange="validatePoItems()">
+                        <option value="" disabled selected>Select Raw Material</option>
+                        {% for m in raw_materials %}
+                        <option value="{{ m.name }}">{{ m.name }} ({{ m.quantity|int }} {{ m.unit }} in stock)</option>
+                        {% endfor %}
+                    </select>
+                    <input type="number" name="quantity[]" class="po-qty-input" step="0.01" required min="0.01" placeholder="Qty" style="flex:1;" oninput="calcTotal()">
+                    <input type="number" name="unit_cost[]" class="po-cost-input" step="0.01" required min="0.01" placeholder="Unit Cost ₹" style="flex:1;" oninput="calcTotal()">
+                    <button type="button" class="btn btn-xs btn-ghost" style="color:var(--danger); padding:0.25rem 0.5rem;" onclick="removePoRow(this)" title="Remove Item">×</button>
+                </div>
+            </div>
+            <button type="button" class="btn btn-xs btn-ghost" style="color:var(--primary); align-self:flex-start;" onclick="addPoRow()">+ Add Item</button>
+            <div id="po-item-error" class="text-danger hidden" style="font-size:0.8rem; margin-top:0.25rem;">Duplicate materials selected! Please select unique materials.</div>
+        </div>
+        <div class="form-row">
+            <div class="settlement-display">
+                Total Cost: <strong id="purchase-total-display">₹ 0.00</strong>
+            </div>
+        </div>
+        <p class="text-muted" style="margin-top:0.5rem">
+            💡 Creating a PO puts it in <strong>Draft</strong> state. No inventory or cash changes occur yet.
+        </p>
+        <div class="form-actions">
+            <button type="submit" id="purchase-submit-btn" class="btn btn-primary">Create Draft PO</button>
+            <button type="button" class="btn btn-ghost" onclick="toggleForm('purchaseForm')">Cancel</button>
+        </div>
+    </form>
+</div>
+
+<!-- Filters -->
+<div class="filter-bar">
+    <form autocomplete="off" method="GET" action="{{ url_for('purchase.purchase_list') }}" class="filter-form">
+        <input type="date" name="date_from" value="{{ date_from }}" placeholder="From">
+        <input type="date" name="date_to" value="{{ date_to }}" placeholder="To">
+        <button type="submit" class="btn btn-sm">Filter</button>
+        <a href="{{ url_for('purchase.purchase_list') }}" class="btn btn-sm btn-ghost">Clear</a>
+    </form>
+</div>
+
+<!-- Summary -->
+<div class="summary-row">
+    <div class="summary-item">
+        <span class="summary-label">Total Valid POs</span>
+        <span class="summary-value">{{ purchases|length }}</span>
+    </div>
+    <div class="summary-item">
+        <span class="summary-label">Gross Value</span>
+        <span class="summary-value text-primary">₹ {{ "%.2f"|format(total_spent) }}</span>
+    </div>
+</div>
+
+<!-- Purchases Table -->
+<div class="table-wrapper">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>PO Number</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Vendor</th>
+                <th>Item</th>
+                <th>Qty</th>
+                <th>Total Cost ₹</th>
+                <th>Invoice / Txn</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in purchases %}
+            <tr>
+                <td><span class="text-mono">{{ p.po_number or '-' }}</span></td>
+                <td>{{ p.created_at.strftime('%d/%m/%Y') if p.created_at and p.created_at.strftime else '-' }}</td>
+                <td>
+                    {% if p.status == 'Draft' %}
+                        <span class="badge" style="background:#fef3c7; color:#92400e; border:1px solid #fde68a;">{{ p.status }}</span>
+                    {% elif p.status == 'Sent' %}
+                        <span class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">{{ p.status }}</span>
+                    {% elif p.status == 'Received' %}
+                        <span class="badge bg-success">{{ p.status }}</span>
+                    {% elif p.status == 'Paid' %}
+                        <span class="badge bg-primary">{{ p.status }}</span>
+                    {% elif p.status == 'Cancelled' %}
+                        <span class="badge bg-danger">{{ p.status }}</span>
+                    {% else %}
+                        <span class="badge">{{ p.status }}</span>
+                    {% endif %}
+                </td>
+                <td>{{ p.vendor_name }}</td>
+                <td>
+                    {% set po_items = p.get('items') or [] %}
+                    {% if not po_items and p.get('item') %}
+                        {{ p.item }}
+                    {% elif po_items|length > 0 %}
+                        {{ po_items[0].item }} {% if po_items|length > 1 %}<span class="text-muted" style="font-size:0.85em;">(+{{ po_items|length - 1 }} more)</span>{% endif %}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td class="text-right">
+                    {% set po_items = p.get('items') or [] %}
+                    {% if po_items|length > 0 %}
+                        {{ po_items | sum(attribute='quantity') }}
+                    {% else %}
+                        {{ p.quantity }}
+                    {% endif %}
+                </td>
+                <td class="text-right text-bold">{{ "%.2f"|format(p.total_cost) }}</td>
+                <td>
+                    {% if p.payment_id %}<small class="text-muted">Txn: {{ p.payment_id }}</small>{% endif %}
+                </td>
+                <td class="actions-cell">
+                    <div style="display:grid; grid-template-columns: 85px 85px 70px; gap:0.35rem; align-items:center; justify-items:start;">
+                        {% if p.status == 'Draft' %}
+                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_sent', po_id=p.id) }}" style="margin:0; width:100%;">
+                            <button type="submit" class="btn btn-xs btn-primary" style="width:100%;">Sent</button>
+                        </form>
+                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0; width:100%;" onsubmit="return confirm('Are you sure you want to cancel this PO? This action cannot be undone.');">
+                            <button type="submit" class="btn btn-xs btn-outline-danger" style="width:100%;">Cancel</button>
+                        </form>
+                        {% elif p.status == 'Sent' %}
+                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_received', po_id=p.id) }}" style="margin:0; width:100%;">
+                            <button type="submit" class="btn btn-xs btn-outline-success" style="width:100%;" onclick="return confirm('Receive items and increment inventory?')">Receive</button>
+                        </form>
+                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0; width:100%;" onsubmit="return confirm('Are you sure you want to cancel this PO? This action cannot be undone.');">
+                            <button type="submit" class="btn btn-xs btn-outline-danger" style="width:100%;">Cancel</button>
+                        </form>
+                        {% elif p.status == 'Received' %}
+                        <button type="button" class="btn btn-xs btn-outline-primary" style="width:100%;" onclick="openPayModal('{{ p.id }}', '{{ p.po_number }}')">Pay</button>
+                        <button type="button" class="btn btn-xs btn-outline-danger" style="width:100%;" onclick="openReturnModal('{{ p.id }}', '{{ p.po_number }}', 'Received')">Return</button>
+                        {% elif p.status == 'Paid' %}
+                        <div></div>
+                        <button type="button" class="btn btn-xs btn-outline-danger" style="width:100%;" onclick="openReturnModal('{{ p.id }}', '{{ p.po_number }}', 'Paid')">Return</button>
+                        {% elif p.status == 'Returned' %}
+                        <div></div>
+                        <span style="font-size: 0.65rem; font-weight: 800; color: #991b1b; background: #fee2e2; padding: 0.2rem 0.4rem; border-radius: 4px; width:100%; text-align:center; text-transform: uppercase;">Returned</span>
+                        {% elif p.status == 'Cancelled' %}
+                        <div></div>
+                        <span style="font-size: 0.65rem; font-weight: 800; color: #991b1b; background: #fee2e2; padding: 0.2rem 0.4rem; border-radius: 4px; width:100%; text-align:center; text-transform: uppercase;">Cancelled</span>
+                        {% endif %}
+                        <button type="button" class="btn btn-xs btn-ghost" style="width:100%;" data-po="{{ p|tojson|forceescape }}" onclick="openViewPoModal(this)">History</button>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+            {% if not purchases %}
+            <tr><td colspan="9" class="empty-state">No Purchase Orders recorded. Click "+ New PO" to add one.</td></tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+
+<!-- Modal: Mark Paid -->
+<div class="modal-overlay hidden" id="payModal">
+    <div class="modal" style="max-width:400px;">
+        <div class="modal-header">
+            <h3>Pay Vendor</h3>
+            <button class="modal-close" onclick="closeModal('payModal')">×</button>
+        </div>
+        <p class="text-muted mb-4" style="font-size:0.85em; margin-bottom:1rem;">Marking this PO as Paid will log a cash outflow.</p>
+        <form autocomplete="off" id="payForm" method="POST" action="">
+            <div class="form-group" style="margin-bottom:1.5rem;">
+                <label>Payment ID / UTR *</label>
+                <input type="text" name="payment_id" required placeholder="e.g. HDFC-1002">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Settle Payment</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: View PO History -->
+<div class="modal-overlay hidden" id="poViewModal">
+    <div class="modal" style="max-width:680px;">
+        <div class="modal-header">
+            <h3>PO Details &amp; History</h3>
+            <button class="modal-close" onclick="closeModal('poViewModal')">&#x00D7;</button>
+        </div>
+        <!-- Header strip -->
+        <div id="view-po-header" style="display:flex; gap:1.5rem; flex-wrap:wrap; margin-bottom:1.25rem; padding:0.75rem 1rem; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); font-size:0.88em;">
+            <div><span class="text-muted">PO #</span>&nbsp;<strong id="view-po-number" class="text-mono"></strong></div>
+            <div><span class="text-muted">Vendor</span>&nbsp;<strong id="view-po-vendor"></strong></div>
+            <div><span class="text-muted">Status</span>&nbsp;<span id="view-po-status"></span></div>
+            <div><span class="text-muted">Date</span>&nbsp;<strong id="view-po-date"></strong></div>
+        </div>
+        <!-- Line items table -->
+        <div style="overflow-x:auto; margin-bottom:1.25rem;">
+            <table class="data-table" style="width:100%;">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th style="text-align:right;">Qty</th>
+                        <th style="text-align:right;">Unit Cost &#x20b9;</th>
+                        <th style="text-align:right;">Line Total &#x20b9;</th>
+                    </tr>
+                </thead>
+                <tbody id="view-po-items-body"></tbody>
+                <tfoot id="view-po-footer"></tfoot>
+            </table>
+        </div>
+        <!-- Timeline -->
+        <div style="padding-top:1rem; border-top:1px solid var(--border);">
+            <div style="font-size:0.72em; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-secondary); margin-bottom:1rem; font-weight:700;">PO Journey Timeline</div>
+            <div id="view-po-timeline" style="display:flex; align-items:flex-start; gap:0; overflow-x:auto; padding-bottom:0.5rem;"></div>
+        </div>
+    </div>
+</div>
+
+
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function calcTotal() {
+    let total = 0;
+    const rows = document.querySelectorAll('.po-item-row');
+    rows.forEach(row => {
+        const qty = parseFloat(row.querySelector('.po-qty-input').value) || 0;
+        const cost = parseFloat(row.querySelector('.po-cost-input').value) || 0;
+        total += qty * cost;
+    });
+    document.getElementById('purchase-total-display').textContent = '₹ ' + total.toFixed(2);
+}
+
+function addPoRow() {
+    const container = document.getElementById('po-items-container');
+    const firstRow = container.querySelector('.po-item-row');
+    const newRow = firstRow.cloneNode(true);
+    newRow.querySelector('.po-item-select').value = "";
+    newRow.querySelector('.po-qty-input').value = "";
+    newRow.querySelector('.po-cost-input').value = "";
+    container.appendChild(newRow);
+    validatePoItems();
+    calcTotal();
+}
+
+function removePoRow(btn) {
+    const container = document.getElementById('po-items-container');
+    if (container.children.length > 1) {
+        btn.closest('.po-item-row').remove();
+        validatePoItems();
+        calcTotal();
+    } else {
+        alert("At least one item is required.");
+    }
+}
+
+function validatePoItems() {
+    const selects = document.querySelectorAll('.po-item-select');
+    const values = Array.from(selects).map(s => s.value).filter(v => v);
+    const hasDuplicates = new Set(values).size !== values.length;
+    
+    const errorEl = document.getElementById('po-item-error');
+    const submitBtn = document.getElementById('purchase-submit-btn');
+    if (hasDuplicates) {
+        errorEl.classList.remove('hidden');
+        if(submitBtn) submitBtn.disabled = true;
+    } else {
+        errorEl.classList.add('hidden');
+        if(submitBtn) submitBtn.disabled = false;
+    }
+}
+
+
+function openPayModal(id, poId) {
+    document.getElementById('payForm').action = "/purchases/paid/" + id;
+    document.getElementById('payModal').classList.remove('hidden');
+}
+
+function openReturnModal(id, poId, status) {
+    document.getElementById('returnForm').action = "/purchases/return/" + id;
+    const refundGroup = document.getElementById('return-refund-group');
+    const refundInput = document.getElementById('return-refund-input');
+    if (status === 'Paid') {
+        refundGroup.style.display = 'block';
+        refundInput.required = true;
+    } else {
+        refundGroup.style.display = 'none';
+        refundInput.required = false;
+        refundInput.value = 0;
+    }
+    document.getElementById('returnModal').classList.remove('hidden');
+}
+
+function openViewPoModal(btn) {
+    const data = JSON.parse(btn.getAttribute('data-po'));
+
+    // ── Header strip ──────────────────────────────────────────────────────
+    document.getElementById('view-po-number').textContent = data.po_number || '-';
+    document.getElementById('view-po-vendor').textContent = data.vendor_name || '-';
+
+    const dateRaw = data.created_at;
+    let dateStr = '-';
+    if (dateRaw) {
+        try {
+            const d = new Date(dateRaw);
+            if (!isNaN(d)) dateStr = d.toLocaleDateString('en-GB');
+        } catch(e) {}
+    }
+    document.getElementById('view-po-date').textContent = dateStr;
+
+    const statusColors = {
+        'Draft': ['#fef3c7','#92400e','#fde68a'],
+        'Sent':  ['#e0f2fe','#0369a1','#bae6fd'],
+        'Received': ['#d1fae5','#065f46','#6ee7b7'],
+        'Paid':  ['#ede9fe','#5b21b6','#c4b5fd'],
+        'Cancelled': ['#fee2e2','#991b1b','#fca5a5'],
+        'Returned':  ['#ffedd5','#9a3412','#fdba74'],
+    };
+    const sc = statusColors[data.status] || ['#f3f4f6','#374151','#d1d5db'];
+    document.getElementById('view-po-status').innerHTML =
+        `<span class="badge" style="background:${sc[0]};color:${sc[1]};border:1px solid ${sc[2]};">${data.status || '-'}</span>`;
+
+    // ── Line items table ───────────────────────────────────────────────────
+    const tbody  = document.getElementById('view-po-items-body');
+    const tfoot  = document.getElementById('view-po-footer');
+    tbody.innerHTML = '';
+    tfoot.innerHTML = '';
+
+    const items = data.items || [];
+    let grandTotal = 0;
+
+    if (items.length > 0) {
+        items.forEach(it => {
+            const qty  = parseFloat(it.quantity  || 0);
+            const cost = parseFloat(it.unit_cost || 0);
+            const line = qty * cost;
+            grandTotal += line;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${it.item || '-'}</td>
+                <td style="text-align:right;">${qty.toLocaleString()}</td>
+                <td style="text-align:right;">${cost.toFixed(2)}</td>
+                <td style="text-align:right; font-weight:600;">${line.toFixed(2)}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } else {
+        // Legacy single-item PO
+        const qty  = parseFloat(data.quantity  || 0);
+        const cost = parseFloat(data.unit_cost || 0);
+        grandTotal = parseFloat(data.total_cost || qty * cost);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${data.item || '-'}</td>
+            <td style="text-align:right;">${qty.toLocaleString()}</td>
+            <td style="text-align:right;">${cost.toFixed(2)}</td>
+            <td style="text-align:right; font-weight:600;">${grandTotal.toFixed(2)}</td>
+        `;
+        tbody.appendChild(tr);
+    }
+
+    // Grand total footer row
+    tfoot.innerHTML = `
+        <tr style="border-top:2px solid var(--border);">
+            <td colspan="3" style="text-align:right; font-weight:700; padding-top:0.5rem;">Grand Total</td>
+            <td style="text-align:right; font-weight:700; color:var(--primary); padding-top:0.5rem;">&#x20b9; ${grandTotal.toFixed(2)}</td>
+        </tr>
+    `;
+
+    // ── Timeline ───────────────────────────────────────────────────────────
+    const history  = data.status_history || [];
+    const timeline = document.getElementById('view-po-timeline');
+    timeline.innerHTML = '';
+
+    const tlColors = { 'Draft':'#f59e0b','Sent':'#3b82f6','Received':'#10b981','Paid':'#6366f1','Cancelled':'#ef4444','Returned':'#f97316' };
+
+    if (history.length === 0) {
+        timeline.innerHTML = '<span class="text-muted" style="font-size:0.85em;">No status history available.</span>';
+    } else {
+        history.forEach((hop, idx) => {
+            const isLast = idx === history.length - 1;
+            let timeStr = '-';
+            if (hop.timestamp) {
+                try {
+                    const d = new Date(hop.timestamp);
+                    if (!isNaN(d)) timeStr = d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+                } catch(e) {}
+            }
+            const color = tlColors[hop.status] || '#6b7280';
+            const node = document.createElement('div');
+            node.style.cssText = 'display:flex;flex-direction:column;align-items:flex-start;position:relative;min-width:110px;padding-right:15px;';
+            node.innerHTML = `
+                <div style="font-size:0.75em;color:var(--text-muted);margin-bottom:4px;">${timeStr}</div>
+                <div style="display:flex;align-items:center;width:100%;">
+                    <div style="width:12px;height:12px;border-radius:50%;background:${color};z-index:2;"></div>
+                    ${!isLast ? `<div style="height:2px;background:var(--border);flex:1;margin-left:-2px;z-index:1;"></div>` : ''}
+                </div>
+                <div style="font-size:0.85em;font-weight:600;color:${color};margin-top:6px;">${hop.status}</div>
+            `;
+            timeline.appendChild(node);
+        });
+    }
+
+    document.getElementById('poViewModal').classList.remove('hidden');
+}
+
+</script>
+{% endblock %}

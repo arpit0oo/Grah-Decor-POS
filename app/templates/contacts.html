@@ -1,0 +1,605 @@
+{% extends "base.html" %}
+{% block title %}Contacts — Grah Decor POS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Contacts</h1>
+    <button class="btn btn-primary" onclick="openVendorModal()">+ Add Vendor</button>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+    <button class="tab {% if active_tab == 'vendors' %}active{% endif %}" onclick="switchTab('vendors')">Vendors ({{
+        vendors|length }})</button>
+    <button class="tab {% if active_tab == 'customers' %}active{% endif %}" onclick="switchTab('customers')">Customers
+        ({{ customers|length }})</button>
+</div>
+
+<!-- ── VENDORS TAB ─────────────────────────────────────── -->
+<div class="tab-content {% if active_tab != 'vendors' %}hidden{% endif %}" id="tab-vendors">
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Vendor ID</th>
+                    <th>Name</th>
+                    <th>Phone Numbers</th>
+                    <th>Added On</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for v in vendors %}
+                <tr>
+                    <form method="POST" action="{{ url_for('contact.update_vendor_route', vendor_id=v.id) }}"
+                        style="display: contents;">
+                        <td class="text-mono">{{ v.vendor_id }}</td>
+                        <td>
+                            <span class="view-mode-{{ v.id }} text-bold">{{ v.name }}</span>
+                            <input type="text" name="name" class="edit-mode-{{ v.id }} hidden inline-input"
+                                value="{{ v.name }}" required>
+                        </td>
+                        <td>
+                            <span class="view-mode-{{ v.id }} text-muted">
+                                {% if v.phone_numbers %}
+                                {{ v.phone_numbers | join(', ') }}
+                                {% else %}
+                                Not available
+                                {% endif %}
+                            </span>
+                            <input type="text" name="phone_numbers" class="edit-mode-{{ v.id }} hidden inline-input"
+                                value="{{ v.phone_numbers|join(', ') if v.phone_numbers else '' }}"
+                                placeholder="Comma separated numbers">
+                        </td>
+                        <td class="text-muted">{{ v.created_at.strftime('%d/%m/%Y') if v.created_at and
+                            v.created_at.strftime else '-' }}</td>
+                        <td class="actions-cell">
+                            <button type="button" class="btn btn-xs btn-outline-primary view-mode-{{ v.id }}"
+                                onclick="toggleEdit('{{ v.id }}')">Edit</button>
+                            <button type="submit"
+                                class="btn btn-xs btn-primary edit-mode-{{ v.id }} hidden">Save</button>
+                            <button type="button" class="btn btn-xs btn-ghost edit-mode-{{ v.id }} hidden"
+                                onclick="toggleEdit('{{ v.id }}')">Cancel</button>
+                        </td>
+                    </form>
+                </tr>
+                {% endfor %}
+                {% if not vendors %}
+                <tr>
+                    <td colspan="5" class="empty-state">No vendors found. Add one above.</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ── CUSTOMERS TAB ───────────────────────────────────── -->
+<div class="tab-content {% if active_tab != 'customers' %}hidden{% endif %}" id="tab-customers">
+    <div style="margin-bottom: 0.75rem; position: relative; display: flex; align-items: center;">
+        <input type="text" id="customerSearch" placeholder="Search by name, ID, phone or order ID..."
+            onkeyup="filterCustomers()"
+            style="width:100%; padding:0.5rem 2.5rem 0.5rem 0.75rem; border:1px solid var(--border); border-radius:6px; font-size:0.9rem;">
+        <button type="button" onclick="document.getElementById('customerSearch').value=''; filterCustomers();"
+            style="position:absolute; right:0.5rem; background:none; border:none; cursor:pointer; font-size:1.1rem; color:var(--text-muted); line-height:1;"
+            title="Clear search">&#x2715;</button>
+    </div>
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Customer ID</th>
+                    <th>Name</th>
+                    <th>Phone Numbers</th>
+                    <th>Platform Used</th>
+                    <th>Recent Order ID</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in customers %}
+                <tr data-order-ids="{{ c.order_ids | join(',') if c.order_ids else '' }}">
+                    <form method="POST" action="{{ url_for('contact.update_customer_route', customer_id=c.id) }}"
+                        style="display: contents;">
+                        <td class="text-mono">{{ c.customer_id }}</td>
+                        <td>
+                            <span class="view-mode-{{ c.id }} text-bold">{{ c.name }}</span>
+                            <input type="text" name="name" class="edit-mode-{{ c.id }} hidden inline-input"
+                                value="{{ c.name }}" required>
+                        </td>
+                        <td>
+                            <span class="view-mode-{{ c.id }} text-muted">
+                                {% if c.phone_numbers %}
+                                {{ c.phone_numbers | join(', ') }}
+                                {% else %}
+                                Not available
+                                {% endif %}
+                            </span>
+                            <input type="text" name="phone_numbers" class="edit-mode-{{ c.id }} hidden inline-input"
+                                value="{{ c.phone_numbers|join(', ') if c.phone_numbers else '' }}"
+                                placeholder="Comma separated numbers">
+                        </td>
+                        <td>
+                            {% if c.platform_used is string %}
+                            <span class="badge" style="background:#e0e7ff; color:#3730a3; border:1px solid #c7d2fe;">{{
+                                c.platform_used or 'Unknown' }}</span>
+                            {% elif c.platform_used %}
+                            {% for p in c.platform_used %}<span class="badge"
+                                style="background:#e0e7ff; color:#3730a3; border:1px solid #c7d2fe; margin-right:2px;">{{
+                                p }}</span>{% endfor %}
+                            {% else %}
+                            <span class="badge"
+                                style="background:#e0e7ff; color:#3730a3; border:1px solid #c7d2fe;">Unknown</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-mono">{{ c.recent_order_id or '-' }}</td>
+                        <td class="actions-cell">
+                            <button type="button" id="history-btn-{{ c.customer_id }}"
+                                class="btn btn-xs btn-outline-primary view-mode-{{ c.id }}"
+                                onclick="toggleOrderHistory('{{ c.customer_id }}')">View</button>
+                            <button type="button" class="btn btn-xs btn-outline-primary view-mode-{{ c.id }}"
+                                onclick="toggleEdit('{{ c.id }}')">Edit</button>
+                            <button type="submit"
+                                class="btn btn-xs btn-primary edit-mode-{{ c.id }} hidden">Save</button>
+                            <button type="button" class="btn btn-xs btn-ghost edit-mode-{{ c.id }} hidden"
+                                onclick="toggleEdit('{{ c.id }}')">Cancel</button>
+                            <a href="https://api.whatsapp.com/send?phone=91{{ c.phone_numbers[0] if c.phone_numbers and c.phone_numbers[0] != 'Not available' else '' }}"
+                                target="_blank"
+                                class="btn btn-xs view-mode-{{ c.id }}{% if not c.phone_numbers or c.phone_numbers[0] == 'Not available' or c.name == 'Unknown' %} btn-ghost disabled{% else %} btn-success{% endif %}"
+                                {% if not c.phone_numbers or c.phone_numbers[0]=='Not available' or c.name=='Unknown'
+                                %}onclick="return false;" {% endif %}
+                                title="WhatsApp {{ c.phone_numbers[0] if c.phone_numbers else '' }}">WA</a>
+                        </td>
+                    </form>
+                </tr>
+                <!-- ── Order history expansion row ── -->
+                <tr id="history-{{ c.customer_id }}" style="display:none;">
+                    <td colspan="6" style="padding:0; background:var(--bg-secondary, #f8f9fa); border-top:none;">
+                        <div id="history-content-{{ c.customer_id }}" style="padding:1rem 1.5rem;">
+                            <div id="history-spinner-{{ c.customer_id }}"
+                                style="text-align:center; padding:1rem; color:var(--text-muted);">Loading&#8230;</div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not customers %}
+                <tr>
+                    <td colspan="6" class="empty-state">No customers yet. Customers are added during order creation.
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ── ADD VENDOR MODAL ────────────────────────────────── -->
+<div class="modal-overlay hidden" id="vendorModal">
+    <div class="modal" style="max-width: 450px;">
+        <div class="modal-header">
+            <h3>Add New Vendor</h3>
+            <button class="modal-close" onclick="closeModal('vendorModal')">×</button>
+        </div>
+        <form autocomplete="off" method="POST" action="{{ url_for('contact.add_vendor_route') }}">
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label>Vendor Name *</label>
+                <input type="text" name="name" required placeholder="e.g. Laxmi Timber">
+            </div>
+
+            <div id="phoneInputsContainer">
+                <div class="form-group" style="margin-bottom: 0.5rem;">
+                    <label>Phone Number(s)</label>
+                    <input type="text" name="phone_1" placeholder="e.g. 9876543210" pattern="\d{10}" maxlength="10"
+                        title="Please enter a 10-digit phone number"
+                        oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                </div>
+            </div>
+
+            <button type="button" id="addPhoneBtn" class="btn btn-xs btn-ghost" onclick="addPhoneRow()"
+                style="margin-bottom: 1.5rem;">+
+                Add another number</button>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">Save
+                    Vendor</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ── VIEW MODAL (order detail — identical to orders.html) ──────── -->
+<div class="modal-overlay hidden" id="viewModal">
+    <div class="modal" style="max-width: 700px;">
+        <div class="modal-header">
+            <h3>Order Details <span id="view-order-id" class="text-muted"
+                    style="font-size: 0.9em; margin-left: 0.5rem;"></span></h3>
+            <button class="modal-close" onclick="closeModal('viewModal')">×</button>
+        </div>
+
+        <div style="margin-bottom: 1.5rem;" class="form-grid form-grid-4 text-muted">
+            <div>
+                <small style="font-size:0.75em; letter-spacing:0.05em; text-transform:uppercase;">Order ID</small><br>
+                <strong id="view-order-id-field" style="color:var(--text); font-size:1.1em;"></strong>
+            </div>
+            <div>
+                <small style="font-size:0.75em; letter-spacing:0.05em; text-transform:uppercase;">Customer</small><br>
+                <strong id="view-customer" style="color:var(--text); font-size:1.1em;"></strong>
+            </div>
+            <div>
+                <small style="font-size:0.75em; letter-spacing:0.05em; text-transform:uppercase;">Date</small><br>
+                <strong id="view-date" style="color:var(--text); font-size:1.1em;"></strong>
+            </div>
+            <div>
+                <small style="font-size:0.75em; letter-spacing:0.05em; text-transform:uppercase;">Platform</small><br>
+                <strong id="view-platform" style="color:var(--text); font-size:1.1em;"></strong>
+            </div>
+        </div>
+
+        <div class="table-wrapper"
+            style="margin-bottom: 1.5rem; max-height:300px; overflow-y:auto; box-shadow:none; border-color:#eee;">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th style="background:#f5f6f8;">Product</th>
+                        <th style="background:#f5f6f8;">Color</th>
+                        <th class="text-right" style="background:#f5f6f8;">Qty</th>
+                        <th class="text-right" style="background:#f5f6f8;">Price</th>
+                        <th class="text-right" style="background:#f5f6f8;">Total</th>
+                    </tr>
+                </thead>
+                <tbody id="view-order-items-body">
+                    <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Financial Summary -->
+        <div style="margin-top:0.5rem; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;">
+            <div
+                style="background:#f8f9fa; padding:0.5rem 1rem; font-size:0.72em; text-transform:uppercase; letter-spacing:0.06em; font-weight:600; color:var(--text-secondary); border-bottom:1px solid var(--border);">
+                Financial Summary</div>
+            <div style="padding:0.75rem 1rem;">
+                <div id="view-fin-rows"
+                    style="display:grid; grid-template-columns:1fr auto; gap:0.3rem 1.5rem; font-size:0.9em;">
+                    <!-- populated by JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Return Details (conditional) -->
+        <div id="view-return-section" class="hidden"
+            style="margin-top:0.75rem; border:1px solid #fecaca; border-radius:var(--radius); overflow:hidden;">
+            <div
+                style="background:#fef2f2; padding:0.5rem 1rem; font-size:0.72em; text-transform:uppercase; letter-spacing:0.06em; font-weight:600; color:#991b1b; border-bottom:1px solid #fecaca;">
+                Return Details</div>
+            <div style="padding:0.75rem 1rem;">
+                <div style="display:grid; grid-template-columns:1fr auto; gap:0.3rem 1.5rem; font-size:0.9em;">
+                    <span style="color:var(--text-secondary);">Return Type</span> <span id="view-return-type"
+                        style="font-weight:600;"></span>
+                    <span style="color:var(--text-secondary);">Item Condition</span> <span id="view-return-condition"
+                        style="font-weight:600;"></span>
+                    <span style="color:#991b1b;">Penalty Amount</span> <span id="view-return-penalty"
+                        style="font-weight:700; color:#991b1b;"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Order Journey Timeline -->
+        <div style="margin-top:1.5rem; padding-top:1.25rem; border-top:1px solid var(--border);">
+            <div
+                style="font-size:0.75em; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin-bottom:1rem; font-weight:600;">
+                Order Journey</div>
+            <div id="view-timeline"
+                style="display:flex; align-items:flex-start; gap:0; overflow-x:auto; padding-bottom:0.5rem;"></div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function switchTab(tab) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+        event.target.classList.add('active');
+        document.getElementById('tab-' + tab).classList.remove('hidden');
+    }
+
+    function openVendorModal() {
+        document.getElementById('vendorModal').classList.remove('hidden');
+    }
+
+    let phoneCount = 1;
+    function addPhoneRow() {
+        if (phoneCount >= 2) return;
+
+        phoneCount++;
+        const container = document.getElementById('phoneInputsContainer');
+        const div = document.createElement('div');
+        div.className = 'form-group';
+        div.style.marginBottom = '0.5rem';
+        div.innerHTML = `<input type="text" name="phone_${phoneCount}" placeholder="Alternate phone number" pattern="\\d{10}" maxlength="10" title="Please enter a 10-digit phone number" oninput="this.value = this.value.replace(/[^0-9]/g, '')">`;
+        container.appendChild(div);
+
+        if (phoneCount >= 2) {
+            document.getElementById('addPhoneBtn').classList.add('hidden');
+        }
+    }
+
+    function toggleEdit(id) {
+        const viewElements = document.querySelectorAll(`.view-mode-${id}`);
+        const editElements = document.querySelectorAll(`.edit-mode-${id}`);
+
+        viewElements.forEach(el => el.classList.toggle('hidden'));
+        editElements.forEach(el => el.classList.toggle('hidden'));
+    }
+
+    function filterCustomers() {
+        const query = document.getElementById('customerSearch').value.toLowerCase().trim();
+        const rows = document.querySelectorAll('#tab-customers tbody tr');
+        rows.forEach(row => {
+            // Never hide expansion rows — they self-manage visibility
+            if (row.id && row.id.startsWith('history-')) return;
+            if (row.querySelector('.empty-state')) { row.style.display = ''; return; }
+            const cellText = Array.from(row.querySelectorAll('td'))
+                .map(td => td.textContent.toLowerCase()).join(' ');
+            const orderIds = (row.dataset.orderIds || '').toLowerCase();
+            const visible = !query || cellText.includes(query) || orderIds.includes(query);
+            row.style.display = visible ? '' : 'none';
+            // Also hide the paired expansion row when parent is hidden
+            const cid = row.dataset.customerId;
+            if (cid) {
+                const expRow = document.getElementById('history-' + cid);
+                if (expRow && !visible) expRow.style.display = 'none';
+            }
+        });
+    }
+
+    // Cache so each customer's orders are fetched only once
+    const _orderHistoryCache = {};
+
+    function toggleOrderHistory(customerId) {
+        const row = document.getElementById('history-' + customerId);
+        const btn = document.getElementById('history-btn-' + customerId);
+        if (!row) return;
+
+        const isOpen = row.style.display !== 'none';
+
+        // Collapse every other open expansion row first
+        document.querySelectorAll('#tab-customers tbody tr[id^="history-"]').forEach(r => {
+            if (r !== row && r.style.display !== 'none') {
+                r.style.display = 'none';
+                const otherId = r.id.replace('history-', '');
+                const otherBtn = document.getElementById('history-btn-' + otherId);
+                if (otherBtn) {
+                    otherBtn.textContent = 'View';
+                    otherBtn.classList.replace('btn-primary', 'btn-outline-primary');
+                }
+            }
+        });
+
+        if (isOpen) {
+            row.style.display = 'none';
+            if (btn) {
+                btn.textContent = 'View';
+                btn.classList.replace('btn-primary', 'btn-outline-primary');
+            }
+            return;
+        }
+
+        row.style.display = '';
+        if (btn) {
+            btn.textContent = 'Close';
+            btn.classList.replace('btn-outline-primary', 'btn-primary');
+        }
+
+        // Already loaded — just show
+        if (_orderHistoryCache[customerId]) return;
+
+        // First open: fetch from API
+        const content = document.getElementById('history-content-' + customerId);
+        content.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-muted);">Loading&#8230;</div>';
+
+        Promise.all([
+            fetch('/contacts/api/customer-orders/' + customerId).then(r => r.json()),
+            fetch('/contacts/api/customer-clv/' + customerId).then(r => r.json())
+        ]).then(([orderData, clvData]) => {
+            _orderHistoryCache[customerId] = true;
+            const orders = orderData.orders || [];
+            const clv = clvData.clv != null ? '&#8377;' + Number(clvData.clv).toFixed(2) : 'N/A';
+
+            const statusColor = s => ({
+                'Delivered': '#16a34a', 'Settled': '#0284c7', 'Pending': '#b45309',
+                'Shipped': '#7c3aed', 'RTO': '#dc2626', 'Returned': '#dc2626',
+                'Cancelled': '#6b7280'
+            }[s] || '#374151');
+
+            const totalSettlement = orders.reduce((sum, o) => sum + (parseFloat(o.bank_settlement) || 0), 0);
+
+            let rows = orders.length
+                ? orders.map(o => `
+                    <tr style="border-bottom:1px solid var(--border);">
+                        <td style="padding:0.4rem 0.5rem;">
+                            <a href="#" onclick="openOrderDetailFromContact('${o.order_id}'); return false;"
+                               style="font-family:monospace; color:var(--primary,#4f46e5); text-decoration:underline;">${o.order_id || '—'}</a>
+                        </td>
+                        <td style="padding:0.4rem 0.5rem;">${o.date ? o.date.slice(0, 10) : '—'}</td>
+                        <td style="padding:0.4rem 0.5rem;">${o.platform || '—'}</td>
+                        <td style="padding:0.4rem 0.5rem; color:${statusColor(o.status)};">${o.status}</td>
+                        <td style="padding:0.4rem 0.5rem; text-align:right;">&#8377;${Number(o.bank_settlement).toFixed(2)}</td>
+                        <td style="padding:0.4rem 0.5rem; color:var(--text-muted); font-size:0.8rem;">${o.items_summary || ''}</td>
+                    </tr>`).join('')
+                : '<tr><td colspan="6" style="padding:0.75rem; color:var(--text-muted); text-align:center;">No orders found for this customer.</td></tr>';
+
+            const footer = orders.length ? `
+                    <tfoot>
+                        <tr style="border-top:2px solid var(--border); font-weight:700; background:#fcfcfc;">
+                            <td colspan="4" style="padding:0.6rem 0.5rem; text-align:right; text-transform:uppercase; font-size:0.75rem; color:var(--text-muted);">Total Settlement:</td>
+                            <td style="padding:0.6rem 0.5rem; text-align:right;">&#8377;${totalSettlement.toFixed(2)}</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>` : '';
+
+            content.innerHTML = `
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.6rem;">
+                    <span style="font-weight:600; font-size:0.9rem;">Order History</span>
+                    <span style="font-size:0.85rem; color:var(--text-muted);">CLV (Delivered + Settled): <strong style="color:var(--success,#16a34a);">${clv}</strong></span>
+                </div>
+                <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+                    <thead>
+                        <tr style="border-bottom:2px solid var(--border); color:var(--text-muted); font-size:0.78rem; text-transform:uppercase;">
+                            <th style="padding:0.3rem 0.5rem; text-align:left;">Order ID</th>
+                            <th style="padding:0.3rem 0.5rem; text-align:left;">Date</th>
+                            <th style="padding:0.3rem 0.5rem; text-align:left;">Platform</th>
+                            <th style="padding:0.3rem 0.5rem; text-align:left;">Status</th>
+                            <th style="padding:0.3rem 0.5rem; text-align:right;">Settlement</th>
+                            <th style="padding:0.3rem 0.5rem; text-align:left;">Items</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                    ${footer}
+                </table>`;
+        }).catch(() => {
+            content.innerHTML = '<div style="color:#dc2626; padding:0.75rem;">Failed to load order history. Please try again.</div>';
+        });
+    }
+
+    // ── helpers shared with openViewModalFromBtn logic ────────────────────
+    function fmt(n) { return '\u20B9\u00a0' + (parseFloat(n) || 0).toFixed(2); }
+    function finRow(label, value, style = '') {
+        return `<span style="color:var(--text-secondary);">${label}</span><span style="${style}">${value}</span>`;
+    }
+
+    function openOrderDetailFromContact(orderId) {
+        // Show the modal immediately with a loading state
+        document.getElementById('view-order-id').textContent = '#' + orderId;
+        document.getElementById('view-order-id-field').textContent = orderId;
+        document.getElementById('view-customer').textContent = '\u2026';
+        document.getElementById('view-date').textContent = '\u2026';
+        document.getElementById('view-platform').textContent = '\u2026';
+        document.getElementById('view-order-items-body').innerHTML =
+            '<tr><td colspan="5" class="empty-state">Loading\u2026</td></tr>';
+        document.getElementById('view-fin-rows').innerHTML = '';
+        document.getElementById('view-return-section').classList.add('hidden');
+        document.getElementById('view-timeline').innerHTML = '';
+        document.getElementById('viewModal').classList.remove('hidden');
+
+        fetch('/orders/api/order-detail/' + encodeURIComponent(orderId))
+            .then(r => r.json())
+            .then(data => {
+                // ── Header fields ──
+                let dateStr = '-';
+                if (data.date) {
+                    try { const d = new Date(data.date); if (!isNaN(d)) dateStr = d.toLocaleDateString('en-GB'); } catch (e) { }
+                }
+                document.getElementById('view-date').textContent = dateStr;
+                document.getElementById('view-order-id').textContent = data.order_id ? `#${data.order_id}` : '';
+                document.getElementById('view-order-id-field').textContent = data.order_id || '-';
+                document.getElementById('view-customer').textContent = data.customer || '-';
+                document.getElementById('view-platform').textContent = data.platform || '-';
+
+                // ── Items table ──
+                const tbody = document.getElementById('view-order-items-body');
+                tbody.innerHTML = '';
+                let sellingPrice = 0;
+                if (data.order_items && data.order_items.length > 0) {
+                    data.order_items.forEach(item => {
+                        const qty = item.quantity || 1;
+                        const price = item.price || 0;
+                        const lineTotal = qty * price;
+                        sellingPrice += lineTotal;
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>
+                                ${item.product || '-'}
+                                ${item.color ? `<span class="text-muted" style="font-size:0.85em;">(${item.color})</span>` : ''}
+                            </td>
+                            <td>${item.color || '-'}</td>
+                            <td class="text-right">${qty}</td>
+                            <td class="text-right">\u20B9 ${parseFloat(price).toFixed(2)}</td>
+                            <td class="text-right text-bold">\u20B9 ${lineTotal.toFixed(2)}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No items logged.</td></tr>';
+                }
+
+                // ── Financial Summary ──
+                const shipping = parseFloat(data.shipping || 0);
+                const tax = parseFloat(data.tax || 0);
+                const mktFee = parseFloat(data.marketplace_fee || 0);
+                const netSettlement = parseFloat(data.bank_settlement || (sellingPrice - shipping - tax - mktFee));
+                const isTerminalPaid = data.status === 'Settled';
+
+                document.getElementById('view-fin-rows').innerHTML = [
+                    finRow('Selling Price', fmt(sellingPrice)),
+                    shipping ? finRow('\u2212 Shipping', fmt(shipping), 'color:#ef4444;') : '',
+                    tax ? finRow('\u2212 Tax / GST', fmt(tax), 'color:#ef4444;') : '',
+                    mktFee ? finRow('\u2212 Marketplace Fee', fmt(mktFee), 'color:#ef4444;') : '',
+                    `<span style="color:var(--text-secondary); border-top:1px solid var(--border); padding-top:0.4rem; margin-top:0.2rem;">Net Settlement</span>
+                     <span style="font-weight:800; font-size:1.05em; border-top:1px solid var(--border); padding-top:0.4rem; margin-top:0.2rem; color:${netSettlement >= 0 ? '#059669' : '#ef4444'};">\u20B9\u00a0${netSettlement.toFixed(2)}</span>`,
+                    isTerminalPaid ? finRow('Status', '<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:999px;font-size:0.82em;font-weight:600;">Settled \u2713</span>') : '',
+                ].filter(Boolean).join('');
+
+                // ── Return Details (conditional) ──
+                const returnSection = document.getElementById('view-return-section');
+                if (['Returned', 'RTO'].includes(data.status)) {
+                    returnSection.classList.remove('hidden');
+                    const rtMap = { rto: 'RTO (Return to Origin)', customer_return: 'Customer Return' };
+                    const condMap = { restock: '\u2713 Restocked to Inventory', damaged: '\u2717 Damaged \u2014 Not Restocked' };
+                    document.getElementById('view-return-type').textContent = rtMap[data.return_type] || data.status;
+                    document.getElementById('view-return-condition').textContent = condMap[data.item_condition] || '\u2014';
+                    document.getElementById('view-return-penalty').textContent = data.penalty_amount ? fmt(data.penalty_amount) : '\u20B9 0.00 (None)';
+                } else {
+                    returnSection.classList.add('hidden');
+                }
+
+                // ── Timeline ──
+                const history = data.status_history || [];
+                const timeline = document.getElementById('view-timeline');
+                timeline.innerHTML = '';
+                const statusColors = {
+                    'Pending': '#f59e0b', 'Shipped': '#3b82f6', 'Delivered': '#10b981',
+                    'RTO': '#ef4444', 'Returned': '#ef4444', 'Cancelled': '#6b7280', 'Settled': '#059669',
+                };
+                if (history.length === 0) {
+                    timeline.innerHTML = '<span class="text-muted" style="font-size:0.85em;">No status history available.</span>';
+                } else {
+                    history.forEach((entry, i) => {
+                        const color = statusColors[entry.status] || 'var(--primary)';
+                        let dateLabel = '';
+                        try {
+                            const d = new Date(entry.timestamp);
+                            if (!isNaN(d)) {
+                                dateLabel = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' +
+                                    d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                            }
+                        } catch (e) { }
+                        const node = document.createElement('div');
+                        node.style.cssText = 'display:flex;align-items:center;flex-shrink:0;';
+                        node.innerHTML = `
+                            <div style="text-align:center;">
+                                <div style="font-size:0.72em;color:#6b7280;margin-bottom:4px;white-space:nowrap;">${dateLabel}</div>
+                                <div style="display:inline-block;padding:4px 10px;border-radius:999px;background:${color}20;color:${color};font-size:0.78em;font-weight:600;border:1.5px solid ${color};white-space:nowrap;">${entry.status}</div>
+                            </div>
+                            ${i < history.length - 1 ? '<div style="height:2px;width:28px;background:#e5e7eb;flex-shrink:0;margin:0 2px;margin-top:20px;"></div>' : ''}
+                        `;
+                        timeline.appendChild(node);
+                    });
+                }
+            })
+            .catch(() => {
+                document.getElementById('view-order-items-body').innerHTML =
+                    '<tr><td colspan="5" style="color:#dc2626; padding:0.75rem;">Failed to load order detail.</td></tr>';
+            });
+    }
+
+    // Close viewModal on overlay click
+    document.getElementById('viewModal')
+        .addEventListener('click', function (e) {
+            if (e.target === this) closeModal('viewModal');
+        });
+</script>
+{% endblock %}

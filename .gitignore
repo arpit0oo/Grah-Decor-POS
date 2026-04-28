@@ -1,0 +1,16 @@
+venv/
+.venv/
+.env
+__pycache__/
+*.pyc
+.idea/
+.vscode/
+
+# Firebase credentials (if stored locally)
+*.json
+firebase-adminsdk.json
+
+# Local database/logs files if any
+*.sqlite3
+*.log
+wipe_firebase.py

@@ -1,0 +1,1131 @@
+{% extends "base.html" %}
+{% block title %}Orders — Grah Decor POS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Order Book</h1>
+    <button class="btn btn-primary" onclick="toggleForm('orderForm')">+ New Order</button>
+</div>
+
+<!-- Datalists for Auto-Complete -->
+<datalist id="productsList">
+    {% for p in products %}
+    <option value="{{ p }}">
+        {% endfor %}
+</datalist>
+<datalist id="colorsList">
+    {% for c in colors %}
+    <option value="{{ c }}">
+        {% endfor %}
+</datalist>
+<datalist id="reviewsList">
+    {% for r in reviews %}
+    <option value="{{ r }}">
+        {% endfor %}
+</datalist>
+
+<!-- Add Order Form -->
+<div class="form-card hidden" id="orderForm">
+    <h3>Log New Order</h3>
+    <form autocomplete="off" method="POST" action="{{ url_for('orders.order_add') }}" onsubmit="return validateOrderForm('add', true)">
+
+        <!-- Row 1: Order Identity -->
+        <div class="order-form-row">
+            <div class="form-group">
+                <label for="add-date">Date</label>
+                <input type="date" id="add-date" name="date" required>
+            </div>
+            <div class="form-group">
+                <label for="add-order-id">Order ID *</label>
+                <input type="text" id="add-order-id" name="order_id" placeholder="Platform order ID" required>
+            </div>
+            <div class="form-group">
+                <label for="add-platform">Platform *</label>
+                <select id="add-platform" name="platform" required>
+                    <option value="" disabled selected>Select platform...</option>
+                    {% for p in platforms %}
+                    <option value="{{ p }}">{{ p }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <!-- Row 2: Customer -->
+        <div class="order-form-section-label">Customer</div>
+        <div id="add-customer-section-wrapper" style="border:1px solid transparent; padding: 0.5rem; border-radius: 6px; margin: 0 -0.5rem;">
+            <div style="margin-bottom:0.6rem; display:flex; gap:1.5rem; align-items:center; flex-wrap:wrap;">
+                <label style="font-size:0.875rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                    <input type="radio" name="customer_mode" value="existing" onchange="toggleCustomerMode('add'); validateOrderForm('add');"> Existing
+                </label>
+                <label style="font-size:0.875rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                    <input type="radio" name="customer_mode" value="new" checked onchange="toggleCustomerMode('add'); validateOrderForm('add');"> New
+                    Customer
+                </label>
+                <label style="font-size:0.875rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                    <input type="radio" name="customer_mode" value="unknown" onchange="toggleCustomerMode('add'); validateOrderForm('add');"> Unknown /
+                    Walk-in
+                </label>
+            </div>
+            <div id="add-existing-customer-group" class="order-form-row hidden" style="grid-template-columns:1fr;">
+                <div class="form-group" style="margin:0;">
+                    <label for="add-existing-customer">Select Customer *</label>
+                    <select id="add-existing-customer" name="existing_customer" style="width: 100%;" onchange="validateOrderForm('add')">
+                        <option value="" disabled selected>Select a customer...</option>
+                        {% for c in customers %}
+                        <option value="{{ c.customer_id }} - {{ c.name }}">{{ c.customer_id }} - {{ c.name }} ({{
+                            c.phone_numbers[0] if c.phone_numbers else 'No phone' }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div id="add-new-customer-group" class="order-form-row" style="grid-template-columns:1fr 1fr;">
+                <div class="form-group" style="margin:0;">
+                    <label for="add-new-customer-name">New Customer Name *</label>
+                    <input type="text" id="add-new-customer-name" name="new_customer_name" placeholder="Customer name" oninput="validateOrderForm('add')"
+                        required>
+                </div>
+                <div class="form-group" style="margin:0;">
+                    <label for="add-new-customer-phone">Phone *</label>
+                    <input type="tel" id="add-new-customer-phone" name="new_customer_phone" placeholder="10-digit number"
+                        pattern="[0-9]{10}" maxlength="10" oninput="this.value = this.value.replace(/[^0-9]/g, '');" required>
+                </div>
+            </div>
+            <div id="add-unknown-customer-group" class="hidden"
+                style="padding:0.5rem 0.75rem; background:#fffbeb; border:1px solid #fde68a; border-radius:6px; font-size:0.85rem; color:#92400e;">
+                🚶 Order will be saved with customer = <strong>Unknown</strong>. You can assign a customer later via Edit.
+            </div>
+            <div id="add-customer-error" class="hidden" style="color:var(--danger); font-size:0.8rem; margin-top:0.5rem; font-weight:600;">Please select a customer option</div>
+        </div>
+
+        <!-- Row 3: Order Items -->
+        <div class="order-form-section-label" style="display:flex; justify-content:space-between; align-items:center;">
+            <span>Order Items</span>
+            <button type="button" class="btn btn-xs btn-ghost" onclick="addOrderItemRow('add-order-items', 'add')">+ Add
+                Item</button>
+        </div>
+        <div id="add-order-items"></div>
+        <div style="text-align:right; margin-top:0.5rem; font-weight:700; font-size:0.95em; color:var(--primary);">
+            Items Total: <span id="add-selling-price-display">₹ 0.00</span>
+        </div>
+
+        <!-- Row 4: Financial Breakdown -->
+        <div class="order-form-section-label">Financials</div>
+        <div class="order-form-row" style="grid-template-columns: repeat(3, 1fr);">
+            <div class="form-group" style="margin:0;">
+                <label for="add-shipping">Shipping ₹ *</label>
+                <input type="number" id="add-shipping" name="shipping" step="0.01" min="0" value="0"
+                    oninput="calcSettlement('add')" required>
+            </div>
+            <div class="form-group" style="margin:0;">
+                <label for="add-tax">Tax ₹ *</label>
+                <input type="number" id="add-tax" name="tax" step="0.01" min="0" value="0"
+                    oninput="calcSettlement('add')" required>
+            </div>
+            <div class="form-group" style="margin:0;">
+                <label for="add-marketplace-fee">Mkt Fee ₹ *</label>
+                <input type="number" id="add-marketplace-fee" name="marketplace_fee" step="0.01" min="0" value="0"
+                    oninput="calcSettlement('add')" required>
+            </div>
+        </div>
+
+        <!-- Row 5: Footer -->
+        <div class="order-form-footer">
+            <div class="settlement-display" id="add-settlement-card">
+                <span>Net Settlement</span>
+                <strong id="add-settlement-display">₹ 0.00</strong>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-ghost" onclick="toggleForm('orderForm')">Discard</button>
+                <button type="submit" class="btn btn-primary">Save Order</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Filters -->
+<div class="filter-bar">
+    <form autocomplete="off" method="GET" action="{{ url_for('orders.orders_list') }}" class="filter-form">
+        <input type="date" name="date_from" value="{{ filter_date_from }}" placeholder="From">
+        <input type="date" name="date_to" value="{{ filter_date_to }}" placeholder="To">
+        <select name="platform">
+            <option value="">All Platforms</option>
+            {% for p in platforms %}
+            <option value="{{ p }}" {% if filter_platform==p %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+        </select>
+        <select name="status">
+            <option value="">All Status</option>
+            {% for s in statuses %}
+            <option value="{{ s }}" {% if filter_status==s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+        </select>
+        <select name="review_status">
+            <option value="">All Reviews</option>
+            <option value="Pending" {% if filter_review=='Pending' %}selected{% endif %}>Pending</option>
+            <option value="Done" {% if filter_review=='Done' %}selected{% endif %}>Done</option>
+        </select>
+        <button type="submit" class="btn btn-sm">Filter</button>
+        <a href="{{ url_for('orders.orders_list') }}" class="btn btn-sm btn-ghost">Clear</a>
+    </form>
+</div>
+
+<!-- Summary -->
+<div class="summary-row">
+    <div class="summary-item">
+        <span class="summary-label">Total Orders</span>
+        <span class="summary-value">{{ orders|length }}</span>
+    </div>
+    <div class="summary-item">
+        <span class="summary-label">Total Sales</span>
+        <span class="summary-value">₹ {{ "%.2f"|format(total_sales) }}</span>
+    </div>
+    <div class="summary-item">
+        <span class="summary-label">Total Settlement</span>
+        <span class="summary-value">₹ {{ "%.2f"|format(total_settlement) }}</span>
+    </div>
+</div>
+
+<!-- Orders Table -->
+<form autocomplete="off" id="bulkForm" method="POST" action="{{ url_for('orders.orders_bulk_action') }}">
+    <input type="hidden" name="action" id="bulkActionInput" value="">
+    <div class="table-wrapper">
+        <table class="data-table" id="ordersTable">
+            <thead>
+                <tr>
+                    <th style="width: 40px; text-align: center;">
+                        <input type="checkbox" id="selectAllCheckbox" onclick="toggleAll(this)">
+                    </th>
+                    <th>Date</th>
+                    <th>Order ID</th>
+                    <th>Customer</th>
+                    <th>Items</th>
+                    <th>Platform</th>
+                    <th>Selling ₹</th>
+                    <th>Shipping</th>
+                    <th>Tax</th>
+                    <th>Mkt Fee</th>
+                    <th>Settlement ₹</th>
+                    <th>Status</th>
+                    <th>Review</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                {% set is_terminal = order.status in ['Cancelled', 'Settled', 'Returned', 'RTO', 'Delivered'] %}
+                <tr>
+                    <td style="text-align: center;">
+                        <input type="checkbox" class="row-checkbox" name="order_ids" value="{{ order.id }}"
+                            onclick="updateBulkBar()" {% if is_terminal %}disabled{% endif %}>
+                    </td>
+                    <td>{{ order.date.strftime('%d/%m/%Y') if order.date and order.date.strftime else '-' }}</td>
+                    <td class="text-mono">{{ order.order_id or '-' }}</td>
+                    <td>{{ order.customer }}</td>
+                    <td>{{ order.order_items|length if order.order_items else 0 }} Items</td>
+                    <td><span class="badge badge-platform">{{ order.platform }}</span></td>
+                    <td class="text-right">{{ "%.2f"|format(order.selling_price) }}</td>
+                    <td class="text-right">{{ "%.2f"|format(order.shipping) }}</td>
+                    <td class="text-right">{{ "%.2f"|format(order.tax) }}</td>
+                    <td class="text-right">{{ "%.2f"|format(order.marketplace_fee) }}</td>
+                    <td class="text-right text-bold">{{ "%.2f"|format(order.bank_settlement) }}</td>
+                    <td style="position:relative;">
+                        {% if is_terminal %}
+                        <span class="badge badge-{{ order.status|lower|replace(' ', '-') }}">{{ order.status }}</span>
+                        {% else %}
+                        <select class="badge badge-{{ order.status|lower|replace(' ', '-') }}"
+                            style="padding-right:1rem; cursor:pointer; outline:none; border:none; appearance:auto; text-align:center; font-family:var(--font); font-weight:600; min-width:85px; background-color:transparent;"
+                            onchange="inlineUpdateStatus('{{ order.id }}', this.value, this)">
+                            {% if order.status == 'Pending' %}
+                            <option value="Pending" selected>Pending</option>
+                            <option value="Shipped">Shipped</option>
+                            <option value="Cancelled">Cancelled</option>
+                            {% elif order.status == 'Shipped' %}
+                            <option value="Shipped" selected>Shipped</option>
+                            <option value="Delivered">Delivered</option>
+                            <option value="Cancelled">Cancelled</option>
+                            {% elif order.status == 'Delivered' %}
+                            <option value="Delivered" selected>Delivered</option>
+                            {% endif %}
+                        </select>
+                        {% endif %}
+                    </td>
+                    <td style="position:relative; text-align:center;">
+                        {% set review_val = order.reviews if order.reviews else 'Pending' %}
+                        <select class="badge badge-review-{{ review_val|lower|replace(' ', '-') }}"
+                            style="padding-right:1.25rem; cursor:pointer; outline:none; border:none; appearance:auto; text-align:center; font-family:var(--font); font-weight:600; min-width:110px; background-color:transparent;"
+                            onchange="inlineUpdateReview('{{ order.id }}', this.value, this)" {% if
+                            order.reviews=='Done' %}disabled{% endif %}>
+                            <option value="Pending" {% if order.reviews=='Pending' or not order.reviews %}selected{%
+                                endif %}>Pending</option>
+                            <option value="Not Responding" {% if order.reviews=='Not Responding' %}selected{% endif %}>
+                                Not Responding</option>
+                            <option value="Done" {% if order.reviews=='Done' %}selected{% endif %}>Done</option>
+                        </select>
+                    </td>
+                    <td class="actions-cell">
+                        <button type="button" class="btn btn-xs btn-ghost"
+                            style="color:var(--primary); border-color:var(--bg); background:var(--bg);"
+                            data-order="{{ order|tojson|forceescape }}"
+                            onclick="openViewModalFromBtn(this)">View</button>
+                        {% if not is_terminal %}
+                        <button type="button" class="btn btn-xs btn-ghost" data-id="{{ order.id }}"
+                            data-order="{{ order|tojson|forceescape }}"
+                            onclick="openEditModalFromBtn(this)">Edit</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not orders %}
+                <tr>
+                    <td colspan="15" class="empty-state">No orders found. Click "+ New Order" to add one.</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</form>
+
+<!-- Floating Bulk Actions Bar -->
+<div id="bulkActionBar" class="bulk-action-bar hidden">
+    <div class="bulk-content" id="bulkContent">
+        <span id="bulkCount">0 orders selected</span>
+        <select id="bulkActionSelect" class="bulk-select">
+            <option value="" disabled selected>Choose action...</option>
+            <option value="status_Pending">Mark Pending</option>
+            <option value="status_Shipped">Mark Shipped</option>
+            <option value="status_Delivered">Mark Delivered</option>
+            <option value="status_Cancelled">Mark Cancelled</option>
+        </select>
+        <button type="button" class="btn btn-primary btn-sm" onclick="submitBulk()">Apply</button>
+    </div>
+    <button type="button" class="btn-minimize" onclick="toggleBulkMinimize()" id="bulkMinBtn">
+        <span id="minIcon">▾</span>
+    </button>
+</div>
+
+<!-- View Modal -->
+<div class="modal-overlay hidden" id="viewModal">
+    <div class="modal" style="max-width: 700px;">
+        <div class="modal-header">
+            <h3>Order Details <span id="view-order-id" class="text-muted"
+                    style="font-size: 0.9em; margin-left: 0.5rem;"></span></h3>
+            <button class="modal-close" onclick="closeModal('viewModal')">×</button>
+        </div>
+
+        <div style="margin-bottom: 1.5rem;" class="form-grid form-grid-4 text-muted">
+            <div>
+                <small style="font-size:0.75em; letter-spacing:0.05em; text-transform:uppercase;">Order ID</small><br>
+                <strong id="view-order-id-field" style="color:var(--text); font-size:1.1em;"></strong>
+            </div>
+            <div>
+                <small style="font-size:0.75em; letter-spacing:0.05em; text-transform:uppercase;">Customer</small><br>
+                <strong id="view-customer" style="color:var(--text); font-size:1.1em;"></strong>
+            </div>
+            <div>
+                <small style="font-size:0.75em; letter-spacing:0.05em; text-transform:uppercase;">Date</small><br>
+                <strong id="view-date" style="color:var(--text); font-size:1.1em;"></strong>
+            </div>
+            <div>
+                <small style="font-size:0.75em; letter-spacing:0.05em; text-transform:uppercase;">Platform</small><br>
+                <strong id="view-platform" style="color:var(--text); font-size:1.1em;"></strong>
+            </div>
+        </div>
+
+        <div class="table-wrapper"
+            style="margin-bottom: 1.5rem; max-height:300px; overflow-y:auto; box-shadow:none; border-color:#eee;">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th style="background:#f5f6f8;">Product</th>
+                        <th style="background:#f5f6f8;">Color</th>
+                        <th class="text-right" style="background:#f5f6f8;">Qty</th>
+                        <th class="text-right" style="background:#f5f6f8;">Price</th>
+                        <th class="text-right" style="background:#f5f6f8;">Total</th>
+                    </tr>
+                </thead>
+                <tbody id="view-order-items-body">
+                    <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Financial Summary -->
+        <div style="margin-top:0.5rem; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;">
+            <div
+                style="background:#f8f9fa; padding:0.5rem 1rem; font-size:0.72em; text-transform:uppercase; letter-spacing:0.06em; font-weight:600; color:var(--text-secondary); border-bottom:1px solid var(--border);">
+                Financial Summary</div>
+            <div style="padding:0.75rem 1rem;">
+                <div id="view-fin-rows"
+                    style="display:grid; grid-template-columns:1fr auto; gap:0.3rem 1.5rem; font-size:0.9em;">
+                    <!-- populated by JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Return Details (conditional) -->
+        <div id="view-return-section" class="hidden"
+            style="margin-top:0.75rem; border:1px solid #fecaca; border-radius:var(--radius); overflow:hidden;">
+            <div
+                style="background:#fef2f2; padding:0.5rem 1rem; font-size:0.72em; text-transform:uppercase; letter-spacing:0.06em; font-weight:600; color:#991b1b; border-bottom:1px solid #fecaca;">
+                Return Details</div>
+            <div style="padding:0.75rem 1rem;">
+                <div style="display:grid; grid-template-columns:1fr auto; gap:0.3rem 1.5rem; font-size:0.9em;">
+                    <span style="color:var(--text-secondary);">Return Type</span> <span id="view-return-type"
+                        style="font-weight:600;"></span>
+                    <span style="color:var(--text-secondary);">Item Condition</span> <span id="view-return-condition"
+                        style="font-weight:600;"></span>
+                    <span style="color:#991b1b;">Penalty Amount</span> <span id="view-return-penalty"
+                        style="font-weight:700; color:#991b1b;"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Order Journey Timeline -->
+        <div style="margin-top:1.5rem; padding-top:1.25rem; border-top:1px solid var(--border);">
+            <div
+                style="font-size:0.75em; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin-bottom:1rem; font-weight:600;">
+                Order Journey</div>
+            <div id="view-timeline"
+                style="display:flex; align-items:flex-start; gap:0; overflow-x:auto; padding-bottom:0.5rem;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay hidden" id="editModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Edit Order</h3>
+            <button class="modal-close" onclick="closeModal('editModal')">×</button>
+        </div>
+        <form autocomplete="off" method="POST" id="editForm">
+
+            <!-- Row 1: Order Identity -->
+            <div class="order-form-row">
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="date" name="date" id="edit-date">
+                </div>
+                <div class="form-group">
+                    <label>Order ID</label>
+                    <input type="text" name="order_id" id="edit-order_id">
+                </div>
+                <div class="form-group">
+                    <label>Platform</label>
+                    <select name="platform" id="edit-platform">
+                        {% for p in platforms %}
+                        <option value="{{ p }}">{{ p }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Row 2: Customer -->
+            <div class="order-form-section-label">Customer</div>
+            <!-- Standard name/phone fields (hidden when customer is Unknown) -->
+            <div id="edit-customer-standard" class="order-form-row" style="grid-template-columns:1fr 1fr;">
+                <div class="form-group" style="margin:0;">
+                    <label>Customer Name</label>
+                    <input type="text" name="customer" id="edit-customer">
+                </div>
+                <div class="form-group" style="margin:0;">
+                    <label>Phone</label>
+                    <input type="tel" name="number" id="edit-number" pattern="[0-9]{10}" maxlength="10"
+                        oninput="this.value = this.value.replace(/[^0-9]/g, '');">
+                </div>
+            </div>
+            <!-- Reassignment panel — shown only when customer == Unknown -->
+            <div id="edit-unknown-banner" class="hidden"
+                style="background:#fffbeb; border:1px solid #fde68a; border-radius:6px; padding:0.75rem; margin-bottom:0.5rem;">
+                <div style="font-size:0.82rem; color:#92400e; margin-bottom:0.6rem;">⚠ This order has no assigned
+                    customer. Assign one now (optional):</div>
+                <input type="hidden" name="edit_customer_mode" id="edit-customer-mode-input" value="">
+                <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+                    <label style="font-size:0.85rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                        <input type="radio" name="edit_customer_choice" value="none" checked
+                            onchange="toggleEditCustomerAssign('none')"> Keep Unknown
+                    </label>
+                    <label style="font-size:0.85rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                        <input type="radio" name="edit_customer_choice" value="assign_existing"
+                            onchange="toggleEditCustomerAssign('assign_existing')"> Link Existing Customer
+                    </label>
+                    <label style="font-size:0.85rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                        <input type="radio" name="edit_customer_choice" value="assign_new"
+                            onchange="toggleEditCustomerAssign('assign_new')"> Create New Customer
+                    </label>
+                </div>
+                <!-- Existing Customer Select -->
+                <div id="edit-assign-existing-group" class="hidden" style="margin-top:0.6rem;">
+                    <select name="edit_existing_customer" id="edit-assign-existing-select" style="width:100%;">
+                        <option value="" disabled selected>Select a customer...</option>
+                        {% for c in customers %}
+                        <option value="{{ c.customer_id }} - {{ c.name }}">{{ c.customer_id }} - {{ c.name }} ({{
+                            c.phone_numbers[0] if c.phone_numbers else 'No phone' }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <!-- New Customer Fields -->
+                <div id="edit-assign-new-group" class="hidden order-form-row"
+                    style="margin-top:0.6rem; grid-template-columns:1fr 1fr;">
+                    <div class="form-group" style="margin:0;">
+                        <label>New Customer Name *</label>
+                        <input type="text" name="edit_new_customer_name" id="edit-assign-new-name"
+                            placeholder="Customer name">
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label>Phone</label>
+                        <input type="tel" name="edit_new_customer_phone" id="edit-assign-new-phone"
+                            placeholder="10-digit number" maxlength="10"
+                            oninput="this.value = this.value.replace(/[^0-9]/g, '');">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Row 3: Order Items -->
+            <div class="order-form-section-label"
+                style="display:flex; justify-content:space-between; align-items:center;">
+                <span>Order Items</span>
+                <button type="button" class="btn btn-xs btn-ghost"
+                    onclick="addOrderItemRow('edit-order-items', 'edit')">+ Add Item</button>
+            </div>
+            <div id="edit-order-items"></div>
+            <div style="text-align:right; margin-top:0.5rem; font-weight:700; font-size:0.95em; color:var(--primary);">
+                Items Total: <span id="edit-selling-price-display">₹ 0.00</span>
+            </div>
+
+            <!-- Row 4: Financial Breakdown -->
+            <div class="order-form-section-label">Financials</div>
+            <div class="order-form-row" style="grid-template-columns: repeat(3, 1fr);">
+                <div class="form-group" style="margin:0;">
+                    <label>Shipping ₹</label>
+                    <input type="number" name="shipping" id="edit-shipping" step="0.01" min="0"
+                        oninput="calcSettlement('edit')">
+                </div>
+                <div class="form-group" style="margin:0;">
+                    <label>Tax ₹</label>
+                    <input type="number" name="tax" id="edit-tax" step="0.01" min="0" oninput="calcSettlement('edit')">
+                </div>
+                <div class="form-group" style="margin:0;">
+                    <label>Mkt Fee ₹</label>
+                    <input type="number" name="marketplace_fee" id="edit-marketplace_fee" step="0.01" min="0"
+                        oninput="calcSettlement('edit')">
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="order-form-footer">
+                <div class="settlement-display card-variant" id="edit-settlement-card">
+                    <span>Net Settlement</span>
+                    <strong id="edit-settlement-display">₹ 0.00</strong>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-ghost" onclick="closeModal('editModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Order</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function toggleAll(source) {
+        const checkboxes = document.querySelectorAll('.row-checkbox');
+        checkboxes.forEach(cb => cb.checked = source.checked);
+        updateBulkBar();
+    }
+
+    function updateBulkBar() {
+        const checkedCount = document.querySelectorAll('.row-checkbox:checked').length;
+        const bar = document.getElementById('bulkActionBar');
+        const span = document.getElementById('bulkCount');
+        if (checkedCount > 0) {
+            bar.classList.remove('hidden');
+            span.textContent = `${checkedCount} order${checkedCount > 1 ? 's' : ''} selected`;
+        } else {
+            bar.classList.add('hidden');
+            bar.classList.remove('minimized');
+            document.getElementById('minIcon').textContent = '▾';
+        }
+    }
+
+    function toggleBulkMinimize() {
+        const bar = document.getElementById('bulkActionBar');
+        const icon = document.getElementById('minIcon');
+        bar.classList.toggle('minimized');
+        icon.textContent = bar.classList.contains('minimized') ? '▴' : '▾';
+    }
+
+    function submitBulk() {
+        const select = document.getElementById('bulkActionSelect');
+        const action = select.value;
+        if (!action) {
+            alert("Please choose an action first.");
+            return;
+        }
+        if (!confirm(`Are you sure you want to apply this status to all selected orders?`)) return;
+
+        document.getElementById('bulkActionInput').value = action;
+        document.getElementById('bulkForm').submit();
+    }
+
+    function handleDropdownOther(selectElem) {
+        let container = selectElem.parentElement;
+        let customInput = container.querySelector('input[type="text"]');
+        if (!customInput) return;
+
+        if (selectElem.value === '__other__') {
+            customInput.classList.remove('hidden');
+            customInput.name = selectElem.name;
+            selectElem.name = '';
+            if (selectElem.required) customInput.required = true;
+        } else {
+            customInput.classList.add('hidden');
+            selectElem.name = customInput.name || selectElem.name;
+            customInput.name = '';
+            customInput.required = false;
+            customInput.value = '';
+        }
+    }
+
+    function getOrderItemRowHtml(prefix) {
+        return `
+            <div class="order-item-row">
+                <div class="item-field item-field-product">
+                    <label>Product *</label>
+                    <select name="product[]" class="item-product" required onchange="handleDropdownOther(this); fetchVariants(this); calcSettlement('${prefix}');">
+                        <option value="" disabled selected>Select…</option>
+                        {% for p in products %}
+                        <option value="{{ p }}">{{ p }}</option>
+                        {% endfor %}
+                        <option value="__other__">Other…</option>
+                    </select>
+                    <input type="text" class="item-product-custom hidden" placeholder="Custom product" oninput="calcSettlement('${prefix}')">
+                </div>
+                <div class="item-field item-field-color">
+                    <label>Variant *</label>
+                    <select name="color[]" class="item-color" required onchange="handleDropdownOther(this); if(checkDuplicates(this.closest('.order-item-row'))) { alert('Already added. Adjust quantity instead.'); this.value=''; }">
+                        <option value="">None</option>
+                        {% for c in colors %}
+                        <option value="{{ c }}">{{ c }}</option>
+                        {% endfor %}
+                        <option value="__other__">Other…</option>
+                    </select>
+                    <input type="text" class="item-color-custom hidden" placeholder="Custom color">
+                </div>
+                <div class="item-field item-field-qty">
+                    <label>Qty *</label>
+                    <input type="number" name="quantity[]" class="item-qty" value="1" min="1" step="1" oninput="calcSettlement('${prefix}')" required>
+                </div>
+                <div class="item-field item-field-price">
+                    <label>Selling Price ₹ *</label>
+                    <input type="number" name="price[]" class="item-price" value="0" min="0" step="0.01" oninput="calcSettlement('${prefix}')" required>
+                </div>
+                <div class="item-field item-field-remove">
+                    <label>&nbsp;</label>
+                    <button type="button" class="btn btn-xs" style="background:var(--danger);color:white;border:none;" onclick="this.closest('.order-item-row').remove(); calcSettlement('${prefix}');">✕</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function addOrderItemRow(containerId, prefix) {
+        document.getElementById(containerId).insertAdjacentHTML('beforeend', getOrderItemRowHtml(prefix));
+    }
+
+    function checkDuplicates(row) {
+        if (!row) return false;
+        const container = row.parentElement;
+        const allRows = Array.from(container.querySelectorAll('.order-item-row'));
+
+        const currentProduct = row.querySelector('.item-product').value;
+        const currentColor = row.querySelector('.item-color').value;
+
+        // Ignore if product is empty or custom
+        if (!currentProduct || currentProduct === '__other__') return false;
+
+        for (let otherRow of allRows) {
+            if (otherRow === row) continue;
+
+            const otherProduct = otherRow.querySelector('.item-product').value;
+            const otherColor = otherRow.querySelector('.item-color').value;
+
+            if (currentProduct === otherProduct && currentColor === otherColor) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    async function fetchVariants(selectEl) {
+        const productName = selectEl.value;
+        if (!productName || productName === '__other__') return;
+        const colorSel = selectEl.closest('.order-item-row').querySelector('.item-color');
+        if (!colorSel) return;
+
+        try {
+            const res = await fetch('/inventory/api/variants?name=' + encodeURIComponent(productName));
+            const variants = await res.json();
+            if (variants.length > 0) {
+                // Replace colour options with fetched variants
+                colorSel.innerHTML = '<option value="">Select Variant</option>';
+                variants.forEach(v => {
+                    const opt = document.createElement('option');
+                    opt.value = v.color;
+                    opt.textContent = v.color + ' (' + v.quantity + ' in stock)';
+                    colorSel.appendChild(opt);
+                });
+                const otherOpt = document.createElement('option');
+                otherOpt.value = '__other__';
+                otherOpt.textContent = 'Other (Custom)...';
+                colorSel.appendChild(otherOpt);
+            }
+            // If no variants, leave colour dropdown as generic list
+        } catch (e) {
+            console.warn('Could not fetch variants:', e);
+        }
+
+        // After setting variants, check for duplicates
+        if (checkDuplicates(row)) {
+            alert("This product is already added to the order. Please adjust the quantity of the existing item instead.");
+            selectEl.value = "";
+            colorSel.innerHTML = '<option value="">No Variant</option>';
+            const prefix = row.closest('#edit-order-items') ? 'edit' : 'add';
+            calcSettlement(prefix);
+        }
+    }
+
+    /* ── helpers ── */
+    function fmt(n) { return '₹\u00a0' + (parseFloat(n) || 0).toFixed(2); }
+    function finRow(label, value, style = '') {
+        return `<span style="color:var(--text-secondary);">${label}</span><span style="${style}">${value}</span>`;
+    }
+
+    function openViewModalFromBtn(btn) {
+        const data = JSON.parse(btn.getAttribute('data-order'));
+
+        // ── Header fields ──
+        let dateStr = '-';
+        if (data.date) {
+            try { const d = new Date(data.date); if (!isNaN(d)) dateStr = d.toLocaleDateString('en-GB'); } catch (e) { }
+        }
+        document.getElementById('view-date').textContent = dateStr;
+        document.getElementById('view-order-id').textContent = data.order_id ? `#${data.order_id}` : '';
+        document.getElementById('view-order-id-field').textContent = data.order_id || '-';
+        document.getElementById('view-customer').textContent = data.customer || '-';
+        document.getElementById('view-platform').textContent = data.platform || '-';
+
+        // ── Items table ──
+        const tbody = document.getElementById('view-order-items-body');
+        tbody.innerHTML = '';
+        let sellingPrice = 0;
+        if (data.order_items && data.order_items.length > 0) {
+            data.order_items.forEach(item => {
+                const qty = item.quantity || 1;
+                const price = item.price || 0;
+                const lineTotal = qty * price;
+                sellingPrice += lineTotal;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>
+                        ${item.product || '-'}
+                        ${item.color ? `<span class="text-muted" style="font-size:0.85em;">(${item.color})</span>` : ''}
+                    </td>
+                    <td>${item.color || '-'}</td>
+                    <td class="text-right">${qty}</td>
+                    <td class="text-right">₹ ${parseFloat(price).toFixed(2)}</td>
+                    <td class="text-right text-bold">₹ ${lineTotal.toFixed(2)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } else {
+            tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No items logged.</td></tr>';
+        }
+
+        // ── Financial Summary ──
+        const shipping = parseFloat(data.shipping || 0);
+        const tax = parseFloat(data.tax || 0);
+        const mktFee = parseFloat(data.marketplace_fee || data.mkt_fee || 0);
+        const netSettlement = parseFloat(data.bank_settlement || data.settlement_amount || (sellingPrice - shipping - tax - mktFee));
+        const isTerminalPaid = ['Settled'].includes(data.status);
+
+        const finContainer = document.getElementById('view-fin-rows');
+        finContainer.innerHTML = [
+            finRow('Selling Price', fmt(sellingPrice)),
+            shipping ? finRow('− Shipping', fmt(shipping), 'color:#ef4444;') : '',
+            tax ? finRow('− Tax / GST', fmt(tax), 'color:#ef4444;') : '',
+            mktFee ? finRow('− Marketplace Fee', fmt(mktFee), 'color:#ef4444;') : '',
+            `<span style="color:var(--text-secondary); border-top:1px solid var(--border); padding-top:0.4rem; margin-top:0.2rem;">Net Settlement</span>
+             <span style="font-weight:800; font-size:1.05em; border-top:1px solid var(--border); padding-top:0.4rem; margin-top:0.2rem; color:${netSettlement >= 0 ? '#059669' : '#ef4444'};">${fmt(netSettlement)}</span>`,
+            isTerminalPaid ? finRow('Status', '<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:999px;font-size:0.82em;font-weight:600;">Settled ✓</span>') : '',
+        ].filter(Boolean).join('');
+
+        // ── Return Details (conditional) ──
+        const returnSection = document.getElementById('view-return-section');
+        if (['Returned', 'RTO'].includes(data.status)) {
+            returnSection.classList.remove('hidden');
+            const rtMap = { rto: 'RTO (Return to Origin)', customer_return: 'Customer Return' };
+            const condMap = { restock: '✓ Restocked to Inventory', damaged: '✗ Damaged — Not Restocked' };
+            document.getElementById('view-return-type').textContent = rtMap[data.return_type] || data.status;
+            document.getElementById('view-return-condition').textContent = condMap[data.item_condition] || '—';
+            document.getElementById('view-return-penalty').textContent = data.penalty_amount ? fmt(data.penalty_amount) : '₹ 0.00 (None)';
+        } else {
+            returnSection.classList.add('hidden');
+        }
+
+        // ── Timeline ──
+        const history = data.status_history || [];
+        const timeline = document.getElementById('view-timeline');
+        timeline.innerHTML = '';
+        const statusColors = {
+            'Pending': '#f59e0b', 'Shipped': '#3b82f6', 'Delivered': '#10b981',
+            'RTO': '#ef4444', 'Returned': '#ef4444', 'Cancelled': '#6b7280', 'Settled': '#059669',
+        };
+        if (history.length === 0) {
+            timeline.innerHTML = '<span class="text-muted" style="font-size:0.85em;">No status history available.</span>';
+        } else {
+            history.forEach((entry, i) => {
+                const color = statusColors[entry.status] || 'var(--primary)';
+                let dateLabel = '';
+                try {
+                    const d = new Date(entry.timestamp);
+                    if (!isNaN(d)) {
+                        dateLabel = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' +
+                            d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                    }
+                } catch (e) { }
+                const node = document.createElement('div');
+                node.style.cssText = 'display:flex;align-items:center;flex-shrink:0;';
+                node.innerHTML = `
+                    <div style="text-align:center;">
+                        <div style="font-size:0.72em;color:#6b7280;margin-bottom:4px;white-space:nowrap;">${dateLabel}</div>
+                        <div style="display:inline-block;padding:4px 10px;border-radius:999px;background:${color}20;color:${color};font-size:0.78em;font-weight:600;border:1.5px solid ${color};white-space:nowrap;">${entry.status}</div>
+                    </div>
+                    ${i < history.length - 1 ? '<div style="height:2px;width:28px;background:#e5e7eb;flex-shrink:0;margin:0 2px;margin-top:20px;"></div>' : ''}
+                `;
+                timeline.appendChild(node);
+            });
+        }
+
+        document.getElementById('viewModal').classList.remove('hidden');
+    }
+
+    function openEditModalFromBtn(btn) {
+        const docId = btn.getAttribute('data-id');
+        const data = JSON.parse(btn.getAttribute('data-order'));
+        openEditModal(docId, data);
+    }
+
+    function openEditModal(docId, data) {
+        const form = document.getElementById('editForm');
+        form.action = '/orders/edit/' + docId;
+
+        if (data.date) {
+            try {
+                let d = new Date(data.date);
+                if (!isNaN(d)) {
+                    document.getElementById('edit-date').value = d.toISOString().split('T')[0];
+                }
+            } catch (e) { }
+        }
+
+        document.getElementById('edit-order_id').value = data.order_id || '';
+        document.getElementById('edit-customer').value = data.customer || '';
+        document.getElementById('edit-number').value = data.number || '';
+
+        const itemsContainer = document.getElementById('edit-order-items');
+        itemsContainer.innerHTML = '';
+        if (data.order_items && data.order_items.length > 0) {
+            data.order_items.forEach(item => {
+                addOrderItemRow('edit-order-items', 'edit');
+                let lastRow = itemsContainer.lastElementChild;
+
+                let prodSelect = lastRow.querySelector('.item-product');
+                let prodOptions = Array.from(prodSelect.options).map(o => o.value);
+                if (item.product && !prodOptions.includes(item.product)) {
+                    prodSelect.value = '__other__';
+                    handleDropdownOther(prodSelect);
+                    lastRow.querySelector('.item-product-custom').value = item.product;
+                } else {
+                    prodSelect.value = item.product || '';
+                }
+
+                let colorSelect = lastRow.querySelector('.item-color');
+                let colorOptions = Array.from(colorSelect.options).map(o => o.value);
+                if (item.color && !colorOptions.includes(item.color)) {
+                    colorSelect.value = '__other__';
+                    handleDropdownOther(colorSelect);
+                    lastRow.querySelector('.item-color-custom').value = item.color;
+                } else {
+                    colorSelect.value = item.color || '';
+                }
+
+                lastRow.querySelector('.item-qty').value = item.quantity || 1;
+                lastRow.querySelector('.item-price').value = item.price || 0;
+            });
+        } else {
+            addOrderItemRow('edit-order-items', 'edit');
+        }
+
+        document.getElementById('edit-platform').value = data.platform || '';
+        document.getElementById('edit-shipping').value = data.shipping || 0;
+        document.getElementById('edit-tax').value = data.tax || 0;
+        document.getElementById('edit-marketplace_fee').value = data.marketplace_fee || 0;
+
+        // Handle Unknown customer — show reassignment banner
+        const isUnknown = (data.customer || '').toLowerCase() === 'unknown';
+        const standardRow = document.getElementById('edit-customer-standard');
+        const unknownBanner = document.getElementById('edit-unknown-banner');
+        if (isUnknown) {
+            standardRow.classList.add('hidden');
+            unknownBanner.classList.remove('hidden');
+            // Reset the reassignment panel
+            document.querySelectorAll('input[name="edit_customer_choice"]').forEach(r => r.checked = (r.value === 'none'));
+            toggleEditCustomerAssign('none');
+        } else {
+            standardRow.classList.remove('hidden');
+            unknownBanner.classList.add('hidden');
+        }
+
+        calcSettlement('edit');
+        document.getElementById('editModal').classList.remove('hidden');
+    }
+
+    function toggleCustomerMode(prefix) {
+        let mode = document.querySelector(`input[name="customer_mode"]:checked`).value;
+        let existingGroup = document.getElementById(`${prefix}-existing-customer-group`);
+        let newGroup = document.getElementById(`${prefix}-new-customer-group`);
+        let unknownGroup = document.getElementById(`${prefix}-unknown-customer-group`);
+        let newNameInput = document.getElementById(`${prefix}-new-customer-name`);
+        let newPhoneInput = document.getElementById(`${prefix}-new-customer-phone`);
+        let existingInput = document.getElementById(`${prefix}-existing-customer`);
+
+        existingGroup.classList.add('hidden');
+        newGroup.classList.add('hidden');
+        if (unknownGroup) unknownGroup.classList.add('hidden');
+        if (newNameInput) newNameInput.required = false;
+        if (newPhoneInput) newPhoneInput.required = false;
+        if (existingInput) existingInput.required = false;
+
+        if (mode === 'existing') {
+            existingGroup.classList.remove('hidden');
+            if (existingInput) existingInput.required = true;
+        } else if (mode === 'unknown') {
+            if (unknownGroup) unknownGroup.classList.remove('hidden');
+        } else { // 'new'
+            newGroup.classList.remove('hidden');
+            if (newNameInput) newNameInput.required = true;
+            if (newPhoneInput) newPhoneInput.required = true;
+        }
+    }
+
+    function toggleEditCustomerAssign(choice) {
+        document.getElementById('edit-assign-existing-group').classList.toggle('hidden', choice !== 'assign_existing');
+        document.getElementById('edit-assign-new-group').classList.toggle('hidden', choice !== 'assign_new');
+        document.getElementById('edit-customer-mode-input').value = choice === 'none' ? '' : choice;
+        document.getElementById('edit-assign-new-name').required = (choice === 'assign_new');
+    }
+
+    function calcSettlement(prefix) {
+        let totalItemsPrice = 0;
+        let form = document.querySelector(prefix === 'add' ? '#orderForm form' : '#editForm');
+        if (form) {
+            let prices = form.querySelectorAll('.item-price');
+            let qtys = form.querySelectorAll('.item-qty');
+            for (let i = 0; i < prices.length; i++) {
+                totalItemsPrice += (parseFloat(prices[i].value) || 0) * (parseInt(qtys[i].value) || 1);
+            }
+            let spDisplay = document.getElementById(prefix + '-selling-price-display');
+            if (spDisplay) {
+                spDisplay.textContent = '₹ ' + totalItemsPrice.toFixed(2);
+            }
+        }
+
+        const sp = totalItemsPrice;
+        const sh = parseFloat(document.getElementById(prefix + '-shipping')?.value || 0);
+        const tx = parseFloat(document.getElementById(prefix + '-tax')?.value || 0);
+        const mf = parseFloat(document.getElementById(prefix + '-marketplace_fee')?.value || document.getElementById(prefix + '-marketplace-fee')?.value || 0);
+
+        const settlement = sp - sh - tx - mf;
+        const el = document.getElementById(prefix + '-settlement-display');
+        if (el) el.textContent = '\u20b9 ' + settlement.toFixed(2);
+        
+        if (prefix === 'add') validateOrderForm('add');
+    }
+
+    function validateOrderForm(prefix, isSubmitAttempt = false) {
+        if (prefix !== 'add') return true;
+
+        if (isSubmitAttempt) {
+            window._addSubmitAttempted = true;
+        }
+
+        let isValid = true;
+        
+        // 1. Financial Validations
+        let totalItemsPrice = 0;
+        let form = document.querySelector('#orderForm form');
+        let prices = form.querySelectorAll('.item-price');
+        let qtys = form.querySelectorAll('.item-qty');
+        for (let i = 0; i < prices.length; i++) {
+            totalItemsPrice += (parseFloat(prices[i].value) || 0) * (parseInt(qtys[i].value) || 1);
+        }
+
+        const shInput = document.getElementById('add-shipping');
+        const txInput = document.getElementById('add-tax');
+        const mfInput = document.getElementById('add-marketplace-fee');
+
+        const sh = parseFloat(shInput.value || 0);
+        const tx = parseFloat(txInput.value || 0);
+        const mf = parseFloat(mfInput.value || 0);
+
+        const checkFin = (input, val, max, errId) => {
+            let errEl = document.getElementById(errId);
+            if (!errEl) {
+                errEl = document.createElement('div');
+                errEl.id = errId;
+                errEl.style.cssText = 'color:var(--danger,#ef4444); font-size:0.75rem; margin-top:0.25rem;';
+                input.parentNode.appendChild(errEl);
+            }
+            if (val > max) {
+                errEl.textContent = 'Exceeds Items Total';
+                errEl.style.display = 'block';
+                input.style.borderColor = 'var(--danger,#ef4444)';
+                return false;
+            } else {
+                errEl.style.display = 'none';
+                input.style.borderColor = '';
+                return true;
+            }
+        };
+
+        let finValid = true;
+        if (!checkFin(shInput, sh, totalItemsPrice, 'err-add-shipping')) finValid = false;
+        if (!checkFin(txInput, tx, totalItemsPrice, 'err-add-tax')) finValid = false;
+        if (!checkFin(mfInput, mf, totalItemsPrice, 'err-add-mktfee')) finValid = false;
+
+        let sumErrEl = document.getElementById('err-add-sum');
+        if (!sumErrEl) {
+            sumErrEl = document.createElement('div');
+            sumErrEl.id = 'err-add-sum';
+            sumErrEl.style.cssText = 'color:var(--danger,#ef4444); font-size:0.85rem; text-align:right; margin-bottom:0.5rem; font-weight:600;';
+            const footer = document.querySelector('#orderForm .order-form-footer');
+            if (footer) footer.parentNode.insertBefore(sumErrEl, footer);
+        }
+
+        if (sh + tx + mf > totalItemsPrice) {
+            if (sumErrEl) {
+                sumErrEl.textContent = 'Combined deductions exceed Items Total!';
+                sumErrEl.style.display = 'block';
+            }
+            finValid = false;
+        } else {
+            if (sumErrEl) sumErrEl.style.display = 'none';
+        }
+
+        if (!finValid) isValid = false;
+
+        // 2. Customer Validations
+        let custValid = true;
+        const modeEl = document.querySelector('input[name="customer_mode"]:checked');
+        const mode = modeEl ? modeEl.value : null;
+        
+        const existingInput = document.getElementById('add-existing-customer');
+        const newNameInput = document.getElementById('add-new-customer-name');
+        const custWrapper = document.getElementById('add-customer-section-wrapper');
+        const custError = document.getElementById('add-customer-error');
+
+        if (mode === 'new') {
+            if (!newNameInput.value.trim()) custValid = false;
+        } else if (mode === 'existing') {
+            if (!existingInput.value) custValid = false;
+        } else if (mode === 'unknown') {
+            custValid = true;
+        } else {
+            custValid = false;
+        }
+
+        if (!custValid) {
+            if (window._addSubmitAttempted) {
+                if (custWrapper) custWrapper.style.borderColor = 'var(--danger,#ef4444)';
+                if (custError) custError.classList.remove('hidden');
+            }
+            isValid = false;
+        } else {
+            if (custWrapper) custWrapper.style.borderColor = 'transparent';
+            if (custError) custError.classList.add('hidden');
+        }
+
+        return isValid;
+    }
+
+    function inlineUpdateStatus(orderId, newStatus, selectEl) {
+        if (!confirm(`Are you sure you want to change the order status to ${newStatus}? This action cannot be undone.`)) {
+            if (selectEl) {
+                const selectedOpt = selectEl.querySelector('option[selected]');
+                if (selectedOpt) {
+                    selectEl.value = selectedOpt.value;
+                } else {
+                    location.reload(); // Fallback if no option has the 'selected' attribute explicitly
+                }
+            }
+            return;
+        }
+        submitInlineAction(orderId, 'status_' + newStatus);
+    }
+
+    function inlineUpdateReview(orderId, newReview, selectEl) {
+        if (newReview === 'Done' && selectEl) {
+            selectEl.disabled = true;
+        }
+        submitInlineAction(orderId, 'review_' + newReview);
+    }
+
+    function submitInlineAction(orderId, actionValue) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = "{{ url_for('orders.orders_bulk_action') }}";
+
+        const actionInput = document.createElement('input');
+        actionInput.type = 'hidden';
+        actionInput.name = 'action';
+        actionInput.value = actionValue;
+        form.appendChild(actionInput);
+
+        const orderInput = document.createElement('input');
+        orderInput.type = 'hidden';
+        orderInput.name = 'order_ids';
+        orderInput.value = orderId;
+        form.appendChild(orderInput);
+
+        document.body.appendChild(form);
+        form.submit();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        addOrderItemRow('add-order-items', 'add');
+        // Set default date to today
+        const addDate = document.getElementById('add-date');
+        if (addDate) addDate.valueAsDate = new Date();
+        validateOrderForm('add');
+
+        // Prevent negative values from being typed or pasted into number inputs
+        document.addEventListener('keydown', function(e) {
+            if (e.target.tagName === 'INPUT' && e.target.type === 'number') {
+                if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
+                    e.preventDefault();
+                }
+            }
+        });
+        
+        document.addEventListener('input', function(e) {
+            if (e.target.tagName === 'INPUT' && e.target.type === 'number') {
+                if (e.target.value < 0) {
+                    e.target.value = 0;
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}

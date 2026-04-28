@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}Stock Audit Periods — Grah Decor POS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Stock Audit Periods</h1>
+</div>
+
+{# ── Start New Period Button ── #}
+{% if not open_period %}
+<div style="margin-bottom: 1.5rem;">
+    <form method="POST" action="{{ url_for('snapshots.take_opening') }}"
+          onsubmit="return confirm('Start a new audit period? Opening quantities will be set from the previous period\'s physical closing count (or current system quantities if this is the first period).')">
+        <button type="submit" class="btn btn-primary">Start New Audit Period</button>
+    </form>
+</div>
+{% else %}
+<div class="audit-notice">
+    <span>⚠ An audit period is currently <strong>OPEN</strong> — close it before starting a new one.</span>
+</div>
+{% endif %}
+
+{# ── Period Cards ── #}
+<div style="display:flex; flex-direction:column; gap:1rem; max-width:960px;">
+
+{% for snap in snapshots %}
+{% set status = snap.status if snap.status else 'none' %}
+
+<div class="snapshot-card snapshot-card--{{ status }}">
+
+    {# Card Header #}
+    <div class="snapshot-card__header">
+        <div>
+            <span class="snapshot-period-label">{{ snap.period_label if snap.period_label else '—' }}</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.75rem;">
+            {% if status == 'closed' %}
+                <span class="badge badge--closed">✔ CLOSED</span>
+            {% elif status == 'open' %}
+                <span class="badge badge--open">● OPEN</span>
+            {% endif %}
+        </div>
+    </div>
+
+    {# Card Body #}
+    <div class="snapshot-card__body">
+
+        {% if status == 'open' %}
+        {# ── Open Period ──────────────────────────────────────────── #}
+        <div style="display:flex; align-items:flex-start; gap:2.5rem; flex-wrap:wrap;">
+            <div>
+                <div class="meta-label">Opened At</div>
+                <div class="meta-value">
+                    {{ snap.opening.taken_at.strftime('%d %b %Y, %H:%M') if snap.opening and snap.opening.taken_at and snap.opening.taken_at.strftime else '—' }}
+                </div>
+                <div class="meta-sub">
+                    {{ snap.opening.materials|length if snap.opening and snap.opening.materials else 0 }} materials recorded
+                    {% if snap.opening and snap.opening.source == 'carry_forward' %}
+                     · carried from previous period
+                    {% elif snap.opening and snap.opening.source == 'system' %}
+                     · read from system (first period)
+                    {% endif %}
+                </div>
+            </div>
+            <div style="margin-top:auto;">
+                <a href="{{ url_for('snapshots.closing_form', doc_id=snap.id) }}"
+                   class="btn btn-primary btn-sm">Enter Closing Counts</a>
+            </div>
+        </div>
+
+        {% elif status == 'closed' %}
+        {# ── Closed Period ────────────────────────────────────────── #}
+        <div style="display:flex; align-items:flex-start; gap:2.5rem; flex-wrap:wrap;">
+            <div>
+                <div class="meta-label">Opened</div>
+                <div class="meta-value">
+                    {{ snap.opening.taken_at.strftime('%d %b %Y, %H:%M') if snap.opening and snap.opening.taken_at and snap.opening.taken_at.strftime else '—' }}
+                </div>
+            </div>
+            <div>
+                <div class="meta-label">Closed</div>
+                <div class="meta-value">
+                    {{ snap.closing.taken_at.strftime('%d %b %Y, %H:%M') if snap.closing and snap.closing.taken_at and snap.closing.taken_at.strftime else '—' }}
+                </div>
+                <div class="meta-sub">
+                    {{ snap.closing.materials|length if snap.closing and snap.closing.materials else 0 }} materials
+                </div>
+            </div>
+            <div style="margin-top:auto;">
+                <button type="button" class="btn btn-sm btn-ghost"
+                        onclick="toggleReport('snap-{{ snap.id }}', this)">View Report</button>
+            </div>
+        </div>
+
+        {# ── Expandable Consumption Table ─────────────────────────── #}
+        <div id="snap-{{ snap.id }}" class="snap-report hidden" style="margin-top:1.25rem;">
+            <div class="table-wrapper" style="margin:0;">
+                <table class="data-table" style="font-size:0.82rem;">
+                    <thead>
+                        <tr>
+                            <th>Material</th>
+                            <th>Unit</th>
+                            <th style="text-align:right;">Opening</th>
+                            <th style="text-align:right;">+ Purchases</th>
+                            <th style="text-align:right;">− Closing</th>
+                            <th style="text-align:right; color:var(--primary);">= Consumed</th>
+                            <th style="text-align:right;">Adjustment</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {# Build unit map from opening materials #}
+                        {% set opening_map = {} %}
+                        {% if snap.opening and snap.opening.materials %}
+                            {% for m in snap.opening.materials %}
+                                {% set _ = opening_map.update({m.name: m}) %}
+                            {% endfor %}
+                        {% endif %}
+
+                        {% if snap.closing and snap.closing.materials %}
+                            {% for row in snap.closing.materials %}
+                            {% set om = opening_map.get(row.name, {}) %}
+                            {% set adj = row.adjustment if row.adjustment is defined else 0 %}
+                            <tr>
+                                <td class="text-bold">{{ row.name }}</td>
+                                <td class="text-muted">{{ om.get('unit', '—') if om else '—' }}</td>
+                                <td style="text-align:right;">{{ "%.2f"|format(om.get('opening_qty', 0)) if om else '—' }}</td>
+                                <td style="text-align:right; color:#059669;">+{{ "%.2f"|format(row.purchases_qty) }}</td>
+                                <td style="text-align:right; color:#dc2626;">−{{ "%.2f"|format(row.closing_qty|abs) }}</td>
+                                <td style="text-align:right; font-weight:700; color:var(--primary);">{{ "%.2f"|format(row.consumed) }}</td>
+                                <td style="text-align:right; {% if adj < 0 %}color:#dc2626;{% elif adj > 0 %}color:#059669;{% else %}opacity:0.4;{% endif %}">
+                                    {% if adj > 0 %}+{% endif %}{{ "%.2f"|format(adj) }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr><td colspan="7" class="empty-state">No closing data available.</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {% endif %}
+
+    </div>{# /.snapshot-card__body #}
+</div>{# /.snapshot-card #}
+
+{% else %}
+<div style="padding:2rem; text-align:center; color:var(--text-secondary);">
+    No audit periods yet. Click <strong>Start New Audit Period</strong> above to begin.
+</div>
+{% endfor %}
+
+</div>{# /.list #}
+{% endblock %}
+
+
+{% block scripts %}
+<style>
+    /* ── Audit notice ────────────────────────────── */
+    .audit-notice {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.6rem 1rem;
+        background: #fef3c7;
+        border: 1px solid #fcd34d;
+        border-radius: 8px;
+        color: #92400e;
+        font-size: 0.875rem;
+        margin-bottom: 1.25rem;
+    }
+
+    /* ── Cards ───────────────────────────────────── */
+    .snapshot-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+        transition: box-shadow 0.2s;
+    }
+    .snapshot-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.09); }
+    .snapshot-card--closed { border-left: 4px solid #10b981; }
+    .snapshot-card--open   { border-left: 4px solid #f59e0b; }
+
+    .snapshot-card__header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.9rem 1.25rem;
+        background: var(--bg);
+        border-bottom: 1px solid var(--border);
+    }
+    .snapshot-period-label { font-size: 1rem; font-weight: 700; }
+    .snapshot-card__body   { padding: 1rem 1.25rem; }
+
+    /* ── Badges ──────────────────────────────────── */
+    .badge { display: inline-flex; align-items: center; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.78em; font-weight: 600; }
+    .badge--closed { background:#d1fae5; color:#065f46; border:1px solid #6ee7b7; }
+    .badge--open   { background:#fef3c7; color:#92400e; border:1px solid #fcd34d; }
+
+    /* ── Meta labels ─────────────────────────────── */
+    .meta-label { font-size:0.72em; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin-bottom:0.25rem; }
+    .meta-value { font-size:0.875rem; font-weight:600; }
+    .meta-sub   { font-size:0.78rem;  color:var(--text-secondary); margin-top:0.15rem; }
+</style>
+<script>
+    function toggleReport(id, btn) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const hidden = el.classList.toggle('hidden');
+        btn.textContent = hidden ? 'View Report' : 'Hide Report';
+    }
+</script>
+{% endblock %}

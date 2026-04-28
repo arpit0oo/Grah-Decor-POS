@@ -1,0 +1,844 @@
+{% extends "base.html" %}
+{% block title %}Inventory — Grah Decor POS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Inventory</h1>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+    <button class="tab {% if active_tab == 'ready' %}active{% endif %}" onclick="switchTab('ready')">Ready Stock ({{
+        ready_stock|length }})</button>
+    <button class="tab {% if active_tab == 'raw' %}active{% endif %}" onclick="switchTab('raw')">Raw Materials ({{
+        raw_materials|length }})</button>
+    <button class="tab {% if active_tab == 'logs' %}active{% endif %}" onclick="switchTab('logs')">Inventory
+        Log</button>
+</div>
+
+<!-- ── RAW MATERIALS TAB ───────────────────────────────── -->
+<div class="tab-content {% if active_tab != 'raw' %}hidden{% endif %}" id="tab-raw">
+    <!-- Add Form -->
+    <div class="form-card hidden" id="rawForm">
+        <h3>Register New Raw Material</h3>
+        <p class="text-muted" style="font-size:0.85em; margin-bottom:1rem;">Initial quantity is always
+            <strong>0</strong>. Stock enters the system exclusively via the Purchase Book.
+        </p>
+        <form autocomplete="off" method="POST" action="{{ url_for('inventory.raw_add') }}">
+            <div class="form-grid form-grid-3">
+                <div class="form-group">
+                    <label for="raw-name">Material Name *</label>
+                    <input type="text" id="raw-name" name="name" required placeholder="e.g. MDF Sheet">
+                </div>
+                <div class="form-group">
+                    <label for="raw-unit">Unit</label>
+                    <select id="raw-unit" name="unit">
+                        <option value="pcs">Pieces</option>
+                        <option value="kg">Kilograms</option>
+                        <option value="meters">Meters</option>
+                        <option value="liters">Liters</option>
+                        <option value="sheets">Sheets</option>
+                        <option value="rolls">Rolls</option>
+                    </select>
+                </div>
+            </div>
+            <input type="hidden" name="quantity" value="0">
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Register Material</button>
+                <button type="button" class="btn btn-ghost" onclick="toggleForm('rawForm')">Cancel</button>
+            </div>
+        </form>
+    </div>
+
+    <button class="btn btn-sm" onclick="toggleForm('rawForm')" style="margin-bottom:1rem">+ Add Material</button>
+
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Material Name</th>
+                    <th class="text-right">Quantity</th>
+                    <th>Unit</th>
+                    <th class="text-right">Price / Unit ₹</th>
+                    <th class="text-right">Total Value ₹</th>
+                    <th>Last Updated</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in raw_materials %}
+                <tr>
+                    <td><span class="text-bold">{{ m.name }}</span></td>
+                    <td class="text-right text-bold">{{ m.quantity }}</td>
+                    <td class="text-muted">{{ m.unit or '-' }}</td>
+                    <td class="text-right text-bold">{{ "%.2f"|format(m.calc_price or 0) }}</td>
+                    <td class="text-right text-bold">{{ "%.2f"|format(m.calc_total_value or 0) }}</td>
+                    <td class="text-muted">{{ m.updated_at.strftime('%d/%m/%Y %H:%M') if m.updated_at and
+                        m.updated_at.strftime else '-' }}</td>
+                    <td class="actions-cell">
+                        <button type="button" class="btn btn-xs btn-ghost"
+                            onclick="openRawHistoryModal('{{ m.name|escape }}')">History</button>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not raw_materials %}
+                <tr>
+                    <td colspan="7" class="empty-state">No raw materials. Add your first one above.</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ── READY STOCK TAB ───────────────────────────── -->
+<style>
+.stock-badge { display:inline-block; padding:1px 6px; border-radius:10px; font-size:0.72em; font-weight:700; letter-spacing:0.04em; margin-left:5px; vertical-align:middle; }
+.stock-badge-out { background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; }
+.stock-badge-low { background:#fef3c7; color:#92400e; border:1px solid #fcd34d; }
+/* ── Stock filter tabs ── */
+.stock-filter-tab { padding:6px 15px; border:none; border-radius:6px; background:transparent; cursor:pointer; font-size:0.85em; font-weight:500; color:#64748b; transition:all 0.15s; white-space:nowrap; display:inline-flex; align-items:center; gap:6px; line-height:1; }
+.stock-filter-tab:hover:not(.stock-filter-active) { color:#1e293b; background:rgba(255,255,255,0.6); }
+.stock-filter-active { background:#fff !important; color:#1e293b !important; box-shadow:0 1px 3px rgba(0,0,0,0.12),0 1px 2px rgba(0,0,0,0.06); }
+.stock-filter-count { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; border-radius:9px; font-size:0.72em; font-weight:700; padding:0 5px; line-height:1; }
+.stock-filter-count-low { background:#fef3c7; color:#92400e; }
+.stock-filter-count-out { background:#fee2e2; color:#991b1b; }
+.stock-filter-active .stock-filter-count-low,
+.stock-filter-active .stock-filter-count-out { background:rgba(0,0,0,0.08); color:inherit; }
+</style>
+<div class="tab-content {% if active_tab != 'ready' %}hidden{% endif %}" id="tab-ready">
+    <div class="form-card hidden" id="readyForm">
+        <h3>Add Product / Parent</h3>
+        <form autocomplete="off" method="POST" action="{{ url_for('inventory.ready_add') }}">
+            <div class="form-grid form-grid-4">
+                <div class="form-group">
+                    <label for="ready-name">Product Name *</label>
+                    <input type="text" id="ready-name" name="name" required placeholder="e.g. A4 Frame">
+                </div>
+                <div class="form-group">
+                    <label for="ready-color">Color (optional)</label>
+                    <input type="text" id="ready-color" name="color" placeholder="Leave blank if using Variants">
+                </div>
+                <div class="form-group">
+                    <label for="ready-qty">Initial Quantity</label>
+                    <input type="number" id="ready-qty" name="quantity" step="1" min="0" value="0">
+                </div>
+                <div class="form-group">
+                    <label for="ready-cost">Cost / Unit ₹</label>
+                    <input type="number" id="ready-cost" name="cost_price" step="1" min="0" value="0">
+                </div>
+                <div class="form-group">
+                    <label for="ready-min-stock">Min Stock Alert</label>
+                    <input type="number" id="ready-min-stock" name="min_stock" step="1" min="0" value="0"
+                        title="Show LOW badge when available stock falls to or below this number">
+                </div>
+            </div>
+            <input type="hidden" name="reason" value="Manufactured">
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Add Product</button>
+                <button type="button" class="btn btn-ghost" onclick="toggleForm('readyForm')">Cancel</button>
+            </div>
+        </form>
+    </div>
+
+    <button class="btn btn-sm" onclick="toggleForm('readyForm')" style="margin-bottom:1rem">+ Add Product</button>
+
+    <div id="stockFilterBar" style="margin-bottom:1.25rem; display:inline-flex; background:#f1f5f9; border-radius:8px; padding:3px; gap:2px;">
+        <button id="filter-all" class="stock-filter-tab stock-filter-active" onclick="filterStock('all')">All</button>
+        <button id="filter-low" class="stock-filter-tab" onclick="filterStock('low')">
+            Low Stock
+            <span id="badge-low" class="stock-filter-count stock-filter-count-low" style="display:none;"></span>
+        </button>
+        <button id="filter-out" class="stock-filter-tab" onclick="filterStock('out')">
+            Out of Stock
+            <span id="badge-out" class="stock-filter-count stock-filter-count-out" style="display:none;"></span>
+        </button>
+    </div>
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width:30px"></th>
+                    <th>Product / Variant</th>
+                    <th>Quantity</th>
+                    <th>Reserved</th>
+                    <th>Available</th>
+                    <th>Min Stock</th>
+                    <th>Cost / Unit ₹</th>
+                    <th>Last Updated</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in ready_stock %}
+                {% set avail = s.quantity - (s.reserved_quantity or 0) %}
+                {# ── Parent badge: any variant OUT → OUT; no OUT but any LOW → LOW #}
+                {% set ns = namespace(pbadge='') %}
+                {% if s.variants %}
+                    {% for v in s.variants %}
+                        {% set va = v.quantity - (v.reserved_quantity or 0) %}
+                        {% if va <= 0 %}
+                            {% set ns.pbadge = 'out' %}
+                        {% elif v.min_stock > 0 and va <= v.min_stock and ns.pbadge != 'out' %}
+                            {% set ns.pbadge = 'low' %}
+                        {% endif %}
+                    {% endfor %}
+                {% else %}
+                    {% if avail <= 0 %}
+                        {% set ns.pbadge = 'out' %}
+                    {% elif avail > 0 and s.min_stock > 0 and avail <= s.min_stock %}
+                        {% set ns.pbadge = 'low' %}
+                    {% endif %}
+                {% endif %}
+                {# ── PARENT ROW ── #}
+                <tr class="{% if s.variants %}parent-row{% endif %} {% if not s.variants and avail <= 0 %}row-danger{% elif not s.variants and avail < 5 %}row-warning{% endif %}"
+                    style="{% if s.variants %}background: var(--surface);{% endif %}"
+                    data-parent-id="{{ s.id }}" data-badge="{{ ns.pbadge }}">
+                    <td style="text-align:center; cursor:pointer;" {% if s.variants
+                        %}onclick="toggleVariants('{{ s.id }}')" {% endif %}>
+                        {% if s.variants %}<span id="icon-{{ s.id }}" style="font-size:0.8em;">&#9654;</span>{% endif %}
+                    </td>
+                    <td>
+                        <form autocomplete="off" method="POST" id="form-ready-{{ s.id }}"
+                            action="{{ url_for('inventory.ready_edit', doc_id=s.id) }}" class="inline-edit-form">
+                            <input type="hidden" name="name" value="{{ s.name }}" form="form-ready-{{ s.id }}">
+                            <input type="hidden" name="quantity" value="{{ s.quantity }}" form="form-ready-{{ s.id }}">
+                            <strong>{{ s.name }}</strong>
+                            {% if not s.variants and s.color %}
+                            <span class="text-muted" style="font-size:0.85em;">({{ s.color }})</span>
+                            {% endif %}
+                    </td>
+                    <td>
+                        {% if s.variants %}
+                        <span class="text-muted" style="font-size:0.85em;">{{ s.quantity|int }} total</span>
+                        {% else %}
+                        <span class="text-bold">{{ s.quantity|int }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-warning text-bold">{{ s.reserved_quantity or 0 }}</td>
+                    <td class="{% if avail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">
+                        {{ avail|int }}
+                        {% if ns.pbadge == 'out' %}<span class="stock-badge stock-badge-out">OUT</span>{% endif %}
+                        {% if ns.pbadge == 'low' %}<span class="stock-badge stock-badge-low">LOW</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if s.variants %}
+                        <span class="text-muted" style="font-size:0.85em;">—</span>
+                        {% else %}
+                        <input type="number" name="min_stock" value="{{ s.min_stock or 0 }}" step="1" min="0"
+                            class="inline-input inline-input-sm" readonly
+                            style="pointer-events:none;border-color:transparent;background:transparent;width:60px;"
+                            form="form-ready-{{ s.id }}">
+                        {% endif %}
+                    </td>
+                    <td>
+                        <input type="number" name="cost_price" value="{{ s.cost_price or 0 }}" step="1"
+                            class="inline-input inline-input-sm cost-input" readonly
+                            style="pointer-events:none; border-color:transparent; background:transparent;"
+                            form="form-ready-{{ s.id }}">
+                    </td>
+                    <td class="text-muted">{{ s.updated_at.strftime('%d/%m/%Y') if s.updated_at and
+                        s.updated_at.strftime else '-' }}</td>
+                    <td class="actions-cell">
+                        <button type="button" class="btn btn-xs edit-cost-btn"
+                            onclick="toggleEditParent(this)">Edit</button>
+                        <button type="submit" class="btn btn-xs save-cost-btn hidden"
+                            form="form-ready-{{ s.id }}">Save</button>
+                        </form>
+                        <button type="button" class="btn btn-xs btn-ghost"
+                            onclick="openHistoryModal('{{ s.name|escape }}', '')">History</button>
+                        <button type="button" class="btn btn-xs btn-ghost"
+                            style="color:var(--primary); border-color:var(--primary);"
+                            onclick="openVariantModal('{{ s.id }}', '{{ s.name|escape }}')">+ Variant</button>
+                        {% if not s.variants %}
+                        <button type="button" class="btn btn-xs"
+                            style="color:var(--success); border-color:var(--success);"
+                            onclick="openAdjustModal('{{ s.id }}', '{{ s.name|escape }}', '')">Add New Stock</button>
+                        {% endif %}
+                    </td>
+                </tr>
+
+                {# ── VARIANT ROWS ── #}
+                {% for v in s.variants %}
+                {% set vavail = v.quantity - (v.reserved_quantity or 0) %}
+                {% if vavail <= 0 %}{% set v_badge = 'out' %}
+                {% elif v.min_stock > 0 and vavail <= v.min_stock %}{% set v_badge = 'low' %}
+                {% else %}{% set v_badge = '' %}{% endif %}
+                <tr class="variant-row hidden" id="variant-{{ s.id }}" style="background:#f8f8ff;"
+                    data-parent-id="{{ s.id }}" data-badge="{{ v_badge }}">
+                    <td></td>
+                    <td style="padding-left:2rem;">
+                        <form autocomplete="off" method="POST" id="form-variant-{{ v.id }}"
+                            action="{{ url_for('inventory.ready_edit', doc_id=v.id) }}" class="inline-edit-form">
+                            <input type="hidden" name="name" value="{{ v.name }}" form="form-variant-{{ v.id }}">
+                            <input type="hidden" name="quantity" value="{{ v.quantity }}" form="form-variant-{{ v.id }}">
+                            <span class="text-muted" style="font-size:0.8em;">&#9492;</span>
+                            <span class="text-bold">{{ v.color }}</span>
+                    </td>
+                    <td><span class="text-bold">{{ v.quantity|int }}</span></td>
+                    <td class="text-warning text-bold">{{ v.reserved_quantity or 0 }}</td>
+                    <td class="{% if vavail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">
+                        {{ vavail|int }}
+                        {% if v_badge == 'out' %}<span class="stock-badge stock-badge-out">OUT</span>{% endif %}
+                        {% if v_badge == 'low' %}<span class="stock-badge stock-badge-low">LOW</span>{% endif %}
+                    </td>
+                    <td>
+                        <input type="number" name="min_stock" value="{{ v.min_stock or 0 }}" step="1" min="0"
+                            class="inline-input inline-input-sm variant-min-input" readonly
+                            style="pointer-events:none;border-color:transparent;background:transparent;width:60px;"
+                            form="form-variant-{{ v.id }}">
+                    </td>
+                    <td class="text-muted" style="font-size:0.8em;">Inherits parent</td>
+                    <td class="text-muted">{{ v.updated_at.strftime('%d/%m/%Y') if v.updated_at and
+                        v.updated_at.strftime else '-' }}</td>
+                    <td class="actions-cell">
+                        <button type="button" class="btn btn-xs edit-variant-btn"
+                            onclick="toggleEditVariant(this)">Edit</button>
+                        <button type="submit" class="btn btn-xs save-variant-btn hidden"
+                            form="form-variant-{{ v.id }}">Save</button>
+                        </form>
+                        <button type="button" class="btn btn-xs btn-ghost"
+                            onclick="openHistoryModal('{{ v.name|escape }}', '{{ v.color|escape }}')">History</button>
+                        <button type="button" class="btn btn-xs"
+                            style="color:var(--success); border-color:var(--success);"
+                            onclick="openAdjustModal('{{ v.id }}', '{{ v.name|escape }}', '{{ v.color|escape }}')">Add New Stock</button>
+                    </td>
+                </tr>
+                {% endfor %}
+
+                {% endfor %}
+                {% if not ready_stock %}
+                <tr>
+                    <td colspan="9" class="empty-state">No ready stock. Add items.</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ── INVENTORY LOGS TAB ──────────────────────────────── -->
+<div class="tab-content {% if active_tab != 'logs' %}hidden{% endif %}" id="tab-logs">
+
+    <!-- ── LOGS FILTER BAR ── -->
+    <div class="card"
+        style="margin-bottom:1rem; padding:1rem; display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; background:white;">
+        <div class="form-group" style="flex:1; min-width:200px;">
+            <label>Search Item or Reason</label>
+            <input type="text" id="logSearch" placeholder="Type to search..." oninput="filterLogs()">
+        </div>
+        <div class="form-group" style="min-width:150px;">
+            <label>Log Type</label>
+            <select id="logTypeFilter" onchange="filterLogs()">
+                <option value="">All Types</option>
+                <option value="Raw Material">Raw Material</option>
+                <option value="Ready Stock">Ready Stock</option>
+            </select>
+        </div>
+        <div class="form-group" style="min-width:150px;">
+            <label>Date From</label>
+            <input type="date" id="logDateFrom" onchange="filterLogs()">
+        </div>
+        <div class="form-group" style="min-width:150px;">
+            <label>Date To</label>
+            <input type="date" id="logDateTo" onchange="filterLogs()">
+        </div>
+        <button class="btn btn-ghost" onclick="clearLogFilters()" style="margin-bottom:4px;">Clear</button>
+    </div>
+
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Date & Time</th>
+                    <th>Type</th>
+                    <th>Item</th>
+                    <th>Movement</th>
+                    <th>Reason</th>
+                </tr>
+            </thead>
+            <tbody id="logsTableBody">
+                {% for log in logs %}
+                <tr class="log-row {% if log.delta > 0 %}row-success{% elif log.delta < 0 %}row-danger{% endif %}"
+                    data-search="{{ log.item_name|lower }} {{ log.color|lower }} {{ log.reason|lower }}"
+                    data-type="{{ log.item_type }}"
+                    data-date="{{ log.date.strftime('%Y-%m-%d') if log.date and log.date.strftime else '' }}">
+                    <td class="text-muted">{{ log.date.strftime('%d/%m/%Y %H:%M') if log.date and log.date.strftime else
+                        '-' }}</td>
+                    <td class="text-bold opacity-75">{{ log.item_type }}</td>
+                    <td class="text-bold">
+                        {{ log.item_name }}
+                        {% if log.color %}<span class="text-muted" style="font-weight:normal;">({{ log.color
+                            }})</span>{% endif %}
+                    </td>
+                    <td class="text-bold">
+                        {% if log.delta > 0 %}
+                        +{{ log.delta|int }} IN
+                        {% else %}
+                        {{ log.delta|int }} OUT
+                        {% endif %}
+                    </td>
+                    <td class="text-muted" style="font-size:0.9em;">{{ log.reason or '-' }}</td>
+                </tr>
+                {% endfor %}
+                {% if not logs %}
+                <tr id="logsEmptyState" {% if logs %}style="display:none;" {% endif %}>
+                    <td colspan="5" class="empty-state">No transactions match the selected filters.</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+
+<!-- ── HISTORY MODAL ───────────────────────────────────── -->
+<div class="modal-overlay hidden" id="historyModal">
+    <div class="modal" style="max-width: 600px;">
+        <div class="modal-header">
+            <h3>Stock Ledger</h3>
+            <button class="modal-close" onclick="closeModal('historyModal')">×</button>
+        </div>
+        <div style="margin-bottom: 1rem;">
+            <strong id="historyItemTitle"></strong>
+            <div id="historyItemTotals" class="text-muted" style="margin-top: 0.5rem; font-size: 0.9em;"></div>
+        </div>
+        <div class="table-wrapper" style="max-height: 350px; overflow-y: auto;">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Movement</th>
+                        <th>Reason</th>
+                    </tr>
+                </thead>
+                <tbody id="historyTableBody">
+                    <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ── ADD VARIANT MODAL ─────────────────────────── -->
+<div class="modal-overlay hidden" id="variantModal">
+    <div class="modal" style="max-width:360px;">
+        <div class="modal-header">
+            <h3>Add Variant</h3>
+            <button class="modal-close" onclick="closeModal('variantModal')">×</button>
+        </div>
+        <p class="text-muted" style="font-size:0.85em; margin-bottom:1rem;">Adding a variant to: <strong
+                id="variantParentName"></strong></p>
+        <form autocomplete="off" id="variantForm" method="POST" action="">
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label>Variant Name (e.g. Black, white)</label>
+                <input type="text" name="variant_name" required placeholder="e.g. Black">
+            </div>
+            <div class="form-group" style="margin-bottom:1.5rem;">
+                <label>Initial Quantity</label>
+                <input type="number" name="quantity" step="1" min="0" value="0">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Add
+                    Variant</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ── ADJUST STOCK MODAL ─────────────────────────── -->
+<div class="modal-overlay hidden" id="adjustModal">
+    <div class="modal" style="max-width:400px;">
+        <div class="modal-header">
+            <h3>Add New Stock</h3>
+            <button class="modal-close" onclick="closeModal('adjustModal')">×</button>
+        </div>
+        <p class="text-muted" style="font-size:0.85em; margin-bottom:1rem;">
+            Adding Stock to: <strong id="adjustItemLabel"></strong>
+        </p>
+        <form autocomplete="off" id="adjustForm" method="POST" action="">
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label>Quantity to Add *</label>
+                <input type="number" name="adjustment" id="adjustQtyInput" required placeholder="e.g. 10" step="1"
+                    min="1">
+                <small class="text-muted">Only additions allowed. Stock is reduced automatically through orders.</small>
+            </div>
+            <input type="hidden" name="reason" value="Manufactured">
+            <div class="form-group" style="margin-bottom:1.5rem;">
+                <label>Notes (optional)</label>
+                <input type="text" name="notes" placeholder="Any additional context">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Apply
+                    Adjustment</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ── RAW MATERIAL STOCK LEDGER MODAL ──────────────── -->
+<div class="modal-overlay hidden" id="rawHistoryModal">
+    <div class="modal" style="max-width:780px;">
+        <div class="modal-header">
+            <h3>Stock Ledger: <span id="rawHistoryTitle" style="color:var(--primary);"></span></h3>
+            <button class="modal-close" onclick="closeModal('rawHistoryModal')">&#x00D7;</button>
+        </div>
+        <p id="rawHistoryTotals" class="text-muted" style="font-size:0.85em; margin-bottom:1rem;">Loading...</p>
+        <div style="overflow-x:auto; max-height:60vh; overflow-y:auto;">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Reference</th>
+                        <th style="text-align:right;">Movement</th>
+                    </tr>
+                </thead>
+                <tbody id="rawHistoryTableBody">
+                    <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // ── LOGS FILTERING LOGIC ──
+    function filterLogs() {
+        const searchVal = document.getElementById('logSearch').value.toLowerCase();
+        const typeVal = document.getElementById('logTypeFilter').value;
+        const dateFrom = document.getElementById('logDateFrom').value;
+        const dateTo = document.getElementById('logDateTo').value;
+
+        const rows = document.querySelectorAll('#logsTableBody .log-row');
+        let visibleCount = 0;
+
+        rows.forEach(row => {
+            const rowSearchText = row.getAttribute('data-search');
+            const rowType = row.getAttribute('data-type');
+            const rowDate = row.getAttribute('data-date'); // YYYY-MM-DD
+
+            // Search Check
+            const matchSearch = rowSearchText.indexOf(searchVal) !== -1;
+
+            // Type Check
+            const matchType = typeVal === "" || rowType === typeVal;
+
+            // Date Check (simple string comparison works for YYYY-MM-DD)
+            let matchDate = true;
+            if (rowDate) {
+                if (dateFrom && rowDate < dateFrom) matchDate = false;
+                if (dateTo && rowDate > dateTo) matchDate = false;
+            } else if (dateFrom || dateTo) {
+                matchDate = false; // no date on row but filter is active
+            }
+
+            if (matchSearch && matchType && matchDate) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        // Toggle Empty State row
+        const emptyRow = document.getElementById('logsEmptyState');
+        if (emptyRow) {
+            emptyRow.style.display = visibleCount === 0 ? '' : 'none';
+        }
+    }
+
+    function clearLogFilters() {
+        document.getElementById('logSearch').value = '';
+        document.getElementById('logTypeFilter').value = '';
+        document.getElementById('logDateFrom').value = '';
+        document.getElementById('logDateTo').value = '';
+        filterLogs();
+    }
+
+    async function openRawHistoryModal(name) {
+        document.getElementById('rawHistoryTitle').textContent = name;
+        const tbody = document.getElementById('rawHistoryTableBody');
+        const totalsDiv = document.getElementById('rawHistoryTotals');
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding:2rem;">Loading…</td></tr>';
+        totalsDiv.textContent = 'Loading…';
+        document.getElementById('rawHistoryModal').classList.remove('hidden');
+
+        try {
+            const res = await fetch('/inventory/api/raw-stock-ledger?name=' + encodeURIComponent(name));
+            const data = await res.json();
+            tbody.innerHTML = '';
+
+            if (data.error) {
+                tbody.innerHTML = `<tr><td colspan="4" class="empty-state text-danger">${data.error}</td></tr>`;
+                totalsDiv.textContent = '';
+                return;
+            }
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No stock movements found for this material.</td></tr>';
+                totalsDiv.textContent = '';
+                return;
+            }
+
+            // Type badge colours
+            const typeStyle = {
+                'PO Received': { bg: '#d1fae5', color: '#065f46', border: '#6ee7b7' },
+                'PO Return': { bg: '#ffedd5', color: '#9a3412', border: '#fdba74' },
+                'Production': { bg: '#fee2e2', color: '#991b1b', border: '#fca5a5' },
+                'Audit Adjustment': { bg: '#ede9fe', color: '#5b21b6', border: '#c4b5fd' },
+                'Manual': { bg: '#fef3c7', color: '#92400e', border: '#fcd34d' },
+                'Inflow': { bg: '#dbeafe', color: '#1e40af', border: '#93c5fd' },
+                'Outflow': { bg: '#f3f4f6', color: '#374151', border: '#d1d5db' },
+            };
+
+            let totalIn = 0, totalOut = 0;
+            data.forEach(ev => {
+                const d = ev.delta || 0;
+                if (d > 0) totalIn += d;
+                else totalOut += Math.abs(d);
+
+                const s = typeStyle[ev.type] || { bg: '#f3f4f6', color: '#374151', border: '#d1d5db' };
+                const badgeHtml = `<span class="badge" style="background:${s.bg};color:${s.color};border:1px solid ${s.border};font-size:0.75em;">${ev.type}</span>`;
+
+                const movHtml = d > 0
+                    ? `<span style="color:#059669;font-weight:700;">+${d.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>`
+                    : `<span style="color:#dc2626;font-weight:700;">${d.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>`;
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="text-muted" style="white-space:nowrap;">${ev.date_str || '-'}</td>
+                    <td>${badgeHtml}</td>
+                    <td style="font-size:0.85em;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(ev.reference || '').replace(/"/g, "&quot;")}">  ${ev.reference || '-'}</td>
+                    <td style="text-align:right;">${movHtml}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            totalsDiv.innerHTML =
+                `Total In: <strong style="color:#059669;">+${totalIn.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong>
+                &nbsp;|&nbsp;
+                Total Out: <strong style="color:#dc2626;">−${totalOut.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong>`;
+
+        } catch (err) {
+            console.error(err);
+            tbody.innerHTML = '<tr><td colspan="5" class="empty-state text-danger">Failed to load ledger.</td></tr>';
+            totalsDiv.textContent = '';
+        }
+    }
+
+    function openAdjustModal(docId, name, color) {
+        const label = name + (color ? ' (' + color + ')' : '');
+        document.getElementById('adjustItemLabel').textContent = label;
+        document.getElementById('adjustForm').action = '/inventory/ready/adjust/' + docId;
+        document.getElementById('adjustQtyInput').value = '';
+        document.getElementById('adjustModal').classList.remove('hidden');
+    }
+
+    function toggleEditParent(btn) {
+        const td = btn.closest('.actions-cell');
+        const tr = btn.closest('tr');
+        // Enable both cost_price and min_stock inputs
+        [tr.querySelector('input[name="cost_price"]'), tr.querySelector('input[name="min_stock"]')]
+            .forEach(inp => {
+                if (!inp) return;
+                inp.removeAttribute('readonly');
+                inp.style.pointerEvents = 'auto';
+                inp.style.borderColor = '';
+                inp.style.background = '';
+            });
+        btn.classList.add('hidden');
+        td.querySelector('.save-cost-btn').classList.remove('hidden');
+        const costInput = tr.querySelector('input[name="cost_price"]');
+        if (costInput) costInput.focus();
+    }
+
+    function toggleEditVariant(btn) {
+        const td = btn.closest('.actions-cell');
+        const tr = btn.closest('tr');
+        const inp = tr.querySelector('input[name="min_stock"]');
+        if (!inp) return;
+        inp.removeAttribute('readonly');
+        inp.style.pointerEvents = 'auto';
+        inp.style.borderColor = '';
+        inp.style.background = '';
+        btn.classList.add('hidden');
+        td.querySelector('.save-variant-btn').classList.remove('hidden');
+        inp.focus();
+    }
+
+    function filterStock(mode) {
+        // Update active tab
+        document.querySelectorAll('#stockFilterBar .stock-filter-tab').forEach(b => b.classList.remove('stock-filter-active'));
+        const activeBtn = document.getElementById('filter-' + mode);
+        if (activeBtn) activeBtn.classList.add('stock-filter-active');
+
+        const allTagged   = [...document.querySelectorAll('tr[data-parent-id]')];
+        const parentRows  = allTagged.filter(r => !r.classList.contains('variant-row'));
+        const variantRows = allTagged.filter(r =>  r.classList.contains('variant-row'));
+
+        if (mode === 'all') {
+            // Restore all parent rows; variant rows go back to their collapse (.hidden) state
+            parentRows.forEach(r => { r.style.display = ''; });
+            variantRows.forEach(r => {
+                r.style.display = '';          // clear any filter-imposed display:none
+                r.classList.add('hidden');     // re-apply collapse so toggleVariants still works
+            });
+            return;
+        }
+
+        const visibleParents = new Set();
+
+        parentRows.forEach(parentRow => {
+            const parentId = parentRow.getAttribute('data-parent-id');
+            // Variant children for this parent
+            const children = variantRows.filter(r => r.getAttribute('data-parent-id') === parentId);
+
+            let show = false;
+
+            if (children.length === 0) {
+                // ── Standalone product (no variants) ──
+                // Read badge spans directly from this row
+                const hasOut = !!parentRow.querySelector('.stock-badge-out');
+                const hasLow = !!parentRow.querySelector('.stock-badge-low');
+                if (mode === 'out') show = hasOut;
+                if (mode === 'low') show = hasOut || hasLow;
+            } else {
+                // ── Product with variants ──
+                // Out of Stock: at least one variant row has an OUT badge
+                // Low Stock:    at least one variant row has an OUT or LOW badge
+                const anyOut = children.some(r => r.querySelector('.stock-badge-out'));
+                const anyLow = children.some(r => r.querySelector('.stock-badge-low'));
+                if (mode === 'out') show = anyOut;
+                if (mode === 'low') show = anyOut || anyLow;
+            }
+
+            parentRow.style.display = show ? '' : 'none';
+            if (show) visibleParents.add(parentId);
+        });
+
+        // Show/hide variant rows — only touch display style, never .hidden class or expand icon
+        variantRows.forEach(r => {
+            const parentId = r.getAttribute('data-parent-id');
+            if (visibleParents.has(parentId)) {
+                r.style.display = 'table-row';  // overrides .hidden without removing it
+            } else {
+                r.style.display = 'none';
+            }
+        });
+    }
+
+
+
+    function switchTab(tab) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+        event.target.classList.add('active');
+        document.getElementById('tab-' + tab).classList.remove('hidden');
+    }
+
+    function toggleVariants(parentId) {
+        const rows = document.querySelectorAll('#variant-' + parentId);
+        const icon = document.getElementById('icon-' + parentId);
+        const hidden = rows[0] && rows[0].classList.contains('hidden');
+        rows.forEach(r => r.classList.toggle('hidden', !hidden));
+        if (icon) icon.textContent = hidden ? '\u25BE' : '\u25B6';
+    }
+
+    function openVariantModal(parentId, parentName) {
+        document.getElementById('variantParentName').textContent = parentName;
+        document.getElementById('variantForm').action = '/inventory/ready/add_variant/' + parentId;
+        document.getElementById('variantModal').classList.remove('hidden');
+    }
+
+    async function openHistoryModal(name, color) {
+        const title = name + (color && color !== 'None' ? ` (${color})` : '');
+        document.getElementById('historyItemTitle').textContent = title;
+
+        const tbody = document.getElementById('historyTableBody');
+        const totalsDiv = document.getElementById('historyItemTotals');
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted" style="padding: 2rem;">Loading ledger data...</td></tr>';
+        totalsDiv.textContent = 'Calculating...';
+
+        document.getElementById('historyModal').classList.remove('hidden');
+
+        try {
+            const url = `/inventory/api/product-logs?name=${encodeURIComponent(name)}&color=${encodeURIComponent(color || '')}`;
+            const response = await fetch(url);
+            const logs = await response.json();
+
+            let inTotal = 0;
+            let outTotal = 0;
+            tbody.innerHTML = '';
+
+            if (logs.error) {
+                tbody.innerHTML = `<tr><td colspan="3" class="empty-state text-danger">${logs.error}</td></tr>`;
+                totalsDiv.textContent = '';
+                return;
+            }
+
+            if (logs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No transaction history found.</td></tr>';
+            } else {
+                logs.forEach(log => {
+                    if (log.delta > 0) inTotal += log.delta;
+                    if (log.delta < 0) outTotal += Math.abs(log.delta);
+
+                    const d = new Date(log.date);
+                    const isNaN_date = isNaN(d);
+                    const dateStr = !isNaN_date ? d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-';
+
+                    const badgeHtml = log.delta > 0
+                        ? `<span class="badge bg-success" style="padding:2px 6px;">+${log.delta} IN</span>`
+                        : `<span class="badge bg-danger" style="padding:2px 6px;">${log.delta} OUT</span>`;
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                    <td class="text-muted" style="white-space: nowrap;">${dateStr}</td>
+                    <td class="text-bold">${badgeHtml}</td>
+                    <td>${log.reason || '-'}</td>
+                `;
+                    tbody.appendChild(tr);
+                });
+            }
+            totalsDiv.innerHTML = `Total Lifetime IN: <strong class="text-success">+${inTotal}</strong> &nbsp;|&nbsp; Total Lifetime OUT: <strong class="text-danger">-${outTotal}</strong>`;
+        } catch (err) {
+            console.error(err);
+            tbody.innerHTML = '<tr><td colspan="3" class="empty-state text-danger">Failed to load history. Check your connection.</td></tr>';
+            totalsDiv.textContent = '';
+        }
+    }
+
+    function updateFilterCounts() {
+        const allTagged   = [...document.querySelectorAll('tr[data-parent-id]')];
+        const parentRows  = allTagged.filter(r => !r.classList.contains('variant-row'));
+        const variantRows = allTagged.filter(r =>  r.classList.contains('variant-row'));
+
+        let lowCount = 0, outCount = 0;
+        parentRows.forEach(parentRow => {
+            const parentId = parentRow.getAttribute('data-parent-id');
+            const children = variantRows.filter(r => r.getAttribute('data-parent-id') === parentId);
+            let hasOut, hasLow;
+            if (children.length === 0) {
+                hasOut = !!parentRow.querySelector('.stock-badge-out');
+                hasLow = !!parentRow.querySelector('.stock-badge-low');
+            } else {
+                hasOut = children.some(r => r.querySelector('.stock-badge-out'));
+                hasLow = children.some(r => r.querySelector('.stock-badge-low'));
+            }
+            if (hasOut) outCount++;
+            if (hasOut || hasLow) lowCount++;
+        });
+
+        const bl = document.getElementById('badge-low');
+        const bo = document.getElementById('badge-out');
+        if (bl) { bl.textContent = lowCount;  bl.style.display = lowCount  > 0 ? '' : 'none'; }
+        if (bo) { bo.textContent = outCount;  bo.style.display = outCount  > 0 ? '' : 'none'; }
+    }
+
+    document.addEventListener('DOMContentLoaded', updateFilterCounts);
+</script>
+{% endblock %}
