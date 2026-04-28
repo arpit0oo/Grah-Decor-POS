@@ -23,7 +23,7 @@ def get_stock_deltas(status):
     return (0, 1) # pending, reserved
 
 
-def get_all_orders(date_from=None, date_to=None, platform=None, status=None):
+def get_all_orders(date_from=None, date_to=None, platform=None, status=None, review_status=None):
     db = get_db()
     query = db.collection('orders').order_by('date', direction='DESCENDING')
     docs = list(query.stream())
@@ -42,6 +42,14 @@ def get_all_orders(date_from=None, date_to=None, platform=None, status=None):
             continue
         if status and entry.get('status') != status:
             continue
+            
+        if review_status:
+            rev = entry.get('reviews') or 'Pending'
+            if review_status == 'Done':
+                if rev != 'Done': continue
+            elif review_status == 'Pending':
+                if rev not in ['Pending', 'Not Responding']: continue
+
         results.append(entry)
 
     # Secondary sort in memory (Python's sort is stable)

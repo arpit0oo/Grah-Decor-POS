@@ -37,6 +37,7 @@ def orders_list():
     date_to = request.args.get('date_to')
     platform = request.args.get('platform', '')
     status = request.args.get('status', '')
+    review_status = request.args.get('review_status', '')
 
     df = None
     dt = None
@@ -53,7 +54,8 @@ def orders_list():
 
     orders = get_all_orders(date_from=df, date_to=dt,
                             platform=platform or None,
-                            status=status or None)
+                            status=status or None,
+                            review_status=review_status or None)
 
     total_sales = sum(o.get('selling_price', 0) for o in orders)
     total_settlement = sum(o.get('bank_settlement', 0) for o in orders)
@@ -76,7 +78,8 @@ def orders_list():
                            filter_date_from=date_from or '',
                            filter_date_to=date_to or '',
                            filter_platform=platform,
-                           filter_status=status)
+                           filter_status=status,
+                           filter_review=review_status)
 
 
 @orders_bp.route('/add', methods=['POST'])
