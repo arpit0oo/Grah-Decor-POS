@@ -255,7 +255,7 @@ def update_order(doc_id, data):
                 qty = float(item.get('quantity', 1))
                 if prod:
                     adjust_ready_stock_qty(prod, item.get('color', ''), -qty, -qty,
-                                          reason=f"{prefix}Dispatched — {new_status}", ref_id=doc_id)
+                                          reason=f"{prefix}{new_status.upper()}", ref_id=doc_id)
 
         elif old_zone == 'A' and new_zone == 'C':
             # Pending → Cancelled: only release the reservation, stock stays on shelf

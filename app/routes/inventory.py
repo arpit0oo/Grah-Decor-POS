@@ -88,9 +88,10 @@ def ready_add():
     color = request.form.get('color', '').strip()
     quantity = request.form.get('quantity', 0)
     cost_price = request.form.get('cost_price', 0)
+    min_stock = request.form.get('min_stock', 0)
     reason = request.form.get('reason', 'Manual Add').strip() or 'Manual Add'
     if name:
-        add_ready_stock(name, color, quantity, cost_price, reason=reason)
+        add_ready_stock(name, color, quantity, cost_price, reason=reason, min_stock=min_stock)
         flash('Ready stock item added.', 'success')
     else:
         flash('Product name is required.', 'error')
@@ -103,10 +104,12 @@ def ready_edit(doc_id):
     # Name and Quantity are LOCKED — use Adjust Stock to change quantity
     if request.form.get('cost_price') is not None:
         data['cost_price'] = float(request.form.get('cost_price') or 0)
+    if request.form.get('min_stock') is not None:
+        data['min_stock'] = int(float(request.form.get('min_stock') or 0))
     if data:
         try:
             update_ready_stock(doc_id, data)
-            flash('Cost price updated.', 'success')
+            flash('Product updated.', 'success')
         except ValueError as e:
             flash(str(e), 'error')
     return redirect(url_for('inventory.inventory_list', tab='ready'))

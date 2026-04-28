@@ -92,6 +92,20 @@
 </div>
 
 <!-- ── READY STOCK TAB ───────────────────────────── -->
+<style>
+.stock-badge { display:inline-block; padding:1px 6px; border-radius:10px; font-size:0.72em; font-weight:700; letter-spacing:0.04em; margin-left:5px; vertical-align:middle; }
+.stock-badge-out { background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; }
+.stock-badge-low { background:#fef3c7; color:#92400e; border:1px solid #fcd34d; }
+/* ── Stock filter tabs ── */
+.stock-filter-tab { padding:6px 15px; border:none; border-radius:6px; background:transparent; cursor:pointer; font-size:0.85em; font-weight:500; color:#64748b; transition:all 0.15s; white-space:nowrap; display:inline-flex; align-items:center; gap:6px; line-height:1; }
+.stock-filter-tab:hover:not(.stock-filter-active) { color:#1e293b; background:rgba(255,255,255,0.6); }
+.stock-filter-active { background:#fff !important; color:#1e293b !important; box-shadow:0 1px 3px rgba(0,0,0,0.12),0 1px 2px rgba(0,0,0,0.06); }
+.stock-filter-count { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; border-radius:9px; font-size:0.72em; font-weight:700; padding:0 5px; line-height:1; }
+.stock-filter-count-low { background:#fef3c7; color:#92400e; }
+.stock-filter-count-out { background:#fee2e2; color:#991b1b; }
+.stock-filter-active .stock-filter-count-low,
+.stock-filter-active .stock-filter-count-out { background:rgba(0,0,0,0.08); color:inherit; }
+</style>
 <div class="tab-content {% if active_tab != 'ready' %}hidden{% endif %}" id="tab-ready">
     <div class="form-card hidden" id="readyForm">
         <h3>Add Product / Parent</h3>
@@ -113,16 +127,13 @@
                     <label for="ready-cost">Cost / Unit ₹</label>
                     <input type="number" id="ready-cost" name="cost_price" step="1" min="0" value="0">
                 </div>
+                <div class="form-group">
+                    <label for="ready-min-stock">Min Stock Alert</label>
+                    <input type="number" id="ready-min-stock" name="min_stock" step="1" min="0" value="0"
+                        title="Show LOW badge when available stock falls to or below this number">
+                </div>
             </div>
-            <div class="form-group">
-                <label for="ready-reason">Reason *</label>
-                <select id="ready-reason" name="reason" required>
-                    <option value="" disabled selected>Select reason…</option>
-                    <option value="Manufactured">Manufactured</option>
-                    <option value="Audit Correction">Audit Correction</option>
-                    <option value="Returned to Stock">Returned to Stock</option>
-                </select>
-            </div>
+            <input type="hidden" name="reason" value="Manufactured">
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary">Add Product</button>
                 <button type="button" class="btn btn-ghost" onclick="toggleForm('readyForm')">Cancel</button>
@@ -132,6 +143,17 @@
 
     <button class="btn btn-sm" onclick="toggleForm('readyForm')" style="margin-bottom:1rem">+ Add Product</button>
 
+    <div id="stockFilterBar" style="margin-bottom:1.25rem; display:inline-flex; background:#f1f5f9; border-radius:8px; padding:3px; gap:2px;">
+        <button id="filter-all" class="stock-filter-tab stock-filter-active" onclick="filterStock('all')">All</button>
+        <button id="filter-low" class="stock-filter-tab" onclick="filterStock('low')">
+            Low Stock
+            <span id="badge-low" class="stock-filter-count stock-filter-count-low" style="display:none;"></span>
+        </button>
+        <button id="filter-out" class="stock-filter-tab" onclick="filterStock('out')">
+            Out of Stock
+            <span id="badge-out" class="stock-filter-count stock-filter-count-out" style="display:none;"></span>
+        </button>
+    </div>
     <div class="table-wrapper">
         <table class="data-table">
             <thead>
@@ -141,6 +163,7 @@
                     <th>Quantity</th>
                     <th>Reserved</th>
                     <th>Available</th>
+                    <th>Min Stock</th>
                     <th>Cost / Unit ₹</th>
                     <th>Last Updated</th>
                     <th>Actions</th>
@@ -149,9 +172,28 @@
             <tbody>
                 {% for s in ready_stock %}
                 {% set avail = s.quantity - (s.reserved_quantity or 0) %}
+                {# ── Parent badge: any variant OUT → OUT; no OUT but any LOW → LOW #}
+                {% set ns = namespace(pbadge='') %}
+                {% if s.variants %}
+                    {% for v in s.variants %}
+                        {% set va = v.quantity - (v.reserved_quantity or 0) %}
+                        {% if va <= 0 %}
+                            {% set ns.pbadge = 'out' %}
+                        {% elif v.min_stock > 0 and va <= v.min_stock and ns.pbadge != 'out' %}
+                            {% set ns.pbadge = 'low' %}
+                        {% endif %}
+                    {% endfor %}
+                {% else %}
+                    {% if avail <= 0 %}
+                        {% set ns.pbadge = 'out' %}
+                    {% elif avail > 0 and s.min_stock > 0 and avail <= s.min_stock %}
+                        {% set ns.pbadge = 'low' %}
+                    {% endif %}
+                {% endif %}
                 {# ── PARENT ROW ── #}
                 <tr class="{% if s.variants %}parent-row{% endif %} {% if not s.variants and avail <= 0 %}row-danger{% elif not s.variants and avail < 5 %}row-warning{% endif %}"
-                    style="{% if s.variants %}background: var(--surface);{% endif %}">
+                    style="{% if s.variants %}background: var(--surface);{% endif %}"
+                    data-parent-id="{{ s.id }}" data-badge="{{ ns.pbadge }}">
                     <td style="text-align:center; cursor:pointer;" {% if s.variants
                         %}onclick="toggleVariants('{{ s.id }}')" {% endif %}>
                         {% if s.variants %}<span id="icon-{{ s.id }}" style="font-size:0.8em;">&#9654;</span>{% endif %}
@@ -174,8 +216,21 @@
                         {% endif %}
                     </td>
                     <td class="text-warning text-bold">{{ s.reserved_quantity or 0 }}</td>
-                    <td class="{% if avail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">{{ avail|int
-                        }}</td>
+                    <td class="{% if avail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">
+                        {{ avail|int }}
+                        {% if ns.pbadge == 'out' %}<span class="stock-badge stock-badge-out">OUT</span>{% endif %}
+                        {% if ns.pbadge == 'low' %}<span class="stock-badge stock-badge-low">LOW</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if s.variants %}
+                        <span class="text-muted" style="font-size:0.85em;">—</span>
+                        {% else %}
+                        <input type="number" name="min_stock" value="{{ s.min_stock or 0 }}" step="1" min="0"
+                            class="inline-input inline-input-sm" readonly
+                            style="pointer-events:none;border-color:transparent;background:transparent;width:60px;"
+                            form="form-ready-{{ s.id }}">
+                        {% endif %}
+                    </td>
                     <td>
                         <input type="number" name="cost_price" value="{{ s.cost_price or 0 }}" step="1"
                             class="inline-input inline-input-sm cost-input" readonly
@@ -186,7 +241,7 @@
                         s.updated_at.strftime else '-' }}</td>
                     <td class="actions-cell">
                         <button type="button" class="btn btn-xs edit-cost-btn"
-                            onclick="toggleEditCost(this)">Edit</button>
+                            onclick="toggleEditParent(this)">Edit</button>
                         <button type="submit" class="btn btn-xs save-cost-btn hidden"
                             form="form-ready-{{ s.id }}">Save</button>
                         </form>
@@ -206,33 +261,47 @@
                 {# ── VARIANT ROWS ── #}
                 {% for v in s.variants %}
                 {% set vavail = v.quantity - (v.reserved_quantity or 0) %}
-                <tr class="variant-row hidden" id="variant-{{ s.id }}" style="background:#f8f8ff;">
+                {% if vavail <= 0 %}{% set v_badge = 'out' %}
+                {% elif v.min_stock > 0 and vavail <= v.min_stock %}{% set v_badge = 'low' %}
+                {% else %}{% set v_badge = '' %}{% endif %}
+                <tr class="variant-row hidden" id="variant-{{ s.id }}" style="background:#f8f8ff;"
+                    data-parent-id="{{ s.id }}" data-badge="{{ v_badge }}">
                     <td></td>
                     <td style="padding-left:2rem;">
-                        <form autocomplete="off" method="POST"
+                        <form autocomplete="off" method="POST" id="form-variant-{{ v.id }}"
                             action="{{ url_for('inventory.ready_edit', doc_id=v.id) }}" class="inline-edit-form">
-                            <input type="hidden" name="name" value="{{ v.name }}">
-                            <input type="hidden" name="quantity" value="{{ v.quantity }}">
+                            <input type="hidden" name="name" value="{{ v.name }}" form="form-variant-{{ v.id }}">
+                            <input type="hidden" name="quantity" value="{{ v.quantity }}" form="form-variant-{{ v.id }}">
                             <span class="text-muted" style="font-size:0.8em;">&#9492;</span>
                             <span class="text-bold">{{ v.color }}</span>
                     </td>
-                    <td>
-                        <span class="text-bold">{{ v.quantity|int }}</span>
-                    </td>
+                    <td><span class="text-bold">{{ v.quantity|int }}</span></td>
                     <td class="text-warning text-bold">{{ v.reserved_quantity or 0 }}</td>
-                    <td class="{% if vavail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">{{ vavail|int
-                        }}</td>
-                    <td class="text-muted" colspan="1" style="font-size:0.8em;">Inherits parent</td>
+                    <td class="{% if vavail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">
+                        {{ vavail|int }}
+                        {% if v_badge == 'out' %}<span class="stock-badge stock-badge-out">OUT</span>{% endif %}
+                        {% if v_badge == 'low' %}<span class="stock-badge stock-badge-low">LOW</span>{% endif %}
+                    </td>
+                    <td>
+                        <input type="number" name="min_stock" value="{{ v.min_stock or 0 }}" step="1" min="0"
+                            class="inline-input inline-input-sm variant-min-input" readonly
+                            style="pointer-events:none;border-color:transparent;background:transparent;width:60px;"
+                            form="form-variant-{{ v.id }}">
+                    </td>
+                    <td class="text-muted" style="font-size:0.8em;">Inherits parent</td>
                     <td class="text-muted">{{ v.updated_at.strftime('%d/%m/%Y') if v.updated_at and
                         v.updated_at.strftime else '-' }}</td>
                     <td class="actions-cell">
+                        <button type="button" class="btn btn-xs edit-variant-btn"
+                            onclick="toggleEditVariant(this)">Edit</button>
+                        <button type="submit" class="btn btn-xs save-variant-btn hidden"
+                            form="form-variant-{{ v.id }}">Save</button>
+                        </form>
                         <button type="button" class="btn btn-xs btn-ghost"
                             onclick="openHistoryModal('{{ v.name|escape }}', '{{ v.color|escape }}')">History</button>
                         <button type="button" class="btn btn-xs"
                             style="color:var(--success); border-color:var(--success);"
-                            onclick="openAdjustModal('{{ v.id }}', '{{ v.name|escape }}', '{{ v.color|escape }}')">Add
-                            New Stock</button>
-                        </form>
+                            onclick="openAdjustModal('{{ v.id }}', '{{ v.name|escape }}', '{{ v.color|escape }}')">Add New Stock</button>
                     </td>
                 </tr>
                 {% endfor %}
@@ -240,7 +309,7 @@
                 {% endfor %}
                 {% if not ready_stock %}
                 <tr>
-                    <td colspan="8" class="empty-state">No ready stock. Add items.</td>
+                    <td colspan="9" class="empty-state">No ready stock. Add items.</td>
                 </tr>
                 {% endif %}
             </tbody>
@@ -395,15 +464,7 @@
                     min="1">
                 <small class="text-muted">Only additions allowed. Stock is reduced automatically through orders.</small>
             </div>
-            <div class="form-group" style="margin-bottom:1rem;">
-                <label>Reason *</label>
-                <select name="reason" required>
-                    <option value="" disabled selected>Select reason…</option>
-                    <option value="Manufactured">Manufactured</option>
-                    <option value="Audit Correction">Audit Correction</option>
-                    <option value="Returned to Stock">Returned to Stock</option>
-                </select>
-            </div>
+            <input type="hidden" name="reason" value="Manufactured">
             <div class="form-group" style="margin-bottom:1.5rem;">
                 <label>Notes (optional)</label>
                 <input type="text" name="notes" placeholder="Any additional context">
@@ -501,14 +562,14 @@
 
     async function openRawHistoryModal(name) {
         document.getElementById('rawHistoryTitle').textContent = name;
-        const tbody   = document.getElementById('rawHistoryTableBody');
+        const tbody = document.getElementById('rawHistoryTableBody');
         const totalsDiv = document.getElementById('rawHistoryTotals');
         tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding:2rem;">Loading…</td></tr>';
         totalsDiv.textContent = 'Loading…';
         document.getElementById('rawHistoryModal').classList.remove('hidden');
 
         try {
-            const res  = await fetch('/inventory/api/raw-stock-ledger?name=' + encodeURIComponent(name));
+            const res = await fetch('/inventory/api/raw-stock-ledger?name=' + encodeURIComponent(name));
             const data = await res.json();
             tbody.innerHTML = '';
 
@@ -525,42 +586,42 @@
 
             // Type badge colours
             const typeStyle = {
-                'PO Received':      { bg: '#d1fae5', color: '#065f46', border: '#6ee7b7' },
-                'PO Return':        { bg: '#ffedd5', color: '#9a3412', border: '#fdba74' },
-                'Production':       { bg: '#fee2e2', color: '#991b1b', border: '#fca5a5' },
+                'PO Received': { bg: '#d1fae5', color: '#065f46', border: '#6ee7b7' },
+                'PO Return': { bg: '#ffedd5', color: '#9a3412', border: '#fdba74' },
+                'Production': { bg: '#fee2e2', color: '#991b1b', border: '#fca5a5' },
                 'Audit Adjustment': { bg: '#ede9fe', color: '#5b21b6', border: '#c4b5fd' },
-                'Manual':           { bg: '#fef3c7', color: '#92400e', border: '#fcd34d' },
-                'Inflow':           { bg: '#dbeafe', color: '#1e40af', border: '#93c5fd' },
-                'Outflow':          { bg: '#f3f4f6', color: '#374151', border: '#d1d5db' },
+                'Manual': { bg: '#fef3c7', color: '#92400e', border: '#fcd34d' },
+                'Inflow': { bg: '#dbeafe', color: '#1e40af', border: '#93c5fd' },
+                'Outflow': { bg: '#f3f4f6', color: '#374151', border: '#d1d5db' },
             };
 
             let totalIn = 0, totalOut = 0;
             data.forEach(ev => {
                 const d = ev.delta || 0;
-                if (d > 0) totalIn  += d;
-                else       totalOut += Math.abs(d);
+                if (d > 0) totalIn += d;
+                else totalOut += Math.abs(d);
 
                 const s = typeStyle[ev.type] || { bg: '#f3f4f6', color: '#374151', border: '#d1d5db' };
                 const badgeHtml = `<span class="badge" style="background:${s.bg};color:${s.color};border:1px solid ${s.border};font-size:0.75em;">${ev.type}</span>`;
 
                 const movHtml = d > 0
-                    ? `<span style="color:#059669;font-weight:700;">+${d.toLocaleString(undefined,{maximumFractionDigits:2})}</span>`
-                    : `<span style="color:#dc2626;font-weight:700;">${d.toLocaleString(undefined,{maximumFractionDigits:2})}</span>`;
+                    ? `<span style="color:#059669;font-weight:700;">+${d.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>`
+                    : `<span style="color:#dc2626;font-weight:700;">${d.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>`;
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td class="text-muted" style="white-space:nowrap;">${ev.date_str || '-'}</td>
                     <td>${badgeHtml}</td>
-                    <td style="font-size:0.85em;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(ev.reference||'').replace(/"/g,"&quot;")}">  ${ev.reference || '-'}</td>
+                    <td style="font-size:0.85em;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(ev.reference || '').replace(/"/g, "&quot;")}">  ${ev.reference || '-'}</td>
                     <td style="text-align:right;">${movHtml}</td>
                 `;
                 tbody.appendChild(tr);
             });
 
             totalsDiv.innerHTML =
-                `Total In: <strong style="color:#059669;">+${totalIn.toLocaleString(undefined,{maximumFractionDigits:2})}</strong>
+                `Total In: <strong style="color:#059669;">+${totalIn.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong>
                 &nbsp;|&nbsp;
-                Total Out: <strong style="color:#dc2626;">−${totalOut.toLocaleString(undefined,{maximumFractionDigits:2})}</strong>`;
+                Total Out: <strong style="color:#dc2626;">−${totalOut.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong>`;
 
         } catch (err) {
             console.error(err);
@@ -577,25 +638,97 @@
         document.getElementById('adjustModal').classList.remove('hidden');
     }
 
-    function toggleEditCost(btn) {
+    function toggleEditParent(btn) {
         const td = btn.closest('.actions-cell');
         const tr = btn.closest('tr');
-        const input = tr.querySelector('input[name="cost_price"]');
-
-        if (!input) return;
-
-        // Remove readonly and specific styling
-        input.removeAttribute('readonly');
-        input.style.pointerEvents = 'auto';
-        input.style.borderColor = '';
-        input.style.background = '';
-
-        // Switch buttons
+        // Enable both cost_price and min_stock inputs
+        [tr.querySelector('input[name="cost_price"]'), tr.querySelector('input[name="min_stock"]')]
+            .forEach(inp => {
+                if (!inp) return;
+                inp.removeAttribute('readonly');
+                inp.style.pointerEvents = 'auto';
+                inp.style.borderColor = '';
+                inp.style.background = '';
+            });
         btn.classList.add('hidden');
         td.querySelector('.save-cost-btn').classList.remove('hidden');
+        const costInput = tr.querySelector('input[name="cost_price"]');
+        if (costInput) costInput.focus();
+    }
 
-        // Focus the input
-        input.focus();
+    function toggleEditVariant(btn) {
+        const td = btn.closest('.actions-cell');
+        const tr = btn.closest('tr');
+        const inp = tr.querySelector('input[name="min_stock"]');
+        if (!inp) return;
+        inp.removeAttribute('readonly');
+        inp.style.pointerEvents = 'auto';
+        inp.style.borderColor = '';
+        inp.style.background = '';
+        btn.classList.add('hidden');
+        td.querySelector('.save-variant-btn').classList.remove('hidden');
+        inp.focus();
+    }
+
+    function filterStock(mode) {
+        // Update active tab
+        document.querySelectorAll('#stockFilterBar .stock-filter-tab').forEach(b => b.classList.remove('stock-filter-active'));
+        const activeBtn = document.getElementById('filter-' + mode);
+        if (activeBtn) activeBtn.classList.add('stock-filter-active');
+
+        const allTagged   = [...document.querySelectorAll('tr[data-parent-id]')];
+        const parentRows  = allTagged.filter(r => !r.classList.contains('variant-row'));
+        const variantRows = allTagged.filter(r =>  r.classList.contains('variant-row'));
+
+        if (mode === 'all') {
+            // Restore all parent rows; variant rows go back to their collapse (.hidden) state
+            parentRows.forEach(r => { r.style.display = ''; });
+            variantRows.forEach(r => {
+                r.style.display = '';          // clear any filter-imposed display:none
+                r.classList.add('hidden');     // re-apply collapse so toggleVariants still works
+            });
+            return;
+        }
+
+        const visibleParents = new Set();
+
+        parentRows.forEach(parentRow => {
+            const parentId = parentRow.getAttribute('data-parent-id');
+            // Variant children for this parent
+            const children = variantRows.filter(r => r.getAttribute('data-parent-id') === parentId);
+
+            let show = false;
+
+            if (children.length === 0) {
+                // ── Standalone product (no variants) ──
+                // Read badge spans directly from this row
+                const hasOut = !!parentRow.querySelector('.stock-badge-out');
+                const hasLow = !!parentRow.querySelector('.stock-badge-low');
+                if (mode === 'out') show = hasOut;
+                if (mode === 'low') show = hasOut || hasLow;
+            } else {
+                // ── Product with variants ──
+                // Out of Stock: at least one variant row has an OUT badge
+                // Low Stock:    at least one variant row has an OUT or LOW badge
+                const anyOut = children.some(r => r.querySelector('.stock-badge-out'));
+                const anyLow = children.some(r => r.querySelector('.stock-badge-low'));
+                if (mode === 'out') show = anyOut;
+                if (mode === 'low') show = anyOut || anyLow;
+            }
+
+            parentRow.style.display = show ? '' : 'none';
+            if (show) visibleParents.add(parentId);
+        });
+
+        // Show/hide variant rows — only touch display style, never .hidden class or expand icon
+        variantRows.forEach(r => {
+            const parentId = r.getAttribute('data-parent-id');
+            if (visibleParents.has(parentId)) {
+                r.style.display = 'table-row';  // overrides .hidden without removing it
+            } else {
+                r.style.display = 'none';
+            }
+        });
     }
 
 
@@ -678,5 +811,34 @@
             totalsDiv.textContent = '';
         }
     }
+
+    function updateFilterCounts() {
+        const allTagged   = [...document.querySelectorAll('tr[data-parent-id]')];
+        const parentRows  = allTagged.filter(r => !r.classList.contains('variant-row'));
+        const variantRows = allTagged.filter(r =>  r.classList.contains('variant-row'));
+
+        let lowCount = 0, outCount = 0;
+        parentRows.forEach(parentRow => {
+            const parentId = parentRow.getAttribute('data-parent-id');
+            const children = variantRows.filter(r => r.getAttribute('data-parent-id') === parentId);
+            let hasOut, hasLow;
+            if (children.length === 0) {
+                hasOut = !!parentRow.querySelector('.stock-badge-out');
+                hasLow = !!parentRow.querySelector('.stock-badge-low');
+            } else {
+                hasOut = children.some(r => r.querySelector('.stock-badge-out'));
+                hasLow = children.some(r => r.querySelector('.stock-badge-low'));
+            }
+            if (hasOut) outCount++;
+            if (hasOut || hasLow) lowCount++;
+        });
+
+        const bl = document.getElementById('badge-low');
+        const bo = document.getElementById('badge-out');
+        if (bl) { bl.textContent = lowCount;  bl.style.display = lowCount  > 0 ? '' : 'none'; }
+        if (bo) { bo.textContent = outCount;  bo.style.display = outCount  > 0 ? '' : 'none'; }
+    }
+
+    document.addEventListener('DOMContentLoaded', updateFilterCounts);
 </script>
 {% endblock %}

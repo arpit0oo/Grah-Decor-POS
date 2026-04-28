@@ -153,6 +153,7 @@ def get_ready_stock_grouped():
         doc.setdefault('quantity', 0)
         doc.setdefault('reserved_quantity', 0)
         doc.setdefault('cost_price', 0)
+        doc.setdefault('min_stock', 0)
         doc.setdefault('color', '')
         doc.setdefault('name', '')
 
@@ -178,7 +179,7 @@ def get_ready_stock_grouped():
     return parents
 
 
-def add_ready_stock(name, color, quantity, cost_price, reason='Manual Add'):
+def add_ready_stock(name, color, quantity, cost_price, reason='Manual Add', min_stock=0):
     db = get_db()
     db.collection('ready_stock').add({
         'name': name,
@@ -186,6 +187,7 @@ def add_ready_stock(name, color, quantity, cost_price, reason='Manual Add'):
         'quantity': float(quantity or 0),
         'reserved_quantity': 0,
         'cost_price': float(cost_price or 0),
+        'min_stock': int(float(min_stock or 0)),
         'updated_at': datetime.now(timezone.utc),
     })
     log_inventory_transaction('Ready Stock', name, color, quantity, reason)
@@ -201,6 +203,10 @@ def update_ready_stock(doc_id, data):
     # Strip quantity if somehow submitted — all quantity changes go via adjust_ready_stock_qty
     data.pop('quantity', None)
 
+    # Coerce min_stock to int if present
+    if 'min_stock' in data:
+        data['min_stock'] = int(float(data.get('min_stock') or 0))
+
     data['updated_at'] = datetime.now(timezone.utc)
     doc_ref.update(data)
     return True
@@ -211,7 +217,7 @@ def delete_ready_stock(doc_id):
     db.collection('ready_stock').document(doc_id).delete()
 
 
-def add_ready_stock_variant(parent_id, parent_name, variant_name, quantity):
+def add_ready_stock_variant(parent_id, parent_name, variant_name, quantity, min_stock=0):
     """Add a colour/variant child under an existing parent product."""
     db = get_db()
     qty = int(float(quantity or 0))
@@ -221,6 +227,7 @@ def add_ready_stock_variant(parent_id, parent_name, variant_name, quantity):
         'color': variant_name,
         'quantity': qty,
         'reserved_quantity': 0,
+        'min_stock': int(float(min_stock or 0)),
         'updated_at': datetime.now(timezone.utc),
     })
     log_inventory_transaction('Ready Stock', parent_name, variant_name, qty, 'Variant Added')

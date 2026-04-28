@@ -27,7 +27,7 @@
 <!-- Add Order Form -->
 <div class="form-card hidden" id="orderForm">
     <h3>Log New Order</h3>
-    <form autocomplete="off" method="POST" action="{{ url_for('orders.order_add') }}">
+    <form autocomplete="off" method="POST" action="{{ url_for('orders.order_add') }}" onsubmit="return validateOrderForm('add', true)">
 
         <!-- Row 1: Order Identity -->
         <div class="order-form-row">
@@ -36,12 +36,13 @@
                 <input type="date" id="add-date" name="date" required>
             </div>
             <div class="form-group">
-                <label for="add-order-id">Order ID</label>
-                <input type="text" id="add-order-id" name="order_id" placeholder="Platform order ID">
+                <label for="add-order-id">Order ID *</label>
+                <input type="text" id="add-order-id" name="order_id" placeholder="Platform order ID" required>
             </div>
             <div class="form-group">
-                <label for="add-platform">Platform</label>
-                <select id="add-platform" name="platform">
+                <label for="add-platform">Platform *</label>
+                <select id="add-platform" name="platform" required>
+                    <option value="" disabled selected>Select platform...</option>
                     {% for p in platforms %}
                     <option value="{{ p }}">{{ p }}</option>
                     {% endfor %}
@@ -51,46 +52,49 @@
 
         <!-- Row 2: Customer -->
         <div class="order-form-section-label">Customer</div>
-        <div style="margin-bottom:0.6rem; display:flex; gap:1.5rem; align-items:center; flex-wrap:wrap;">
-            <label style="font-size:0.875rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
-                <input type="radio" name="customer_mode" value="existing" onchange="toggleCustomerMode('add')"> Existing
-            </label>
-            <label style="font-size:0.875rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
-                <input type="radio" name="customer_mode" value="new" checked onchange="toggleCustomerMode('add')"> New
-                Customer
-            </label>
-            <label style="font-size:0.875rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
-                <input type="radio" name="customer_mode" value="unknown" onchange="toggleCustomerMode('add')"> Unknown /
-                Walk-in
-            </label>
-        </div>
-        <div id="add-existing-customer-group" class="order-form-row hidden" style="grid-template-columns:1fr;">
-            <div class="form-group" style="margin:0;">
-                <label for="add-existing-customer">Select Customer *</label>
-                <select id="add-existing-customer" name="existing_customer" style="width: 100%;">
-                    <option value="" disabled selected>Select a customer...</option>
-                    {% for c in customers %}
-                    <option value="{{ c.customer_id }} - {{ c.name }}">{{ c.customer_id }} - {{ c.name }} ({{
-                        c.phone_numbers[0] if c.phone_numbers else 'No phone' }})</option>
-                    {% endfor %}
-                </select>
+        <div id="add-customer-section-wrapper" style="border:1px solid transparent; padding: 0.5rem; border-radius: 6px; margin: 0 -0.5rem;">
+            <div style="margin-bottom:0.6rem; display:flex; gap:1.5rem; align-items:center; flex-wrap:wrap;">
+                <label style="font-size:0.875rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                    <input type="radio" name="customer_mode" value="existing" onchange="toggleCustomerMode('add'); validateOrderForm('add');"> Existing
+                </label>
+                <label style="font-size:0.875rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                    <input type="radio" name="customer_mode" value="new" checked onchange="toggleCustomerMode('add'); validateOrderForm('add');"> New
+                    Customer
+                </label>
+                <label style="font-size:0.875rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                    <input type="radio" name="customer_mode" value="unknown" onchange="toggleCustomerMode('add'); validateOrderForm('add');"> Unknown /
+                    Walk-in
+                </label>
             </div>
-        </div>
-        <div id="add-new-customer-group" class="order-form-row" style="grid-template-columns:1fr 1fr;">
-            <div class="form-group" style="margin:0;">
-                <label for="add-new-customer-name">New Customer Name *</label>
-                <input type="text" id="add-new-customer-name" name="new_customer_name" placeholder="Customer name"
-                    required>
+            <div id="add-existing-customer-group" class="order-form-row hidden" style="grid-template-columns:1fr;">
+                <div class="form-group" style="margin:0;">
+                    <label for="add-existing-customer">Select Customer *</label>
+                    <select id="add-existing-customer" name="existing_customer" style="width: 100%;" onchange="validateOrderForm('add')">
+                        <option value="" disabled selected>Select a customer...</option>
+                        {% for c in customers %}
+                        <option value="{{ c.customer_id }} - {{ c.name }}">{{ c.customer_id }} - {{ c.name }} ({{
+                            c.phone_numbers[0] if c.phone_numbers else 'No phone' }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
-            <div class="form-group" style="margin:0;">
-                <label for="add-new-customer-phone">Phone</label>
-                <input type="tel" id="add-new-customer-phone" name="new_customer_phone" placeholder="10-digit number"
-                    pattern="[0-9]{10}" maxlength="10" oninput="this.value = this.value.replace(/[^0-9]/g, '');">
+            <div id="add-new-customer-group" class="order-form-row" style="grid-template-columns:1fr 1fr;">
+                <div class="form-group" style="margin:0;">
+                    <label for="add-new-customer-name">New Customer Name *</label>
+                    <input type="text" id="add-new-customer-name" name="new_customer_name" placeholder="Customer name" oninput="validateOrderForm('add')"
+                        required>
+                </div>
+                <div class="form-group" style="margin:0;">
+                    <label for="add-new-customer-phone">Phone *</label>
+                    <input type="tel" id="add-new-customer-phone" name="new_customer_phone" placeholder="10-digit number"
+                        pattern="[0-9]{10}" maxlength="10" oninput="this.value = this.value.replace(/[^0-9]/g, '');" required>
+                </div>
             </div>
-        </div>
-        <div id="add-unknown-customer-group" class="hidden"
-            style="padding:0.5rem 0.75rem; background:#fffbeb; border:1px solid #fde68a; border-radius:6px; font-size:0.85rem; color:#92400e;">
-            🚶 Order will be saved with customer = <strong>Unknown</strong>. You can assign a customer later via Edit.
+            <div id="add-unknown-customer-group" class="hidden"
+                style="padding:0.5rem 0.75rem; background:#fffbeb; border:1px solid #fde68a; border-radius:6px; font-size:0.85rem; color:#92400e;">
+                🚶 Order will be saved with customer = <strong>Unknown</strong>. You can assign a customer later via Edit.
+            </div>
+            <div id="add-customer-error" class="hidden" style="color:var(--danger); font-size:0.8rem; margin-top:0.5rem; font-weight:600;">Please select a customer option</div>
         </div>
 
         <!-- Row 3: Order Items -->
@@ -108,19 +112,19 @@
         <div class="order-form-section-label">Financials</div>
         <div class="order-form-row" style="grid-template-columns: repeat(3, 1fr);">
             <div class="form-group" style="margin:0;">
-                <label for="add-shipping">Shipping ₹</label>
+                <label for="add-shipping">Shipping ₹ *</label>
                 <input type="number" id="add-shipping" name="shipping" step="0.01" min="0" value="0"
-                    oninput="calcSettlement('add')">
+                    oninput="calcSettlement('add')" required>
             </div>
             <div class="form-group" style="margin:0;">
-                <label for="add-tax">Tax ₹</label>
+                <label for="add-tax">Tax ₹ *</label>
                 <input type="number" id="add-tax" name="tax" step="0.01" min="0" value="0"
-                    oninput="calcSettlement('add')">
+                    oninput="calcSettlement('add')" required>
             </div>
             <div class="form-group" style="margin:0;">
-                <label for="add-marketplace-fee">Mkt Fee ₹</label>
+                <label for="add-marketplace-fee">Mkt Fee ₹ *</label>
                 <input type="number" id="add-marketplace-fee" name="marketplace_fee" step="0.01" min="0" value="0"
-                    oninput="calcSettlement('add')">
+                    oninput="calcSettlement('add')" required>
             </div>
         </div>
 
@@ -203,7 +207,7 @@
             </thead>
             <tbody>
                 {% for order in orders %}
-                {% set is_terminal = order.status in ['Cancelled', 'Settled', 'Returned', 'RTO'] %}
+                {% set is_terminal = order.status in ['Cancelled', 'Settled', 'Returned', 'RTO', 'Delivered'] %}
                 <tr style="{% if is_terminal %}opacity:0.6;{% endif %}">
                     <td style="text-align: center;">
                         <input type="checkbox" class="row-checkbox" name="order_ids" value="{{ order.id }}"
@@ -303,7 +307,11 @@
             <button class="modal-close" onclick="closeModal('viewModal')">×</button>
         </div>
 
-        <div style="margin-bottom: 1.5rem;" class="form-grid form-grid-3 text-muted">
+        <div style="margin-bottom: 1.5rem;" class="form-grid form-grid-4 text-muted">
+            <div>
+                <small style="font-size:0.75em; letter-spacing:0.05em; text-transform:uppercase;">Order ID</small><br>
+                <strong id="view-order-id-field" style="color:var(--text); font-size:1.1em;"></strong>
+            </div>
             <div>
                 <small style="font-size:0.75em; letter-spacing:0.05em; text-transform:uppercase;">Customer</small><br>
                 <strong id="view-customer" style="color:var(--text); font-size:1.1em;"></strong>
@@ -591,8 +599,8 @@
                     <input type="text" class="item-product-custom hidden" placeholder="Custom product" oninput="calcSettlement('${prefix}')">
                 </div>
                 <div class="item-field item-field-color">
-                    <label>Variant</label>
-                    <select name="color[]" class="item-color" onchange="handleDropdownOther(this); if(checkDuplicates(this.closest('.order-item-row'))) { alert('Already added. Adjust quantity instead.'); this.value=''; }">
+                    <label>Variant *</label>
+                    <select name="color[]" class="item-color" required onchange="handleDropdownOther(this); if(checkDuplicates(this.closest('.order-item-row'))) { alert('Already added. Adjust quantity instead.'); this.value=''; }">
                         <option value="">None</option>
                         {% for c in colors %}
                         <option value="{{ c }}">{{ c }}</option>
@@ -602,12 +610,12 @@
                     <input type="text" class="item-color-custom hidden" placeholder="Custom color">
                 </div>
                 <div class="item-field item-field-qty">
-                    <label>Qty</label>
-                    <input type="number" name="quantity[]" class="item-qty" value="1" min="1" step="1" oninput="calcSettlement('${prefix}')">
+                    <label>Qty *</label>
+                    <input type="number" name="quantity[]" class="item-qty" value="1" min="1" step="1" oninput="calcSettlement('${prefix}')" required>
                 </div>
                 <div class="item-field item-field-price">
-                    <label>Selling Price ₹</label>
-                    <input type="number" name="price[]" class="item-price" value="0" min="0" step="0.01" oninput="calcSettlement('${prefix}')">
+                    <label>Selling Price ₹ *</label>
+                    <input type="number" name="price[]" class="item-price" value="0" min="0" step="0.01" oninput="calcSettlement('${prefix}')" required>
                 </div>
                 <div class="item-field item-field-remove">
                     <label>&nbsp;</label>
@@ -699,6 +707,7 @@
         }
         document.getElementById('view-date').textContent = dateStr;
         document.getElementById('view-order-id').textContent = data.order_id ? `#${data.order_id}` : '';
+        document.getElementById('view-order-id-field').textContent = data.order_id || '-';
         document.getElementById('view-customer').textContent = data.customer || '-';
         document.getElementById('view-platform').textContent = data.platform || '-';
 
@@ -884,12 +893,14 @@
         let newGroup = document.getElementById(`${prefix}-new-customer-group`);
         let unknownGroup = document.getElementById(`${prefix}-unknown-customer-group`);
         let newNameInput = document.getElementById(`${prefix}-new-customer-name`);
+        let newPhoneInput = document.getElementById(`${prefix}-new-customer-phone`);
         let existingInput = document.getElementById(`${prefix}-existing-customer`);
 
         existingGroup.classList.add('hidden');
         newGroup.classList.add('hidden');
         if (unknownGroup) unknownGroup.classList.add('hidden');
         if (newNameInput) newNameInput.required = false;
+        if (newPhoneInput) newPhoneInput.required = false;
         if (existingInput) existingInput.required = false;
 
         if (mode === 'existing') {
@@ -900,6 +911,7 @@
         } else { // 'new'
             newGroup.classList.remove('hidden');
             if (newNameInput) newNameInput.required = true;
+            if (newPhoneInput) newPhoneInput.required = true;
         }
     }
 
@@ -933,6 +945,114 @@
         const settlement = sp - sh - tx - mf;
         const el = document.getElementById(prefix + '-settlement-display');
         if (el) el.textContent = '\u20b9 ' + settlement.toFixed(2);
+        
+        if (prefix === 'add') validateOrderForm('add');
+    }
+
+    function validateOrderForm(prefix, isSubmitAttempt = false) {
+        if (prefix !== 'add') return true;
+
+        if (isSubmitAttempt) {
+            window._addSubmitAttempted = true;
+        }
+
+        let isValid = true;
+        
+        // 1. Financial Validations
+        let totalItemsPrice = 0;
+        let form = document.querySelector('#orderForm form');
+        let prices = form.querySelectorAll('.item-price');
+        let qtys = form.querySelectorAll('.item-qty');
+        for (let i = 0; i < prices.length; i++) {
+            totalItemsPrice += (parseFloat(prices[i].value) || 0) * (parseInt(qtys[i].value) || 1);
+        }
+
+        const shInput = document.getElementById('add-shipping');
+        const txInput = document.getElementById('add-tax');
+        const mfInput = document.getElementById('add-marketplace-fee');
+
+        const sh = parseFloat(shInput.value || 0);
+        const tx = parseFloat(txInput.value || 0);
+        const mf = parseFloat(mfInput.value || 0);
+
+        const checkFin = (input, val, max, errId) => {
+            let errEl = document.getElementById(errId);
+            if (!errEl) {
+                errEl = document.createElement('div');
+                errEl.id = errId;
+                errEl.style.cssText = 'color:var(--danger,#ef4444); font-size:0.75rem; margin-top:0.25rem;';
+                input.parentNode.appendChild(errEl);
+            }
+            if (val > max) {
+                errEl.textContent = 'Exceeds Items Total';
+                errEl.style.display = 'block';
+                input.style.borderColor = 'var(--danger,#ef4444)';
+                return false;
+            } else {
+                errEl.style.display = 'none';
+                input.style.borderColor = '';
+                return true;
+            }
+        };
+
+        let finValid = true;
+        if (!checkFin(shInput, sh, totalItemsPrice, 'err-add-shipping')) finValid = false;
+        if (!checkFin(txInput, tx, totalItemsPrice, 'err-add-tax')) finValid = false;
+        if (!checkFin(mfInput, mf, totalItemsPrice, 'err-add-mktfee')) finValid = false;
+
+        let sumErrEl = document.getElementById('err-add-sum');
+        if (!sumErrEl) {
+            sumErrEl = document.createElement('div');
+            sumErrEl.id = 'err-add-sum';
+            sumErrEl.style.cssText = 'color:var(--danger,#ef4444); font-size:0.85rem; text-align:right; margin-bottom:0.5rem; font-weight:600;';
+            const footer = document.querySelector('#orderForm .order-form-footer');
+            if (footer) footer.parentNode.insertBefore(sumErrEl, footer);
+        }
+
+        if (sh + tx + mf > totalItemsPrice) {
+            if (sumErrEl) {
+                sumErrEl.textContent = 'Combined deductions exceed Items Total!';
+                sumErrEl.style.display = 'block';
+            }
+            finValid = false;
+        } else {
+            if (sumErrEl) sumErrEl.style.display = 'none';
+        }
+
+        if (!finValid) isValid = false;
+
+        // 2. Customer Validations
+        let custValid = true;
+        const modeEl = document.querySelector('input[name="customer_mode"]:checked');
+        const mode = modeEl ? modeEl.value : null;
+        
+        const existingInput = document.getElementById('add-existing-customer');
+        const newNameInput = document.getElementById('add-new-customer-name');
+        const custWrapper = document.getElementById('add-customer-section-wrapper');
+        const custError = document.getElementById('add-customer-error');
+
+        if (mode === 'new') {
+            if (!newNameInput.value.trim()) custValid = false;
+        } else if (mode === 'existing') {
+            if (!existingInput.value) custValid = false;
+        } else if (mode === 'unknown') {
+            custValid = true;
+        } else {
+            custValid = false;
+        }
+
+        if (!custValid) {
+            if (window._addSubmitAttempted) {
+                if (custWrapper) custWrapper.style.borderColor = 'var(--danger,#ef4444)';
+                if (custError) custError.classList.remove('hidden');
+            }
+            isValid = false;
+        } else {
+            if (custWrapper) custWrapper.style.borderColor = 'transparent';
+            if (custError) custError.classList.add('hidden');
+        }
+
+        return isValid;
     }
 
     function inlineUpdateStatus(orderId, newStatus, selectEl) {
@@ -983,6 +1103,24 @@
         // Set default date to today
         const addDate = document.getElementById('add-date');
         if (addDate) addDate.valueAsDate = new Date();
+        validateOrderForm('add');
+
+        // Prevent negative values from being typed or pasted into number inputs
+        document.addEventListener('keydown', function(e) {
+            if (e.target.tagName === 'INPUT' && e.target.type === 'number') {
+                if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
+                    e.preventDefault();
+                }
+            }
+        });
+        
+        document.addEventListener('input', function(e) {
+            if (e.target.tagName === 'INPUT' && e.target.type === 'number') {
+                if (e.target.value < 0) {
+                    e.target.value = 0;
+                }
+            }
+        });
     });
 </script>
 {% endblock %}

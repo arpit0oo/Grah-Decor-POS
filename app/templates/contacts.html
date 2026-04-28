@@ -77,12 +77,12 @@
 <!-- ── CUSTOMERS TAB ───────────────────────────────────── -->
 <div class="tab-content {% if active_tab != 'customers' %}hidden{% endif %}" id="tab-customers">
     <div style="margin-bottom: 0.75rem; position: relative; display: flex; align-items: center;">
-        <input type="text" id="customerSearch"
-               placeholder="Search by name, ID, phone or order ID..."
-               onkeyup="filterCustomers()"
-               style="width:100%; padding:0.5rem 2.5rem 0.5rem 0.75rem; border:1px solid var(--border); border-radius:6px; font-size:0.9rem;">
+        <input type="text" id="customerSearch" placeholder="Search by name, ID, phone or order ID..."
+            onkeyup="filterCustomers()"
+            style="width:100%; padding:0.5rem 2.5rem 0.5rem 0.75rem; border:1px solid var(--border); border-radius:6px; font-size:0.9rem;">
         <button type="button" onclick="document.getElementById('customerSearch').value=''; filterCustomers();"
-                style="position:absolute; right:0.5rem; background:none; border:none; cursor:pointer; font-size:1.1rem; color:var(--text-muted); line-height:1;" title="Clear search">&#x2715;</button>
+            style="position:absolute; right:0.5rem; background:none; border:none; cursor:pointer; font-size:1.1rem; color:var(--text-muted); line-height:1;"
+            title="Clear search">&#x2715;</button>
     </div>
     <div class="table-wrapper">
         <table class="data-table">
@@ -102,9 +102,8 @@
                     <form method="POST" action="{{ url_for('contact.update_customer_route', customer_id=c.id) }}"
                         style="display: contents;">
                         <td class="text-mono">{{ c.customer_id }}</td>
-                        <td style="cursor:pointer; user-select:none;" onclick="toggleOrderHistory('{{ c.customer_id }}')">
+                        <td>
                             <span class="view-mode-{{ c.id }} text-bold">{{ c.name }}</span>
-                            <span id="chevron-{{ c.customer_id }}" style="display:inline-block; transition:transform 0.2s; font-size:0.7rem; margin-left:4px; color:var(--text-muted);">&#9656;</span>
                             <input type="text" name="name" class="edit-mode-{{ c.id }} hidden inline-input"
                                 value="{{ c.name }}" required>
                         </td>
@@ -122,15 +121,22 @@
                         </td>
                         <td>
                             {% if c.platform_used is string %}
-                                <span class="badge" style="background:#e0e7ff; color:#3730a3; border:1px solid #c7d2fe;">{{ c.platform_used or 'Unknown' }}</span>
+                            <span class="badge" style="background:#e0e7ff; color:#3730a3; border:1px solid #c7d2fe;">{{
+                                c.platform_used or 'Unknown' }}</span>
                             {% elif c.platform_used %}
-                                {% for p in c.platform_used %}<span class="badge" style="background:#e0e7ff; color:#3730a3; border:1px solid #c7d2fe; margin-right:2px;">{{ p }}</span>{% endfor %}
+                            {% for p in c.platform_used %}<span class="badge"
+                                style="background:#e0e7ff; color:#3730a3; border:1px solid #c7d2fe; margin-right:2px;">{{
+                                p }}</span>{% endfor %}
                             {% else %}
-                                <span class="badge" style="background:#e0e7ff; color:#3730a3; border:1px solid #c7d2fe;">Unknown</span>
+                            <span class="badge"
+                                style="background:#e0e7ff; color:#3730a3; border:1px solid #c7d2fe;">Unknown</span>
                             {% endif %}
                         </td>
                         <td class="text-mono">{{ c.recent_order_id or '-' }}</td>
                         <td class="actions-cell">
+                            <button type="button" id="history-btn-{{ c.customer_id }}"
+                                class="btn btn-xs btn-outline-primary view-mode-{{ c.id }}"
+                                onclick="toggleOrderHistory('{{ c.customer_id }}')">View</button>
                             <button type="button" class="btn btn-xs btn-outline-primary view-mode-{{ c.id }}"
                                 onclick="toggleEdit('{{ c.id }}')">Edit</button>
                             <button type="submit"
@@ -138,10 +144,11 @@
                             <button type="button" class="btn btn-xs btn-ghost edit-mode-{{ c.id }} hidden"
                                 onclick="toggleEdit('{{ c.id }}')">Cancel</button>
                             <a href="https://api.whatsapp.com/send?phone=91{{ c.phone_numbers[0] if c.phone_numbers and c.phone_numbers[0] != 'Not available' else '' }}"
-                               target="_blank"
-                               class="btn btn-xs view-mode-{{ c.id }}{% if not c.phone_numbers or c.phone_numbers[0] == 'Not available' or c.name == 'Unknown' %} btn-ghost disabled{% else %} btn-success{% endif %}"
-                               {% if not c.phone_numbers or c.phone_numbers[0] == 'Not available' or c.name == 'Unknown' %}onclick="return false;"{% endif %}
-                               title="WhatsApp {{ c.phone_numbers[0] if c.phone_numbers else '' }}">WA</a>
+                                target="_blank"
+                                class="btn btn-xs view-mode-{{ c.id }}{% if not c.phone_numbers or c.phone_numbers[0] == 'Not available' or c.name == 'Unknown' %} btn-ghost disabled{% else %} btn-success{% endif %}"
+                                {% if not c.phone_numbers or c.phone_numbers[0]=='Not available' or c.name=='Unknown'
+                                %}onclick="return false;" {% endif %}
+                                title="WhatsApp {{ c.phone_numbers[0] if c.phone_numbers else '' }}">WA</a>
                         </td>
                     </form>
                 </tr>
@@ -149,7 +156,8 @@
                 <tr id="history-{{ c.customer_id }}" style="display:none;">
                     <td colspan="6" style="padding:0; background:var(--bg-secondary, #f8f9fa); border-top:none;">
                         <div id="history-content-{{ c.customer_id }}" style="padding:1rem 1.5rem;">
-                            <div id="history-spinner-{{ c.customer_id }}" style="text-align:center; padding:1rem; color:var(--text-muted);">Loading&#8230;</div>
+                            <div id="history-spinner-{{ c.customer_id }}"
+                                style="text-align:center; padding:1rem; color:var(--text-muted);">Loading&#8230;</div>
                         </div>
                     </td>
                 </tr>
@@ -208,7 +216,11 @@
             <button class="modal-close" onclick="closeModal('viewModal')">×</button>
         </div>
 
-        <div style="margin-bottom: 1.5rem;" class="form-grid form-grid-3 text-muted">
+        <div style="margin-bottom: 1.5rem;" class="form-grid form-grid-4 text-muted">
+            <div>
+                <small style="font-size:0.75em; letter-spacing:0.05em; text-transform:uppercase;">Order ID</small><br>
+                <strong id="view-order-id-field" style="color:var(--text); font-size:1.1em;"></strong>
+            </div>
             <div>
                 <small style="font-size:0.75em; letter-spacing:0.05em; text-transform:uppercase;">Customer</small><br>
                 <strong id="view-customer" style="color:var(--text); font-size:1.1em;"></strong>
@@ -331,7 +343,7 @@
             if (row.id && row.id.startsWith('history-')) return;
             if (row.querySelector('.empty-state')) { row.style.display = ''; return; }
             const cellText = Array.from(row.querySelectorAll('td'))
-                                  .map(td => td.textContent.toLowerCase()).join(' ');
+                .map(td => td.textContent.toLowerCase()).join(' ');
             const orderIds = (row.dataset.orderIds || '').toLowerCase();
             const visible = !query || cellText.includes(query) || orderIds.includes(query);
             row.style.display = visible ? '' : 'none';
@@ -348,8 +360,8 @@
     const _orderHistoryCache = {};
 
     function toggleOrderHistory(customerId) {
-        const row     = document.getElementById('history-' + customerId);
-        const chevron = document.getElementById('chevron-' + customerId);
+        const row = document.getElementById('history-' + customerId);
+        const btn = document.getElementById('history-btn-' + customerId);
         if (!row) return;
 
         const isOpen = row.style.display !== 'none';
@@ -359,19 +371,28 @@
             if (r !== row && r.style.display !== 'none') {
                 r.style.display = 'none';
                 const otherId = r.id.replace('history-', '');
-                const otherChevron = document.getElementById('chevron-' + otherId);
-                if (otherChevron) otherChevron.style.transform = '';
+                const otherBtn = document.getElementById('history-btn-' + otherId);
+                if (otherBtn) {
+                    otherBtn.textContent = 'View';
+                    otherBtn.classList.replace('btn-primary', 'btn-outline-primary');
+                }
             }
         });
 
         if (isOpen) {
             row.style.display = 'none';
-            if (chevron) chevron.style.transform = '';
+            if (btn) {
+                btn.textContent = 'View';
+                btn.classList.replace('btn-primary', 'btn-outline-primary');
+            }
             return;
         }
 
         row.style.display = '';
-        if (chevron) chevron.style.transform = 'rotate(90deg)';
+        if (btn) {
+            btn.textContent = 'Close';
+            btn.classList.replace('btn-outline-primary', 'btn-primary');
+        }
 
         // Already loaded — just show
         if (_orderHistoryCache[customerId]) return;
@@ -382,16 +403,16 @@
 
         Promise.all([
             fetch('/contacts/api/customer-orders/' + customerId).then(r => r.json()),
-            fetch('/contacts/api/customer-clv/'    + customerId).then(r => r.json())
+            fetch('/contacts/api/customer-clv/' + customerId).then(r => r.json())
         ]).then(([orderData, clvData]) => {
             _orderHistoryCache[customerId] = true;
             const orders = orderData.orders || [];
-            const clv    = clvData.clv != null ? '&#8377;' + Number(clvData.clv).toFixed(2) : 'N/A';
+            const clv = clvData.clv != null ? '&#8377;' + Number(clvData.clv).toFixed(2) : 'N/A';
 
             const statusColor = s => ({
-                'Delivered':'#16a34a','Settled':'#0284c7','Pending':'#b45309',
-                'Shipped':'#7c3aed','RTO':'#dc2626','Returned':'#dc2626',
-                'Cancelled':'#6b7280'
+                'Delivered': '#16a34a', 'Settled': '#0284c7', 'Pending': '#b45309',
+                'Shipped': '#7c3aed', 'RTO': '#dc2626', 'Returned': '#dc2626',
+                'Cancelled': '#6b7280'
             }[s] || '#374151');
 
             const totalSettlement = orders.reduce((sum, o) => sum + (parseFloat(o.bank_settlement) || 0), 0);
@@ -403,7 +424,7 @@
                             <a href="#" onclick="openOrderDetailFromContact('${o.order_id}'); return false;"
                                style="font-family:monospace; color:var(--primary,#4f46e5); text-decoration:underline;">${o.order_id || '—'}</a>
                         </td>
-                        <td style="padding:0.4rem 0.5rem;">${o.date ? o.date.slice(0,10) : '—'}</td>
+                        <td style="padding:0.4rem 0.5rem;">${o.date ? o.date.slice(0, 10) : '—'}</td>
                         <td style="padding:0.4rem 0.5rem;">${o.platform || '—'}</td>
                         <td style="padding:0.4rem 0.5rem; color:${statusColor(o.status)};">${o.status}</td>
                         <td style="padding:0.4rem 0.5rem; text-align:right;">&#8377;${Number(o.bank_settlement).toFixed(2)}</td>
@@ -453,9 +474,10 @@
     function openOrderDetailFromContact(orderId) {
         // Show the modal immediately with a loading state
         document.getElementById('view-order-id').textContent = '#' + orderId;
-        document.getElementById('view-customer').textContent  = '\u2026';
-        document.getElementById('view-date').textContent      = '\u2026';
-        document.getElementById('view-platform').textContent  = '\u2026';
+        document.getElementById('view-order-id-field').textContent = orderId;
+        document.getElementById('view-customer').textContent = '\u2026';
+        document.getElementById('view-date').textContent = '\u2026';
+        document.getElementById('view-platform').textContent = '\u2026';
         document.getElementById('view-order-items-body').innerHTML =
             '<tr><td colspan="5" class="empty-state">Loading\u2026</td></tr>';
         document.getElementById('view-fin-rows').innerHTML = '';
@@ -469,12 +491,13 @@
                 // ── Header fields ──
                 let dateStr = '-';
                 if (data.date) {
-                    try { const d = new Date(data.date); if (!isNaN(d)) dateStr = d.toLocaleDateString('en-GB'); } catch(e) {}
+                    try { const d = new Date(data.date); if (!isNaN(d)) dateStr = d.toLocaleDateString('en-GB'); } catch (e) { }
                 }
-                document.getElementById('view-date').textContent     = dateStr;
+                document.getElementById('view-date').textContent = dateStr;
                 document.getElementById('view-order-id').textContent = data.order_id ? `#${data.order_id}` : '';
-                document.getElementById('view-customer').textContent  = data.customer  || '-';
-                document.getElementById('view-platform').textContent  = data.platform  || '-';
+                document.getElementById('view-order-id-field').textContent = data.order_id || '-';
+                document.getElementById('view-customer').textContent = data.customer || '-';
+                document.getElementById('view-platform').textContent = data.platform || '-';
 
                 // ── Items table ──
                 const tbody = document.getElementById('view-order-items-body');
@@ -504,17 +527,17 @@
                 }
 
                 // ── Financial Summary ──
-                const shipping     = parseFloat(data.shipping        || 0);
-                const tax          = parseFloat(data.tax             || 0);
-                const mktFee       = parseFloat(data.marketplace_fee || 0);
+                const shipping = parseFloat(data.shipping || 0);
+                const tax = parseFloat(data.tax || 0);
+                const mktFee = parseFloat(data.marketplace_fee || 0);
                 const netSettlement = parseFloat(data.bank_settlement || (sellingPrice - shipping - tax - mktFee));
                 const isTerminalPaid = data.status === 'Settled';
 
                 document.getElementById('view-fin-rows').innerHTML = [
                     finRow('Selling Price', fmt(sellingPrice)),
-                    shipping ? finRow('\u2212 Shipping',        fmt(shipping), 'color:#ef4444;') : '',
-                    tax      ? finRow('\u2212 Tax / GST',       fmt(tax),      'color:#ef4444;') : '',
-                    mktFee   ? finRow('\u2212 Marketplace Fee', fmt(mktFee),   'color:#ef4444;') : '',
+                    shipping ? finRow('\u2212 Shipping', fmt(shipping), 'color:#ef4444;') : '',
+                    tax ? finRow('\u2212 Tax / GST', fmt(tax), 'color:#ef4444;') : '',
+                    mktFee ? finRow('\u2212 Marketplace Fee', fmt(mktFee), 'color:#ef4444;') : '',
                     `<span style="color:var(--text-secondary); border-top:1px solid var(--border); padding-top:0.4rem; margin-top:0.2rem;">Net Settlement</span>
                      <span style="font-weight:800; font-size:1.05em; border-top:1px solid var(--border); padding-top:0.4rem; margin-top:0.2rem; color:${netSettlement >= 0 ? '#059669' : '#ef4444'};">\u20B9\u00a0${netSettlement.toFixed(2)}</span>`,
                     isTerminalPaid ? finRow('Status', '<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:999px;font-size:0.82em;font-weight:600;">Settled \u2713</span>') : '',
@@ -524,11 +547,11 @@
                 const returnSection = document.getElementById('view-return-section');
                 if (['Returned', 'RTO'].includes(data.status)) {
                     returnSection.classList.remove('hidden');
-                    const rtMap   = { rto: 'RTO (Return to Origin)', customer_return: 'Customer Return' };
+                    const rtMap = { rto: 'RTO (Return to Origin)', customer_return: 'Customer Return' };
                     const condMap = { restock: '\u2713 Restocked to Inventory', damaged: '\u2717 Damaged \u2014 Not Restocked' };
-                    document.getElementById('view-return-type').textContent      = rtMap[data.return_type]   || data.status;
+                    document.getElementById('view-return-type').textContent = rtMap[data.return_type] || data.status;
                     document.getElementById('view-return-condition').textContent = condMap[data.item_condition] || '\u2014';
-                    document.getElementById('view-return-penalty').textContent   = data.penalty_amount ? fmt(data.penalty_amount) : '\u20B9 0.00 (None)';
+                    document.getElementById('view-return-penalty').textContent = data.penalty_amount ? fmt(data.penalty_amount) : '\u20B9 0.00 (None)';
                 } else {
                     returnSection.classList.add('hidden');
                 }
@@ -538,8 +561,8 @@
                 const timeline = document.getElementById('view-timeline');
                 timeline.innerHTML = '';
                 const statusColors = {
-                    'Pending':'#f59e0b','Shipped':'#3b82f6','Delivered':'#10b981',
-                    'RTO':'#ef4444','Returned':'#ef4444','Cancelled':'#6b7280','Settled':'#059669',
+                    'Pending': '#f59e0b', 'Shipped': '#3b82f6', 'Delivered': '#10b981',
+                    'RTO': '#ef4444', 'Returned': '#ef4444', 'Cancelled': '#6b7280', 'Settled': '#059669',
                 };
                 if (history.length === 0) {
                     timeline.innerHTML = '<span class="text-muted" style="font-size:0.85em;">No status history available.</span>';
@@ -550,10 +573,10 @@
                         try {
                             const d = new Date(entry.timestamp);
                             if (!isNaN(d)) {
-                                dateLabel = d.toLocaleDateString('en-GB', { day:'2-digit', month:'short' }) + ' ' +
-                                            d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+                                dateLabel = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' +
+                                    d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
                             }
-                        } catch(e) {}
+                        } catch (e) { }
                         const node = document.createElement('div');
                         node.style.cssText = 'display:flex;align-items:center;flex-shrink:0;';
                         node.innerHTML = `
@@ -575,7 +598,7 @@
 
     // Close viewModal on overlay click
     document.getElementById('viewModal')
-        .addEventListener('click', function(e) {
+        .addEventListener('click', function (e) {
             if (e.target === this) closeModal('viewModal');
         });
 </script>
