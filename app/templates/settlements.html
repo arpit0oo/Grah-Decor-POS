@@ -130,27 +130,23 @@ TAB 1: UNSETTLED ORDERS
 
                 <div class="form-group" style="margin-bottom: 0.75rem;">
                     <label>Actual Amount Received ₹ *</label>
-                    <input type="number" name="amount_received" step="0.01" min="0" required id="amountReceivedInput">
+                    <input type="number" name="amount_received" step="0.01" min="0" required id="amountReceivedInput" oninput="validateSettlement()">
                 </div>
 
-                <!-- Optional Deductions (tracking only) -->
-                <div style="margin-bottom: 0.75rem;">
-                    <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-size:0.85rem; color:var(--text-secondary);">
-                        <input type="checkbox" id="deductionsToggle" onchange="toggleDeductions(this)" style="margin:0;">
-                        Apply Platform Deductions / Penalties
-                    </label>
-                    <div id="deductionsPanel" class="hidden" style="margin-top:0.5rem; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:0.65rem 0.75rem;">
-                        <small class="text-muted" style="display:block; margin-bottom:0.4rem;">Saved for records only — does not affect cashbook amount.</small>
-                        <input type="number" name="platform_deductions" step="0.01" min="0" value="0" id="deductionsInput"
-                            placeholder="₹ Penalty / TDS amount" style="width:100%;">
-                    </div>
+                <!-- Deductions (auto-shown when Actual < Expected) -->
+                <div id="deductionsPanel" class="hidden" style="margin-bottom: 0.75rem; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:0.65rem 0.75rem;">
+                    <label style="font-weight:500; font-size:0.85rem; margin-bottom:0.25rem; display:block;">Platform Deductions / Penalties ₹ *</label>
+                    <small class="text-muted" style="display:block; margin-bottom:0.4rem;">Must account for the difference. Saved for records only.</small>
+                    <input type="number" name="platform_deductions" step="0.01" min="0" value="0" id="deductionsInput"
+                        placeholder="₹ Penalty / TDS amount" style="width:100%;" oninput="validateSettlement()">
                 </div>
 
-                <div class="form-group" style="margin-bottom: 1.5rem;">
+                <div class="form-group" style="margin-bottom: 1rem;">
                     <label>Notes (Optional)</label>
-                    <input type="text" name="notes" placeholder="Any deductions/remarks?">
+                    <input type="text" name="notes" placeholder="Any remarks?">
                 </div>
 
+                <div id="settlementValidation" style="margin-bottom:0.75rem; font-size:0.85rem; font-weight:500; display:none;"></div>
                 <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;"
                     id="submitBtn" disabled>Settle Selected Orders</button>
             </div>
@@ -216,6 +212,12 @@ TAB 2: SETTLEMENT LOGS (ACCORDION)
                         {% endif %}
                     </tbody>
                 </table>
+                {% if batch.platform_deductions %}
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem 1.25rem; font-size:0.85em; border-top:1px solid var(--border); background:var(--bg);">
+                    <span style="color:var(--text-secondary);"><strong>Platform Deductions / Penalties:</strong></span>
+                    <span style="color:var(--danger); font-weight:600;">− ₹ {{ "%.2f"|format(batch.platform_deductions) }}</span>
+                </div>
+                {% endif %}
                 {% if batch.notes %}
                 <div
                     style="padding:0.75rem 1.25rem; font-size:0.85em; color:var(--text-secondary); border-top:1px solid var(--border);">
@@ -354,6 +356,7 @@ PROCESS RETURN MODAL
 <script>
     // Date default
     document.getElementById('settlement_date').valueAsDate = new Date();
+    let _selectedExpected = 0;
 
     // ── Tab Switching ──
     function switchSettlementTab(tab) {
@@ -424,20 +427,71 @@ PROCESS RETURN MODAL
             showPlatformWarning(false);
         }
 
-        const amtInput = document.getElementById('amountReceivedInput');
-        if (!amtInput.value && total > 0) {
-            amtInput.value = total.toFixed(2);
-        } else if (total === 0) {
-            amtInput.value = '';
-        }
-
-        document.getElementById('submitBtn').disabled = checkedBoxes.length === 0;
+        _selectedExpected = total;
+        validateSettlement();
     }
 
-    function toggleDeductions(cb) {
-        document.getElementById('deductionsPanel').classList.toggle('hidden', !cb.checked);
-        if (!cb.checked) {
-            document.getElementById('deductionsInput').value = '0';
+    function validateSettlement() {
+        const actual = parseFloat(document.getElementById('amountReceivedInput').value) || 0;
+        const hasValue = document.getElementById('amountReceivedInput').value.trim() !== '';
+        const deductionsInput = document.getElementById('deductionsInput');
+        const deductionsPanel = document.getElementById('deductionsPanel');
+        const submitBtn = document.getElementById('submitBtn');
+        const msg = document.getElementById('settlementValidation');
+        const checkedCount = document.querySelectorAll('.order-checkbox:checked').length;
+
+        // No orders selected
+        if (checkedCount === 0) {
+            submitBtn.disabled = true;
+            msg.style.display = 'none';
+            deductionsPanel.classList.add('hidden');
+            return;
+        }
+
+        // No amount entered yet
+        if (!hasValue) {
+            submitBtn.disabled = true;
+            msg.style.display = 'none';
+            deductionsPanel.classList.add('hidden');
+            deductionsInput.value = '0';
+            return;
+        }
+
+        const expected = _selectedExpected;
+
+        if (actual > expected) {
+            // Actual > Expected → error
+            submitBtn.disabled = true;
+            deductionsPanel.classList.add('hidden');
+            deductionsInput.value = '0';
+            msg.style.display = 'block';
+            msg.style.color = 'var(--danger)';
+            msg.textContent = '⚠ Amount received (₹' + actual.toFixed(2) + ') exceeds expected (₹' + expected.toFixed(2) + ').';
+        } else if (Math.abs(actual - expected) < 0.01) {
+            // Actual ≈ Expected → perfect match
+            submitBtn.disabled = false;
+            deductionsPanel.classList.add('hidden');
+            deductionsInput.value = '0';
+            msg.style.display = 'block';
+            msg.style.color = 'var(--success)';
+            msg.textContent = '✓ Amount matches expected settlement.';
+        } else {
+            // Actual < Expected → show deductions, validate
+            const diff = expected - actual;
+            deductionsPanel.classList.remove('hidden');
+            const deductions = parseFloat(deductionsInput.value) || 0;
+
+            if (Math.abs(deductions - diff) < 0.01) {
+                submitBtn.disabled = false;
+                msg.style.display = 'block';
+                msg.style.color = 'var(--success)';
+                msg.textContent = '✓ Actual + Deductions = Expected (₹' + expected.toFixed(2) + ')';
+            } else {
+                submitBtn.disabled = true;
+                msg.style.display = 'block';
+                msg.style.color = 'var(--danger)';
+                msg.textContent = '⚠ Deductions must be ₹' + diff.toFixed(2) + ' so that Actual + Deductions = ₹' + expected.toFixed(2) + '.';
+            }
         }
     }
 

@@ -54,13 +54,13 @@ def create_payment_settlement(platform, utr_number, amount_received, order_ids, 
                 'bank_settlement': data.get('bank_settlement', 0),
             })
 
-    gross_amount = float(amount_received)
+    received_amount = float(amount_received)
     deductions   = float(platform_deductions) if platform_deductions else 0.0
 
     batch_doc = {
         'platform':            platform,
         'utr_number':          utr_number,
-        'amount_received':     gross_amount,
+        'amount_received':     received_amount,
         'platform_deductions': deductions,
         'order_count':         len(order_ids),
         'order_ids':           order_ids,
@@ -94,7 +94,7 @@ def create_payment_settlement(platform, utr_number, amount_received, order_ids, 
         entry_type='inflow',
         category='Settlement',
         description=f"Platform Payout ({platform}) - UTR: {utr_number}" + (f" | Penalty tracked: ₹{deductions:.0f}" if deductions else ""),
-        amount=gross_amount,
+        amount=received_amount,
         reference_id=doc_ref.id
     )
     
