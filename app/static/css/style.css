@@ -665,7 +665,6 @@ body {
 .badge-review-done { background: #f0fdf4; color: #166534; border: 1px solid #dcfce7; }
 
 select.badge:disabled {
-    opacity: 0.8;
     cursor: not-allowed;
     background-image: none; /* Hide default arrow if any */
 }

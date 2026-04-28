@@ -208,7 +208,7 @@
             <tbody>
                 {% for order in orders %}
                 {% set is_terminal = order.status in ['Cancelled', 'Settled', 'Returned', 'RTO', 'Delivered'] %}
-                <tr style="{% if is_terminal %}opacity:0.6;{% endif %}">
+                <tr>
                     <td style="text-align: center;">
                         <input type="checkbox" class="row-checkbox" name="order_ids" value="{{ order.id }}"
                             onclick="updateBulkBar()" {% if is_terminal %}disabled{% endif %}>
