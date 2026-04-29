@@ -3,22 +3,117 @@ from app import get_db
 from app.services.inventory_service import adjust_raw_material_qty, add_raw_material
 from google.cloud.firestore_v1 import FieldFilter, ArrayUnion
 
+# ---------------------------------------------------------------------------
+# Phase 1 — Schema Hardening
+# ---------------------------------------------------------------------------
+# NEW FIELDS (per-item):
+#   ordered_qty   – quantity on the original PO (frozen at creation)
+#   received_qty  – quantity actually received so far   (default 0)
+#   returned_qty  – quantity returned to vendor so far  (default 0)
+#
+# NEW FIELDS (PO document):
+#   inventory_status  – 'pending' | 'partial' | 'received' | 'returned'
+#   payment_status    – 'unpaid'  | 'partial'  | 'paid'
+#   amount_paid       – running total of confirmed payments  (default 0.0)
+#   balance_due       – total_cost - amount_paid             (default = total_cost)
+#   extra_charges     – array of {label, amount, added_at} for freight etc.
+#
+# BACKWARD COMPATIBILITY:
+#   _apply_po_shim() adds missing keys at READ-TIME so older documents
+#   never crash the existing UI even before they are written back.
+# ---------------------------------------------------------------------------
+
+
+# ── helpers ─────────────────────────────────────────────────────────────────
+
+def _enrich_items(items):
+    """Ensure every item dict carries the Phase-1 qty-tracking keys."""
+    enriched = []
+    for it in items:
+        enriched.append({
+            **it,
+            'ordered_qty':  float(it.get('ordered_qty',  it.get('quantity', 0))),
+            'received_qty': float(it.get('received_qty', 0)),
+            'returned_qty': float(it.get('returned_qty', 0)),
+        })
+    return enriched
+
+
+def _apply_po_shim(entry: dict) -> dict:
+    """
+    Read-time shim: back-fills Phase-1 fields that are absent on legacy
+    documents so that no template or API consumer receives a KeyError.
+
+    This function is ADDITIVE-ONLY and never writes to Firestore.
+    """
+    total = float(entry.get('total_cost', 0))
+
+    # -- per-item enrichment --------------------------------------------------
+    if 'items' in entry:
+        entry['items'] = _enrich_items(entry['items'])
+
+    # -- PO-level financial fields -------------------------------------------
+    entry.setdefault('inventory_status', _derive_inventory_status(entry))
+    entry.setdefault('payment_status',   _derive_payment_status(entry))
+    entry.setdefault('amount_paid',      total if entry.get('status') == 'Paid' else 0.0)
+    entry.setdefault('balance_due',      total - entry.get('amount_paid', 0.0))
+    entry.setdefault('extra_charges',    [])
+
+    return entry
+
+
+def _derive_inventory_status(data: dict) -> str:
+    """Derive a sensible inventory_status from the legacy 'status' field."""
+    status = data.get('status', '')
+    mapping = {
+        'Received': 'received',
+        'Paid':     'received',
+        'Returned': 'returned',
+        'Cancelled':'returned',
+    }
+    return mapping.get(status, 'pending')
+
+
+def _derive_payment_status(data: dict) -> str:
+    """Derive a sensible payment_status from the legacy 'status' field."""
+    status = data.get('status', '')
+    if status == 'Paid':
+        return 'paid'
+    return 'unpaid'
+
+
+def _new_po_phase1_fields(total_cost: float, items: list) -> dict:
+    """Return the complete set of Phase-1 fields for a brand-new PO."""
+    return {
+        'inventory_status': 'pending',
+        'payment_status':   'unpaid',
+        'amount_paid':      0.0,
+        'balance_due':      total_cost,
+        'extra_charges':    [],
+    }
+
+
+# ── PO number generator ─────────────────────────────────────────────────────
+
 def generate_po_number():
     db = get_db()
     docs = list(db.collection('purchase_orders').order_by('created_at', direction='DESCENDING').limit(1).stream())
     if not docs:
         return "PO-001"
-    
+
     last_doc = docs[0].to_dict()
     last_id = last_doc.get('po_number', '')
     if last_id.startswith('PO-'):
         try:
             num = int(last_id.replace('PO-', ''))
             return f"PO-{num + 1:03d}"
-        except:
+        except Exception:
             pass
     count = len(list(db.collection('purchase_orders').stream()))
     return f"PO-{count + 1:03d}"
+
+
+# ── read ─────────────────────────────────────────────────────────────────────
 
 def get_all_purchase_orders(date_from=None, date_to=None):
     db = get_db()
@@ -28,157 +123,202 @@ def get_all_purchase_orders(date_from=None, date_to=None):
     for d in docs:
         entry = {'id': d.id, **d.to_dict()}
         if date_from and entry.get('created_at'):
-            dt = entry['created_at'] if isinstance(entry['created_at'], datetime) else entry['created_at']
+            dt = entry['created_at']
             if hasattr(dt, 'date') and dt.date() < date_from:
                 continue
         if date_to and entry.get('created_at'):
-            dt = entry['created_at'] if isinstance(entry['created_at'], datetime) else entry['created_at']
+            dt = entry['created_at']
             if hasattr(dt, 'date') and dt.date() > date_to:
                 continue
-        results.append(entry)
+        results.append(_apply_po_shim(entry))
     return results
+
+
+# ── create ───────────────────────────────────────────────────────────────────
 
 def add_purchase_order(vendor_name, items):
     db = get_db()
-    
-    total_cost = sum(float(item['quantity']) * float(item['unit_cost']) for item in items)
-    now = datetime.now(timezone.utc)
 
+    # Enrich items with Phase-1 qty tracking fields
+    enriched_items = _enrich_items(items)
+    total_cost = sum(float(it['quantity']) * float(it['unit_cost']) for it in enriched_items)
+    now = datetime.now(timezone.utc)
     po_number = generate_po_number()
 
-    # Create PO with Draft status
     _, doc_ref = db.collection('purchase_orders').add({
-        'po_number': po_number,
-        'vendor_name': vendor_name,
-        'items': items,
-        'total_cost': total_cost,
-        'status': 'Draft',
+        'po_number':            po_number,
+        'vendor_name':          vendor_name,
+        'items':                enriched_items,
+        'total_cost':           total_cost,
+        'status':               'Draft',
         'vendor_invoice_number': '',
-        'payment_id': '',
-        'created_at': now,
-        'updated_at': now,
-        'status_history': [{'status': 'Draft', 'timestamp': now.isoformat()}],
+        'payment_id':           '',
+        'created_at':           now,
+        'updated_at':           now,
+        'status_history':       [{'status': 'Draft', 'timestamp': now.isoformat()}],
+        # ── Phase 1 fields ──────────────────────────────────────────────────
+        **_new_po_phase1_fields(total_cost, enriched_items),
     })
 
     return doc_ref.id
+
+
+# ── Mark Sent ────────────────────────────────────────────────────────────────
 
 def mark_po_sent(po_id):
     db = get_db()
     now = datetime.now(timezone.utc)
     db.collection('purchase_orders').document(po_id).update({
-        'status': 'Sent',
-        'updated_at': now,
-        'status_history': ArrayUnion([{'status': 'Sent', 'timestamp': now.isoformat()}])
+        'status':         'Sent',
+        'updated_at':     now,
+        'status_history': ArrayUnion([{'status': 'Sent', 'timestamp': now.isoformat()}]),
     })
+
+
+# ── Mark Received ────────────────────────────────────────────────────────────
 
 def mark_po_received(po_id):
     db = get_db()
-    
+
     doc = db.collection('purchase_orders').document(po_id).get()
     if not doc.exists:
         return False
     data = doc.to_dict()
-    
+
     if data.get('status') in ['Received', 'Paid']:
         return False
-        
+
     now = datetime.now(timezone.utc)
+
+    # Build the updated items list with received_qty = ordered_qty (full receipt)
+    raw_items = data.get('items', [])
+    if not raw_items and data.get('item'):
+        raw_items = [{'item': data.get('item'), 'quantity': data.get('quantity'), 'unit_cost': data.get('unit_cost', 0)}]
+
+    updated_items = []
+    for it in raw_items:
+        ordered = float(it.get('ordered_qty', it.get('quantity', 0)))
+        updated_items.append({
+            **it,
+            'ordered_qty':  ordered,
+            'received_qty': ordered,   # full receipt
+            'returned_qty': float(it.get('returned_qty', 0)),
+        })
+
     db.collection('purchase_orders').document(po_id).update({
-        'status': 'Received',
-        'updated_at': now,
-        'status_history': ArrayUnion([{'status': 'Received', 'timestamp': now.isoformat()}])
+        'status':           'Received',
+        'inventory_status': 'received',
+        'items':            updated_items,
+        'updated_at':       now,
+        'status_history':   ArrayUnion([{'status': 'Received', 'timestamp': now.isoformat()}]),
     })
-    
+
     # Increment inventory
     po_number = data.get('po_number', po_id)
     reason = f"PO {po_number} Received"
-    
-    items = data.get('items', [])
-    if not items and data.get('item'):
-        items = [{'item': data.get('item'), 'quantity': data.get('quantity'), 'unit_cost': data.get('unit_cost', 0)}]
-        
-    from google.cloud.firestore_v1 import FieldFilter
-    
-    for it in items:
+
+    for it in updated_items:
         item_name = it.get('item')
-        qty = float(it.get('quantity', 0))
-        unit_cost = float(it.get('unit_cost', 0))
-        
+        qty        = float(it.get('received_qty', 0))
+        unit_cost  = float(it.get('unit_cost', 0))
         if not adjust_raw_material_qty(item_name, qty, reason=reason, price=unit_cost):
             add_raw_material(item_name, qty, 'pcs', reason=reason, price=unit_cost)
-            
+
     return True
+
+
+# ── Mark Paid ────────────────────────────────────────────────────────────────
 
 def mark_po_paid(po_id, payment_id):
     from app.services.cashbook_service import add_cashbook_entry
     db = get_db()
-    
+
     doc = db.collection('purchase_orders').document(po_id).get()
     if not doc.exists:
         return False
     data = doc.to_dict()
-    
+
     if data.get('status') == 'Paid':
         return False
-        
+
     now = datetime.now(timezone.utc)
+    total_cost = float(data.get('total_cost', 0))
+
     db.collection('purchase_orders').document(po_id).update({
-        'status': 'Paid',
-        'payment_id': payment_id,
-        'updated_at': now,
-        'status_history': ArrayUnion([{'status': 'Paid', 'timestamp': now.isoformat()}])
+        'status':         'Paid',
+        'payment_id':     payment_id,
+        # ── Phase 1 financial fields ─────────────────────────────────────
+        'payment_status': 'paid',
+        'amount_paid':    total_cost,
+        'balance_due':    0.0,
+        # ────────────────────────────────────────────────────────────────
+        'updated_at':     now,
+        'status_history': ArrayUnion([{'status': 'Paid', 'timestamp': now.isoformat()}]),
     })
-    
+
     po_number = data.get('po_number', po_id)
-    vendor = data.get('vendor_name', 'Unknown')
-    
+    vendor    = data.get('vendor_name', 'Unknown')
     desc = f"{po_number} Paid to {vendor}"
     if payment_id:
         desc += f" - Txn: {payment_id}"
-        
+
     add_cashbook_entry(
         entry_type='outflow',
         category='Purchase',
         description=desc,
-        amount=data.get('total_cost', 0),
+        amount=total_cost,
         reference_id=po_id,
     )
-    
+
     return True
+
+
+# ── Cancel ───────────────────────────────────────────────────────────────────
 
 def cancel_po(po_id):
     db = get_db()
+
     doc = db.collection('purchase_orders').document(po_id).get()
     if not doc.exists:
         return False
     data = doc.to_dict()
-    
+
     old_status = data.get('status')
     if old_status == 'Cancelled':
         return True
-        
+
     now = datetime.now(timezone.utc)
     db.collection('purchase_orders').document(po_id).update({
-        'status': 'Cancelled',
-        'updated_at': now,
-        'status_history': ArrayUnion([{'status': 'Cancelled', 'timestamp': now.isoformat()}])
+        'status':           'Cancelled',
+        # ── Phase 1: cancellation zeroes out pending payments ─────────
+        'inventory_status': 'returned',
+        'payment_status':   'unpaid',
+        'balance_due':      0.0,
+        # ────────────────────────────────────────────────────────────────
+        'updated_at':       now,
+        'status_history':   ArrayUnion([{'status': 'Cancelled', 'timestamp': now.isoformat()}]),
     })
-    
-    # If it was received or paid, reverse inventory
+
+    # If it was received / paid → reverse inventory
     if old_status in ['Received', 'Paid']:
         po_number = data.get('po_number', po_id)
-        reason = f"PO {po_number} Cancelled (Reversal)"
-        
+        reason    = f"PO {po_number} Cancelled (Reversal)"
+
         items = data.get('items', [])
         if not items and data.get('item'):
             items = [{'item': data.get('item'), 'quantity': data.get('quantity')}]
-            
+
+        # Reset per-item received_qty to 0 on the items array
+        zeroed_items = []
         for it in items:
-            item_name = it.get('item')
-            qty = float(it.get('quantity', 0))
-            adjust_raw_material_qty(item_name, -qty, reason=reason)
-        
-        # If it was explicitly paid, reverse the cash outflow by logging a refund (inflow)
+            item_name  = it.get('item')
+            recv_qty   = float(it.get('received_qty', it.get('quantity', 0)))
+            zeroed_items.append({**it, 'received_qty': 0.0})
+            adjust_raw_material_qty(item_name, -recv_qty, reason=reason)
+
+        db.collection('purchase_orders').document(po_id).update({'items': zeroed_items})
+
+        # If explicitly paid → log a refund inflow
         if old_status == 'Paid':
             from app.services.cashbook_service import add_cashbook_entry
             vendor = data.get('vendor_name', 'Unknown')
@@ -192,36 +332,56 @@ def cancel_po(po_id):
 
     return True
 
+
+# ── Return ───────────────────────────────────────────────────────────────────
+
 def return_po(po_id, refund_amount=0):
     db = get_db()
+
     doc = db.collection('purchase_orders').document(po_id).get()
     if not doc.exists:
         return False
     data = doc.to_dict()
-    
+
     status = data.get('status')
     if status not in ['Received', 'Paid']:
         return False
-        
+
     now = datetime.now(timezone.utc)
-    db.collection('purchase_orders').document(po_id).update({
-        'status': 'Returned',
-        'updated_at': now,
-        'status_history': ArrayUnion([{'status': 'Returned', 'timestamp': now.isoformat()}])
-    })
-    
-    po_number = data.get('po_number', po_id)
-    reason = f"PO {po_number} Returned"
-    
+
     items = data.get('items', [])
     if not items and data.get('item'):
         items = [{'item': data.get('item'), 'quantity': data.get('quantity')}]
-        
+
+    # Mark every item as fully returned
+    returned_items = []
     for it in items:
+        ordered  = float(it.get('ordered_qty',  it.get('quantity', 0)))
+        received = float(it.get('received_qty', ordered))
+        returned_items.append({
+            **it,
+            'returned_qty': received,   # everything received is now returned
+        })
+
+    db.collection('purchase_orders').document(po_id).update({
+        'status':           'Returned',
+        # ── Phase 1 ──────────────────────────────────────────────────────
+        'inventory_status': 'returned',
+        'items':            returned_items,
+        # ────────────────────────────────────────────────────────────────
+        'updated_at':       now,
+        'status_history':   ArrayUnion([{'status': 'Returned', 'timestamp': now.isoformat()}]),
+    })
+
+    # Reverse inventory — use received_qty (what we actually have in stock)
+    po_number = data.get('po_number', po_id)
+    reason    = f"PO {po_number} Returned"
+
+    for it in returned_items:
         item_name = it.get('item')
-        qty = float(it.get('quantity', 0))
+        qty       = float(it.get('returned_qty', 0))
         adjust_raw_material_qty(item_name, -qty, reason=reason)
-        
+
     if status == 'Paid':
         from app.services.cashbook_service import add_cashbook_entry
         vendor = data.get('vendor_name', 'Unknown')
@@ -238,3 +398,441 @@ def return_po(po_id, refund_amount=0):
     return True
 
 
+# =============================================================================
+# Phase 2 — Partial Fulfillment Engine
+# =============================================================================
+# Three new functions that operate on INDIVIDUAL QUANTITIES rather than the
+# whole PO.  The old mark_po_received / mark_po_paid / return_po functions
+# remain untouched for backward compatibility.
+#
+# Allowed inventory_status transitions:
+#   pending  → partially_received → received
+#                                  → returned  (if all received qty is returned)
+#
+# Allowed payment_status transitions:
+#   unpaid → partially_paid → paid
+# =============================================================================
+
+
+# ── Partial Receive ───────────────────────────────────────────────────────────
+
+def partial_receive_po(po_id: str, received_quantities: dict) -> dict:
+    """
+    Record receipt of SOME (or all) items on a PO.
+
+    Parameters
+    ----------
+    po_id : str
+        Firestore document ID of the purchase order.
+    received_quantities : dict
+        Mapping of ``item_name → qty_received_this_shipment``.
+        Only items present in this dict are updated.
+        Example: ``{"Fabric A": 50, "Thread B": 200}``
+
+    Returns
+    -------
+    dict  with keys:
+        success      : bool
+        inventory_status : new value written to Firestore
+        message      : human-readable summary
+        items_updated : list of item names that were updated
+    """
+    db = get_db()
+
+    doc = db.collection('purchase_orders').document(po_id).get()
+    if not doc.exists:
+        return {'success': False, 'message': 'PO not found.'}
+    data = doc.to_dict()
+
+    # Guard: cannot receive against Cancelled / Returned POs
+    if data.get('status') in ['Cancelled', 'Returned']:
+        return {'success': False, 'message': f"Cannot receive items on a {data.get('status')} PO."}
+
+    now = datetime.now(timezone.utc)
+    po_number = data.get('po_number', po_id)
+    reason    = f"PO {po_number} Partial Receipt"
+
+    raw_items = data.get('items', [])
+    if not raw_items and data.get('item'):
+        raw_items = [{
+            'item':       data.get('item'),
+            'quantity':   data.get('quantity'),
+            'unit_cost':  data.get('unit_cost', 0),
+            'ordered_qty': data.get('quantity'),
+        }]
+
+    updated_items  = []
+    items_updated  = []
+    total_ordered  = 0.0
+    total_received = 0.0
+
+    for it in raw_items:
+        item_name  = it.get('item', '')
+        ordered    = float(it.get('ordered_qty',  it.get('quantity', 0)))
+        prev_recv  = float(it.get('received_qty', 0))
+        returned   = float(it.get('returned_qty', 0))
+        unit_cost  = float(it.get('unit_cost', 0))
+
+        # How many are we receiving right now?
+        incoming = float(received_quantities.get(item_name, 0))
+
+        # Clamp: cannot receive more than what is still outstanding
+        outstanding = ordered - prev_recv
+        if incoming < 0:
+            incoming = 0.0
+        if incoming > outstanding:
+            incoming = outstanding
+
+        new_recv = prev_recv + incoming
+
+        updated_it = {
+            **it,
+            'ordered_qty':  ordered,
+            'received_qty': new_recv,
+            'returned_qty': returned,
+        }
+        updated_items.append(updated_it)
+        total_ordered  += ordered
+        total_received += new_recv
+
+        # Update physical inventory for the delta only
+        if incoming > 0:
+            items_updated.append(item_name)
+            if not adjust_raw_material_qty(item_name, incoming, reason=reason, price=unit_cost):
+                add_raw_material(item_name, incoming, 'pcs', reason=reason, price=unit_cost)
+
+    # Derive the new inventory_status
+    if total_received <= 0:
+        new_inv_status = 'pending'
+    elif total_received < total_ordered:
+        new_inv_status = 'partially_received'
+    else:
+        new_inv_status = 'received'
+
+    # Derive the new high-level status (only promote, never demote)
+    old_status = data.get('status', 'Draft')
+    new_status = old_status
+    if new_inv_status == 'received' and old_status not in ['Paid', 'Received']:
+        new_status = 'Received'
+    elif new_inv_status == 'partially_received' and old_status in ['Draft', 'Sent']:
+        new_status = 'Partially Received'
+
+    db.collection('purchase_orders').document(po_id).update({
+        'items':            updated_items,
+        'inventory_status': new_inv_status,
+        'status':           new_status,
+        'updated_at':       now,
+        'status_history':   ArrayUnion([{
+            'status':    f"Partial Receipt ({', '.join(items_updated) or 'none'})",
+            'timestamp': now.isoformat(),
+        }]),
+    })
+
+    return {
+        'success':          True,
+        'inventory_status': new_inv_status,
+        'items_updated':    items_updated,
+        'message': (
+            f"Received {len(items_updated)} item(s). "
+            f"Inventory status → {new_inv_status}."
+        ),
+    }
+
+
+# ── Partial Payment ───────────────────────────────────────────────────────────
+
+def partial_pay_po(
+    po_id: str,
+    payment_amount: float,
+    payment_reference: str = '',
+    extra_charges: list | None = None,
+) -> dict:
+    """
+    Record a (partial or full) payment against a PO.
+
+    Optionally accepts extra vendor charges (freight, handling, etc.) that are
+    added to ``total_cost`` BEFORE the payment is applied.  Each charge is
+    appended to the PO's ``extra_charges`` audit array.
+
+    Parameters
+    ----------
+    po_id : str
+        Firestore document ID.
+    payment_amount : float
+        Amount being paid right now (must be > 0).
+    payment_reference : str
+        UTR / cheque number / notes for this payment.
+    extra_charges : list of dicts, optional
+        Each dict must have ``label`` (str) and ``amount`` (float).
+        Example: ``[{"label": "Freight", "amount": 350.0}]``
+
+    Returns
+    -------
+    dict  with keys:
+        success        : bool
+        payment_status : new value written to Firestore
+        amount_paid    : cumulative total after this payment
+        balance_due    : remaining balance after this payment
+        message        : human-readable summary
+    """
+    from app.services.cashbook_service import add_cashbook_entry
+
+    if float(payment_amount) <= 0:
+        return {'success': False, 'message': 'Payment amount must be greater than zero.'}
+
+    db = get_db()
+    doc = db.collection('purchase_orders').document(po_id).get()
+    if not doc.exists:
+        return {'success': False, 'message': 'PO not found.'}
+    data = doc.to_dict()
+
+    if data.get('payment_status') == 'paid':
+        return {'success': False, 'message': 'PO is already fully paid.'}
+
+    if data.get('status') in ['Cancelled', 'Returned']:
+        return {'success': False, 'message': f"Cannot pay against a {data.get('status')} PO."}
+
+    now        = datetime.now(timezone.utc)
+    po_number  = data.get('po_number', po_id)
+    vendor     = data.get('vendor_name', 'Unknown')
+    payment_amount = float(payment_amount)
+
+    # ── 1. Process extra charges first ───────────────────────────────────────
+    extra_charges = extra_charges or []
+    extra_total   = 0.0
+    charges_audit = list(data.get('extra_charges', []))
+    charges_desc_parts = []
+
+    for charge in extra_charges:
+        label  = str(charge.get('label', 'Extra Charge')).strip()
+        amount = float(charge.get('amount', 0))
+        if amount <= 0:
+            continue
+        extra_total += amount
+        charges_audit.append({
+            'label':    label,
+            'amount':   amount,
+            'added_at': now.isoformat(),
+            'added_with_payment': payment_reference or '(no ref)',
+        })
+        charges_desc_parts.append(f"{label}: ₹{amount:,.2f}")
+
+    # ── 2. Update total_cost if extra charges were added ─────────────────────
+    old_total   = float(data.get('total_cost', 0))
+    new_total   = old_total + extra_total
+    prev_paid   = float(data.get('amount_paid', 0))
+
+    # ── 3. Apply payment ─────────────────────────────────────────────────────
+    # Clamp: cannot overpay
+    max_payable  = new_total - prev_paid
+    if payment_amount > max_payable:
+        payment_amount = max_payable
+
+    new_paid     = prev_paid + payment_amount
+    new_balance  = new_total - new_paid
+
+    # Round off tiny floating-point residuals
+    if abs(new_balance) < 0.005:
+        new_balance = 0.0
+
+    new_pay_status = 'paid' if new_balance <= 0 else 'partially_paid'
+
+    # Derive high-level status
+    old_status = data.get('status', '')
+    new_status = 'Paid' if new_pay_status == 'paid' else old_status
+
+    # ── 4. Build cashbook description ────────────────────────────────────────
+    desc_parts = [f"{po_number} Payment to {vendor}"]
+    if charges_desc_parts:
+        desc_parts.append("incl. " + ", ".join(charges_desc_parts))
+    if payment_reference:
+        desc_parts.append(f"Txn: {payment_reference}")
+    cashbook_desc = " — ".join(desc_parts)
+
+    # ── 5. Firestore update ──────────────────────────────────────────────────
+    firestore_update = {
+        'payment_status': new_pay_status,
+        'amount_paid':    new_paid,
+        'balance_due':    new_balance,
+        'extra_charges':  charges_audit,
+        'updated_at':     now,
+        'status_history': ArrayUnion([{
+            'status':    f"Payment ₹{payment_amount:,.2f} ({new_pay_status})",
+            'timestamp': now.isoformat(),
+        }]),
+    }
+    if extra_total > 0:
+        firestore_update['total_cost'] = new_total
+    if new_status != old_status:
+        firestore_update['status'] = new_status
+
+    db.collection('purchase_orders').document(po_id).update(firestore_update)
+
+    # ── 6. Cashbook entry ────────────────────────────────────────────────────
+    add_cashbook_entry(
+        entry_type='outflow',
+        category='Purchase',
+        description=cashbook_desc,
+        amount=payment_amount + extra_total,   # one combined outflow
+        reference_id=po_id,
+    )
+
+    return {
+        'success':        True,
+        'payment_status': new_pay_status,
+        'amount_paid':    new_paid,
+        'balance_due':    new_balance,
+        'extra_total_added': extra_total,
+        'message': (
+            f"Payment of ₹{payment_amount:,.2f} recorded"
+            + (f" (+ ₹{extra_total:,.2f} extra charges)" if extra_total else "")
+            + f". Balance due: ₹{new_balance:,.2f}."
+        ),
+    }
+
+
+# ── Partial Return ────────────────────────────────────────────────────────────
+
+def partial_return_po(
+    po_id: str,
+    return_quantities: dict,
+    refund_amount: float = 0,
+    reason_note: str = '',
+) -> dict:
+    """
+    Return SOME (or all) received items back to the vendor.
+
+    Parameters
+    ----------
+    po_id : str
+        Firestore document ID.
+    return_quantities : dict
+        Mapping of ``item_name → qty_being_returned``.
+        Only items present in this dict are affected.
+        Example: ``{"Fabric A": 10}``
+    refund_amount : float, optional
+        Cash refund received from vendor for these items.
+        If > 0, logged as an inflow in the cashbook.
+    reason_note : str, optional
+        Short note recorded in status_history (e.g. "Defective batch").
+
+    Returns
+    -------
+    dict  with keys:
+        success          : bool
+        inventory_status : new value written to Firestore
+        items_returned   : list of item names that were updated
+        message          : human-readable summary
+    """
+    db = get_db()
+
+    doc = db.collection('purchase_orders').document(po_id).get()
+    if not doc.exists:
+        return {'success': False, 'message': 'PO not found.'}
+    data = doc.to_dict()
+
+    # Guard: can only return from a received (or paid) PO
+    if data.get('inventory_status') not in ['received', 'partially_received']:
+        return {
+            'success': False,
+            'message': (
+                'Can only return items from a PO with inventory_status '
+                '"received" or "partially_received". '
+                f'Current: "{data.get("inventory_status")}".'
+            ),
+        }
+
+    now       = datetime.now(timezone.utc)
+    po_number = data.get('po_number', po_id)
+    reason    = f"PO {po_number} Partial Return" + (f" — {reason_note}" if reason_note else "")
+
+    raw_items      = data.get('items', [])
+    updated_items  = []
+    items_returned = []
+    total_ordered  = 0.0
+    total_received = 0.0
+    total_returned = 0.0
+
+    for it in raw_items:
+        item_name = it.get('item', '')
+        ordered   = float(it.get('ordered_qty',  it.get('quantity', 0)))
+        received  = float(it.get('received_qty', 0))
+        prev_ret  = float(it.get('returned_qty', 0))
+
+        # How many are we returning right now?
+        returning = float(return_quantities.get(item_name, 0))
+
+        # Clamp: cannot return more than net-held (received - already returned)
+        net_held = received - prev_ret
+        if returning < 0:
+            returning = 0.0
+        if returning > net_held:
+            returning = net_held
+
+        new_ret = prev_ret + returning
+
+        updated_it = {
+            **it,
+            'ordered_qty':  ordered,
+            'received_qty': received,
+            'returned_qty': new_ret,
+        }
+        updated_items.append(updated_it)
+        total_ordered  += ordered
+        total_received += received
+        total_returned += new_ret
+
+        # Reduce physical inventory for items being returned
+        if returning > 0:
+            items_returned.append(item_name)
+            adjust_raw_material_qty(item_name, -returning, reason=reason)
+
+    # Derive the new inventory_status
+    net_in_stock = total_received - total_returned
+    if net_in_stock <= 0 and total_returned > 0:
+        new_inv_status = 'returned'
+    elif total_returned > 0:
+        new_inv_status = 'partially_received'   # some still held
+    else:
+        # Nothing actually changed
+        new_inv_status = data.get('inventory_status', 'pending')
+
+    history_note = f"Partial Return ({', '.join(items_returned) or 'none'})"
+    if reason_note:
+        history_note += f" — {reason_note}"
+
+    db.collection('purchase_orders').document(po_id).update({
+        'items':            updated_items,
+        'inventory_status': new_inv_status,
+        'updated_at':       now,
+        'status_history':   ArrayUnion([{
+            'status':    history_note,
+            'timestamp': now.isoformat(),
+        }]),
+    })
+
+    # Log vendor refund if provided
+    if float(refund_amount) > 0:
+        from app.services.cashbook_service import add_cashbook_entry
+        vendor = data.get('vendor_name', 'Unknown')
+        desc   = f"Partial Refund: {po_number} Return from {vendor}"
+        if reason_note:
+            desc += f" ({reason_note})"
+        add_cashbook_entry(
+            entry_type='inflow',
+            category='Refund',
+            description=desc,
+            amount=float(refund_amount),
+            reference_id=po_id,
+        )
+
+    return {
+        'success':          True,
+        'inventory_status': new_inv_status,
+        'items_returned':   items_returned,
+        'message': (
+            f"Returned {len(items_returned)} item type(s). "
+            f"Inventory status → {new_inv_status}."
+            + (f" Refund ₹{float(refund_amount):,.2f} logged." if float(refund_amount) > 0 else "")
+        ),
+    }

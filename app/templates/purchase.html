@@ -100,17 +100,34 @@
                 <td>{{ p.created_at.strftime('%d/%m/%Y') if p.created_at and p.created_at.strftime else '-' }}</td>
                 <td>
                     {% if p.status == 'Draft' %}
-                        <span class="badge" style="background:#fef3c7; color:#92400e; border:1px solid #fde68a;">{{ p.status }}</span>
+                        <span class="badge" style="background:#fef3c7; color:#92400e; border:1px solid #fde68a;">Draft</span>
                     {% elif p.status == 'Sent' %}
-                        <span class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">{{ p.status }}</span>
+                        <span class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">Sent</span>
+                    {% elif p.status == 'Partially Received' %}
+                        <span class="badge" style="background:#fef9c3; color:#854d0e; border:1px solid #fde047;">Partial Recv.</span>
                     {% elif p.status == 'Received' %}
-                        <span class="badge bg-success">{{ p.status }}</span>
+                        <span class="badge bg-success">Received</span>
                     {% elif p.status == 'Paid' %}
-                        <span class="badge bg-primary">{{ p.status }}</span>
+                        <span class="badge bg-primary">Paid</span>
                     {% elif p.status == 'Cancelled' %}
-                        <span class="badge bg-danger">{{ p.status }}</span>
+                        <span class="badge bg-danger">Cancelled</span>
+                    {% elif p.status == 'Returned' %}
+                        <span class="badge" style="background:#ffedd5; color:#9a3412; border:1px solid #fdba74;">Returned</span>
                     {% else %}
                         <span class="badge">{{ p.status }}</span>
+                    {% endif %}
+                    {%- set ns = namespace(ordered=0.0, received=0.0) -%}
+                    {%- for it in (p.get('items') or []) -%}
+                        {%- set ns.ordered = ns.ordered + (it.ordered_qty|default(it.quantity)|float) -%}
+                        {%- set ns.received = ns.received + (it.received_qty|default(0)|float) -%}
+                    {%- endfor -%}
+                    {% if p.inventory_status in ['partially_received', 'received'] %}
+                        <div style="font-size:0.72em; margin-top:3px; {% if p.inventory_status == 'received' %}color:#16a34a;{% else %}color:#d97706;{% endif %}">&#9685; {{ ns.received|int }}/{{ ns.ordered|int }} recvd</div>
+                    {% endif %}
+                    {% if p.balance_due is defined and p.balance_due > 0.005 %}
+                        <div style="font-size:0.72em; margin-top:2px; color:var(--danger);">&#8377;{{ "%.0f"|format(p.balance_due) }} due</div>
+                    {% elif p.payment_status == 'paid' %}
+                        <div style="font-size:0.72em; margin-top:2px; color:#16a34a;">&#10003; Paid</div>
                     {% endif %}
                 </td>
                 <td>{{ p.vendor_name }}</td>
@@ -127,7 +144,7 @@
                 <td class="text-right">
                     {% set po_items = p.get('items') or [] %}
                     {% if po_items|length > 0 %}
-                        {{ po_items | sum(attribute='quantity') }}
+                        {{ po_items | sum(attribute='ordered_qty') | int }}
                     {% else %}
                         {{ p.quantity }}
                     {% endif %}
@@ -137,33 +154,37 @@
                     {% if p.payment_id %}<small class="text-muted">Txn: {{ p.payment_id }}</small>{% endif %}
                 </td>
                 <td class="actions-cell">
-                    <div style="display:grid; grid-template-columns: 85px 85px 70px; gap:0.35rem; align-items:center; justify-items:start;">
+                    <div style="display:grid; grid-template-columns: 95px 85px 70px; gap:0.35rem; align-items:center; justify-items:start;">
                         {% if p.status == 'Draft' %}
                         <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_sent', po_id=p.id) }}" style="margin:0; width:100%;">
-                            <button type="submit" class="btn btn-xs btn-primary" style="width:100%;">Sent</button>
+                            <button type="submit" class="btn btn-xs btn-primary" style="width:100%;">Mark Sent</button>
                         </form>
-                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0; width:100%;" onsubmit="return confirm('Are you sure you want to cancel this PO? This action cannot be undone.');">
+                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0; width:100%;" onsubmit="return confirm('Cancel this PO?');">
                             <button type="submit" class="btn btn-xs btn-outline-danger" style="width:100%;">Cancel</button>
                         </form>
                         {% elif p.status == 'Sent' %}
-                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_received', po_id=p.id) }}" style="margin:0; width:100%;">
-                            <button type="submit" class="btn btn-xs btn-outline-success" style="width:100%;" onclick="return confirm('Receive items and increment inventory?')">Receive</button>
-                        </form>
-                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0; width:100%;" onsubmit="return confirm('Are you sure you want to cancel this PO? This action cannot be undone.');">
+                        <button type="button" class="btn btn-xs btn-outline-success" style="width:100%;" data-po-id="{{ p.id }}" data-po="{{ p|tojson|forceescape }}" onclick="openReceiveModal(this)">Receive Items</button>
+                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0; width:100%;" onsubmit="return confirm('Cancel this PO?');">
                             <button type="submit" class="btn btn-xs btn-outline-danger" style="width:100%;">Cancel</button>
                         </form>
-                        {% elif p.status == 'Received' %}
-                        <button type="button" class="btn btn-xs btn-outline-primary" style="width:100%;" onclick="openPayModal('{{ p.id }}', '{{ p.po_number }}')">Pay</button>
-                        <button type="button" class="btn btn-xs btn-outline-danger" style="width:100%;" onclick="openReturnModal('{{ p.id }}', '{{ p.po_number }}', 'Received')">Return</button>
-                        {% elif p.status == 'Paid' %}
-                        <div></div>
-                        <button type="button" class="btn btn-xs btn-outline-danger" style="width:100%;" onclick="openReturnModal('{{ p.id }}', '{{ p.po_number }}', 'Paid')">Return</button>
+                        {% elif p.status == 'Partially Received' %}
+                        <button type="button" class="btn btn-xs btn-outline-success" style="width:100%;" data-po-id="{{ p.id }}" data-po="{{ p|tojson|forceescape }}" onclick="openReceiveModal(this)">Receive More</button>
+                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0; width:100%;" onsubmit="return confirm('Cancel this PO? Received inventory will be reversed.');">
+                            <button type="submit" class="btn btn-xs btn-outline-danger" style="width:100%;">Cancel</button>
+                        </form>
+                        {% elif p.status in ['Received', 'Paid'] %}
+                        {% if p.balance_due is defined and p.balance_due > 0.005 %}
+                            <button type="button" class="btn btn-xs btn-outline-primary" style="width:100%;" data-po-id="{{ p.id }}" data-po="{{ p|tojson|forceescape }}" onclick="openPhase2PayModal(this)">Pay Balance</button>
+                        {% else %}
+                            <div></div>
+                        {% endif %}
+                        <button type="button" class="btn btn-xs btn-outline-danger" style="width:100%;" data-po-id="{{ p.id }}" data-po="{{ p|tojson|forceescape }}" onclick="openPhase2ReturnModal(this)">Return Defects</button>
                         {% elif p.status == 'Returned' %}
                         <div></div>
-                        <span style="font-size: 0.65rem; font-weight: 800; color: #991b1b; background: #fee2e2; padding: 0.2rem 0.4rem; border-radius: 4px; width:100%; text-align:center; text-transform: uppercase;">Returned</span>
+                        <span style="font-size:0.65rem; font-weight:800; color:#991b1b; background:#fee2e2; padding:0.2rem 0.4rem; border-radius:4px; width:100%; text-align:center; text-transform:uppercase;">Returned</span>
                         {% elif p.status == 'Cancelled' %}
                         <div></div>
-                        <span style="font-size: 0.65rem; font-weight: 800; color: #991b1b; background: #fee2e2; padding: 0.2rem 0.4rem; border-radius: 4px; width:100%; text-align:center; text-transform: uppercase;">Cancelled</span>
+                        <span style="font-size:0.65rem; font-weight:800; color:#991b1b; background:#fee2e2; padding:0.2rem 0.4rem; border-radius:4px; width:100%; text-align:center; text-transform:uppercase;">Cancelled</span>
                         {% endif %}
                         <button type="button" class="btn btn-xs btn-ghost" style="width:100%;" data-po="{{ p|tojson|forceescape }}" onclick="openViewPoModal(this)">History</button>
                     </div>
@@ -195,6 +216,37 @@
                 <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Settle Payment</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Modal: Receive Items (Phase 2 Partial) -->
+<div class="modal-overlay hidden" id="receiveModal">
+    <div class="modal" style="max-width:600px;">
+        <div class="modal-header">
+            <h3>Receive Items &mdash; <span id="recv-po-label" class="text-mono"></span></h3>
+            <button class="modal-close" onclick="closeModal('receiveModal')">&#x00D7;</button>
+        </div>
+        <p class="text-muted" style="font-size:0.85em; margin-bottom:1rem;">
+            Enter quantities arriving <strong>in this shipment only</strong>. Items left at 0 are skipped. Inventory updates immediately on save.
+        </p>
+        <div style="overflow-x:auto; margin-bottom:1rem;">
+            <table class="data-table" style="width:100%;">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th style="text-align:right;">Ordered</th>
+                        <th style="text-align:right;">Prev. Received</th>
+                        <th style="text-align:right;">Receiving Today</th>
+                    </tr>
+                </thead>
+                <tbody id="recv-items-body"></tbody>
+            </table>
+        </div>
+        <div id="recv-modal-error" style="color:var(--danger); font-size:0.85em; min-height:1.4em; margin-bottom:0.75rem;"></div>
+        <div class="form-actions">
+            <button id="recv-submit-btn" class="btn btn-primary" style="justify-content:center;" onclick="submitPartialReceive()">Confirm Receipt</button>
+            <button class="btn btn-ghost" onclick="closeModal('receiveModal')">Cancel</button>
+        </div>
     </div>
 </div>
 
@@ -237,10 +289,86 @@
 
 
 
+<!-- Modal: Pay Balance (Phase 2) -->
+<div class="modal-overlay hidden" id="phase2PayModal">
+    <div class="modal" style="max-width:400px;">
+        <div class="modal-header">
+            <h3>Pay Balance &mdash; <span id="p2-pay-po" class="text-mono"></span></h3>
+            <button class="modal-close" onclick="closeModal('phase2PayModal')">×</button>
+        </div>
+        <div style="margin-bottom:1rem;">
+            <div><span class="text-muted">Balance Due:</span> <strong id="p2-pay-balance" style="color:var(--danger);"></strong></div>
+        </div>
+        <div class="form-group" style="margin-bottom:1rem;">
+            <label>Payment Amount ₹ *</label>
+            <input type="number" id="p2-pay-amount" step="0.01" min="0.01" required>
+        </div>
+        <div class="form-group" style="margin-bottom:1rem;">
+            <label>Payment Ref / UTR</label>
+            <input type="text" id="p2-pay-ref" placeholder="Optional">
+        </div>
+        <div style="margin-bottom:1rem; padding:0.75rem; background:var(--bg-body); border-radius:4px; border:1px dashed var(--border);">
+            <label style="display:flex; align-items:center; gap:0.5rem; font-weight:600; cursor:pointer; margin-bottom:0.5rem;">
+                <input type="checkbox" id="p2-pay-extra-toggle" onchange="toggleExtraCharges()"> Add Extra Vendor Charges
+            </label>
+            <div id="p2-pay-extra-fields" class="hidden" style="margin-top:0.5rem; display:flex; flex-direction:column; gap:0.5rem;">
+                <input type="text" id="p2-pay-extra-label" placeholder="Reason (e.g. Freight, Packing)">
+                <input type="number" id="p2-pay-extra-amount" step="0.01" min="0" placeholder="Charge Amount ₹">
+            </div>
+        </div>
+        <div id="p2-pay-error" style="color:var(--danger); font-size:0.85em; margin-bottom:0.75rem;"></div>
+        <div class="form-actions">
+            <button id="p2-pay-submit" class="btn btn-primary" style="width:100%; justify-content:center;" onclick="submitPhase2Pay()">Confirm Payment</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Return Defects (Phase 2) -->
+<div class="modal-overlay hidden" id="phase2ReturnModal">
+    <div class="modal" style="max-width:600px;">
+        <div class="modal-header">
+            <h3>Return Defects &mdash; <span id="p2-ret-po" class="text-mono"></span></h3>
+            <button class="modal-close" onclick="closeModal('phase2ReturnModal')">×</button>
+        </div>
+        <p class="text-muted" style="font-size:0.85em; margin-bottom:1rem;">
+            Return items to the vendor. Inventory decreases immediately. You cannot return more than what you currently hold.
+        </p>
+        <div style="overflow-x:auto; margin-bottom:1rem;">
+            <table class="data-table" style="width:100%;">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th style="text-align:right;">Recv'd</th>
+                        <th style="text-align:right;">Already Ret'd</th>
+                        <th style="text-align:right;">Returning Now</th>
+                    </tr>
+                </thead>
+                <tbody id="p2-ret-items"></tbody>
+            </table>
+        </div>
+        <div class="form-grid form-grid-2" style="margin-bottom:1rem;">
+            <div class="form-group">
+                <label>Refund Amount ₹ (Optional)</label>
+                <input type="number" id="p2-ret-refund" step="0.01" min="0" placeholder="Cash returned by vendor">
+            </div>
+            <div class="form-group">
+                <label>Reason Note</label>
+                <input type="text" id="p2-ret-reason" placeholder="e.g. Defective fabric">
+            </div>
+        </div>
+        <div id="p2-ret-error" style="color:var(--danger); font-size:0.85em; margin-bottom:0.75rem;"></div>
+        <div class="form-actions">
+            <button id="p2-ret-submit" class="btn btn-danger" style="justify-content:center;" onclick="submitPhase2Return()">Confirm Return</button>
+            <button class="btn btn-ghost" onclick="closeModal('phase2ReturnModal')">Cancel</button>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
+/* ── PO form helpers ──────────────────────────────────────────────────── */
 function calcTotal() {
     let total = 0;
     const rows = document.querySelectorAll('.po-item-row');
@@ -291,6 +419,280 @@ function validatePoItems() {
     }
 }
 
+/* ── Phase 3A: Partial Receive ───────────────────────────────────────────── */
+
+let _receivePoId = null;
+
+function openReceiveModal(btn) {
+    const po = JSON.parse(btn.getAttribute('data-po'));
+    _receivePoId = btn.getAttribute('data-po-id');
+
+    document.getElementById('recv-po-label').textContent = po.po_number || _receivePoId;
+
+    const tbody = document.getElementById('recv-items-body');
+    tbody.innerHTML = '';
+    const items = po.items || [];
+    let anyOutstanding = false;
+
+    items.forEach(it => {
+        const ordered    = parseFloat(it.ordered_qty  || it.quantity || 0);
+        const received   = parseFloat(it.received_qty || 0);
+        const outstanding = Math.max(0, ordered - received);
+        const done = outstanding <= 0;
+        if (!done) anyOutstanding = true;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${it.item || '-'}</td>
+            <td style="text-align:right;">${ordered}</td>
+            <td style="text-align:right; color:#16a34a;">${received}</td>
+            <td style="text-align:right;">
+                ${done
+                    ? '<span style="color:#16a34a;font-size:0.8em;">&#10003; Done</span>'
+                    : `<input type="number" class="recv-qty-input"
+                              data-item="${it.item}"
+                              step="0.01" min="0" max="${outstanding}"
+                              value="0"
+                              style="width:75px; text-align:right;"
+                              placeholder="0">`
+                }
+            </td>`;
+        tbody.appendChild(tr);
+    });
+
+    document.getElementById('recv-modal-error').textContent = '';
+    const submitBtn = document.getElementById('recv-submit-btn');
+    submitBtn.disabled = !anyOutstanding;
+    submitBtn.textContent = 'Confirm Receipt';
+    document.getElementById('receiveModal').classList.remove('hidden');
+}
+
+async function submitPartialReceive() {
+    const inputs = document.querySelectorAll('.recv-qty-input');
+    const quantities = {};
+    inputs.forEach(inp => {
+        const qty = parseFloat(inp.value) || 0;
+        if (qty > 0) quantities[inp.dataset.item] = qty;
+    });
+
+    const errEl = document.getElementById('recv-modal-error');
+    if (Object.keys(quantities).length === 0) {
+        errEl.textContent = 'Please enter at least one quantity to receive.';
+        return;
+    }
+
+    const btn = document.getElementById('recv-submit-btn');
+    btn.disabled = true;
+    btn.textContent = 'Saving\u2026';
+    errEl.textContent = '';
+
+    try {
+        const res = await fetch(`/purchases/api/partial-receive/${_receivePoId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ received_quantities: quantities })
+        });
+        const result = await res.json();
+        if (result.success) {
+            closeModal('receiveModal');
+            window.location.reload();
+        } else {
+            errEl.textContent = result.message || 'An error occurred.';
+            btn.disabled = false;
+            btn.textContent = 'Confirm Receipt';
+        }
+    } catch (e) {
+        errEl.textContent = 'Network error. Please try again.';
+        btn.disabled = false;
+        btn.textContent = 'Confirm Receipt';
+    }
+}
+
+/* ── Phase 3B: Partial Pay ───────────────────────────────────────────────── */
+let _payPoId = null;
+
+function openPhase2PayModal(btn) {
+    const po = JSON.parse(btn.getAttribute('data-po'));
+    _payPoId = btn.getAttribute('data-po-id');
+    
+    document.getElementById('p2-pay-po').textContent = po.po_number || _payPoId;
+    const balance = parseFloat(po.balance_due || 0);
+    document.getElementById('p2-pay-balance').textContent = '₹ ' + balance.toFixed(2);
+    document.getElementById('p2-pay-amount').value = balance.toFixed(2);
+    document.getElementById('p2-pay-amount').max = balance.toFixed(2);
+    
+    document.getElementById('p2-pay-ref').value = '';
+    document.getElementById('p2-pay-extra-toggle').checked = false;
+    document.getElementById('p2-pay-extra-label').value = '';
+    document.getElementById('p2-pay-extra-amount').value = '';
+    toggleExtraCharges();
+    
+    document.getElementById('p2-pay-error').textContent = '';
+    const subBtn = document.getElementById('p2-pay-submit');
+    subBtn.disabled = false;
+    subBtn.textContent = 'Confirm Payment';
+    
+    document.getElementById('phase2PayModal').classList.remove('hidden');
+}
+
+function toggleExtraCharges() {
+    const isChecked = document.getElementById('p2-pay-extra-toggle').checked;
+    const extraFields = document.getElementById('p2-pay-extra-fields');
+    const amtInput = document.getElementById('p2-pay-amount');
+    
+    if (isChecked) {
+        extraFields.classList.remove('hidden');
+        amtInput.removeAttribute('max'); // Uncap payment if extra charges added
+    } else {
+        extraFields.classList.add('hidden');
+        // Reset max to original balance
+        const balStr = document.getElementById('p2-pay-balance').textContent.replace('₹ ', '');
+        amtInput.max = balStr;
+    }
+}
+
+async function submitPhase2Pay() {
+    const amt = parseFloat(document.getElementById('p2-pay-amount').value);
+    const ref = document.getElementById('p2-pay-ref').value;
+    const isExtra = document.getElementById('p2-pay-extra-toggle').checked;
+    const extLabel = document.getElementById('p2-pay-extra-label').value;
+    const extAmt = parseFloat(document.getElementById('p2-pay-extra-amount').value) || 0;
+    
+    const errEl = document.getElementById('p2-pay-error');
+    if (!amt || amt <= 0) {
+        errEl.textContent = 'Enter a valid payment amount.';
+        return;
+    }
+    
+    const payload = {
+        payment_amount: amt,
+        payment_reference: ref
+    };
+    
+    if (isExtra && extAmt > 0) {
+        if (!extLabel.trim()) {
+            errEl.textContent = 'Provide a reason for the extra charges.';
+            return;
+        }
+        payload.extra_charges = [{ label: extLabel, amount: extAmt }];
+    }
+    
+    const btn = document.getElementById('p2-pay-submit');
+    btn.disabled = true;
+    btn.textContent = 'Processing\u2026';
+    errEl.textContent = '';
+    
+    try {
+        const res = await fetch(`/purchases/api/partial-pay/${_payPoId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        if (result.success) {
+            window.location.reload();
+        } else {
+            errEl.textContent = result.message || 'Error processing payment.';
+            btn.disabled = false;
+            btn.textContent = 'Confirm Payment';
+        }
+    } catch (e) {
+        errEl.textContent = 'Network error.';
+        btn.disabled = false;
+        btn.textContent = 'Confirm Payment';
+    }
+}
+
+/* ── Phase 3B: Partial Return ────────────────────────────────────────────── */
+let _retPoId = null;
+
+function openPhase2ReturnModal(btn) {
+    const po = JSON.parse(btn.getAttribute('data-po'));
+    _retPoId = btn.getAttribute('data-po-id');
+    
+    document.getElementById('p2-ret-po').textContent = po.po_number || _retPoId;
+    
+    const tbody = document.getElementById('p2-ret-items');
+    tbody.innerHTML = '';
+    const items = po.items || [];
+    let anyReturnable = false;
+    
+    items.forEach(it => {
+        const recv = parseFloat(it.received_qty || 0);
+        const retd = parseFloat(it.returned_qty || 0);
+        const held = Math.max(0, recv - retd);
+        if (held > 0) anyReturnable = true;
+        
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${it.item || '-'}</td>
+            <td style="text-align:right;">${recv}</td>
+            <td style="text-align:right; color:var(--danger);">${retd}</td>
+            <td style="text-align:right;">
+                ${held > 0 
+                    ? `<input type="number" class="p2-ret-qty" data-item="${it.item}" step="0.01" min="0" max="${held}" value="0" style="width:75px; text-align:right;">`
+                    : `<span style="font-size:0.8em; color:var(--text-muted);">0 held</span>`
+                }
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+    
+    document.getElementById('p2-ret-refund').value = '';
+    document.getElementById('p2-ret-reason').value = '';
+    document.getElementById('p2-ret-error').textContent = '';
+    
+    const subBtn = document.getElementById('p2-ret-submit');
+    subBtn.disabled = !anyReturnable;
+    subBtn.textContent = 'Confirm Return';
+    
+    document.getElementById('phase2ReturnModal').classList.remove('hidden');
+}
+
+async function submitPhase2Return() {
+    const inputs = document.querySelectorAll('.p2-ret-qty');
+    const return_quantities = {};
+    inputs.forEach(inp => {
+        const q = parseFloat(inp.value) || 0;
+        if (q > 0) return_quantities[inp.dataset.item] = q;
+    });
+    
+    const errEl = document.getElementById('p2-ret-error');
+    if (Object.keys(return_quantities).length === 0) {
+        errEl.textContent = 'Enter at least one quantity to return.';
+        return;
+    }
+    
+    const refund = parseFloat(document.getElementById('p2-ret-refund').value) || 0;
+    const reason = document.getElementById('p2-ret-reason').value;
+    
+    const payload = { return_quantities, refund_amount: refund, reason_note: reason };
+    
+    const btn = document.getElementById('p2-ret-submit');
+    btn.disabled = true;
+    btn.textContent = 'Processing\u2026';
+    errEl.textContent = '';
+    
+    try {
+        const res = await fetch(`/purchases/api/partial-return/${_retPoId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        if (result.success) {
+            window.location.reload();
+        } else {
+            errEl.textContent = result.message || 'Error processing return.';
+            btn.disabled = false;
+            btn.textContent = 'Confirm Return';
+        }
+    } catch (e) {
+        errEl.textContent = 'Network error.';
+        btn.disabled = false;
+        btn.textContent = 'Confirm Return';
+    }
+}
 
 function openPayModal(id, poId) {
     document.getElementById('payForm').action = "/purchases/paid/" + id;
