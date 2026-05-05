@@ -623,13 +623,17 @@ def partial_pay_po(
     prev_paid   = float(data.get('amount_paid', 0))
 
     # ── 3. Apply payment ─────────────────────────────────────────────────────
-    # Clamp: cannot overpay
-    max_payable  = new_total - prev_paid
-    if payment_amount > max_payable:
-        payment_amount = max_payable
+    # The total cash going out this transaction = payment_amount + extra_total.
+    # Clamp the combined outflow so we never record more than what is owed.
+    total_cash_out = payment_amount + extra_total
+    max_payable    = new_total - prev_paid          # = old balance + new charges
+    if total_cash_out > max_payable:
+        # Proportionally reduce payment_amount; extra_total is already fixed
+        payment_amount = max(0.0, max_payable - extra_total)
+        total_cash_out = payment_amount + extra_total
 
-    new_paid     = prev_paid + payment_amount
-    new_balance  = new_total - new_paid
+    new_paid    = prev_paid + total_cash_out        # ← includes extra charges
+    new_balance = new_total - new_paid
 
     # Round off tiny floating-point residuals
     if abs(new_balance) < 0.005:
@@ -657,7 +661,7 @@ def partial_pay_po(
         'extra_charges':  charges_audit,
         'updated_at':     now,
         'status_history': ArrayUnion([{
-            'status':    f"Payment ₹{payment_amount:,.2f} ({new_pay_status})",
+            'status':    f"Payment ₹{total_cash_out:,.2f} ({new_pay_status})",
             'timestamp': now.isoformat(),
         }]),
     }
@@ -673,7 +677,7 @@ def partial_pay_po(
         entry_type='outflow',
         category='Purchase',
         description=cashbook_desc,
-        amount=payment_amount + extra_total,   # one combined outflow
+        amount=total_cash_out,   # one combined outflow
         reference_id=po_id,
     )
 
@@ -834,5 +838,116 @@ def partial_return_po(
             f"Returned {len(items_returned)} item type(s). "
             f"Inventory status → {new_inv_status}."
             + (f" Refund ₹{float(refund_amount):,.2f} logged." if float(refund_amount) > 0 else "")
+        ),
+    }
+
+
+# ── Log Refund (Automatic Balance Adjustment) ─────────────────────────────────
+
+def log_refund(po_id: str, refund_amount: float, reference: str = '') -> dict:
+    """
+    Record collection of a vendor refund against a PO whose balance_due is
+    negative (i.e. the vendor owes us money after a partial return).
+
+    This is the financial counterpart to partial_return_po and is completely
+    decoupled from inventory — it only touches money.
+
+    Parameters
+    ----------
+    po_id         : Firestore document ID.
+    refund_amount : Cash received from vendor (must be > 0 and ≤ abs(balance_due)).
+    reference     : UTR / cheque number / notes for this transaction.
+
+    Returns
+    -------
+    dict  with keys: success, balance_due, payment_status, message
+    """
+    from app.services.cashbook_service import add_cashbook_entry
+
+    refund_amount = float(refund_amount)
+    if refund_amount <= 0:
+        return {'success': False, 'message': 'Refund amount must be greater than zero.'}
+
+    db = get_db()
+    doc = db.collection('purchase_orders').document(po_id).get()
+    if not doc.exists:
+        return {'success': False, 'message': 'PO not found.'}
+    data = doc.to_dict()
+
+    current_balance = float(data.get('balance_due', 0))
+    if current_balance >= 0:
+        return {
+            'success': False,
+            'message': (
+                f'No refund is due on this PO. '
+                f'Current balance_due is ₹{current_balance:,.2f}.'
+            ),
+        }
+
+    # Maximum refundable = abs(negative balance)
+    max_refund = abs(current_balance)
+    if refund_amount > max_refund:
+        refund_amount = max_refund   # clamp silently
+
+    now       = datetime.now(timezone.utc)
+    po_number = data.get('po_number', po_id)
+    vendor    = data.get('vendor_name', 'Unknown')
+
+    # Reduce amount_paid (vendor gave cash back, so our net outflow decreases)
+    prev_paid    = float(data.get('amount_paid', 0))
+    new_paid     = prev_paid - refund_amount
+    new_balance  = float(data.get('total_cost', 0)) - new_paid
+
+    # Clamp float residuals
+    if abs(new_balance) < 0.005:
+        new_balance = 0.0
+
+    # Derive payment_status
+    if new_balance <= 0:
+        new_pay_status = 'paid'
+    elif new_paid <= 0:
+        new_pay_status = 'unpaid'
+    else:
+        new_pay_status = 'partially_paid'
+
+    # Build payment_history entry
+    payment_history_entry = {
+        'type':      'Refund',
+        'amount':    refund_amount,
+        'reference': reference,
+        'timestamp': now.isoformat(),
+    }
+
+    db.collection('purchase_orders').document(po_id).update({
+        'amount_paid':     new_paid,
+        'balance_due':     new_balance,
+        'payment_status':  new_pay_status,
+        'updated_at':      now,
+        'payment_history': ArrayUnion([payment_history_entry]),
+        'status_history':  ArrayUnion([{
+            'status':    f'Refund Collected ₹{refund_amount:,.2f}',
+            'timestamp': now.isoformat(),
+        }]),
+    })
+
+    # Log cashbook inflow
+    desc = f"Refund for {po_number} from {vendor}"
+    if reference:
+        desc += f" — Ref: {reference}"
+    add_cashbook_entry(
+        entry_type='inflow',
+        category='Refund',
+        description=desc,
+        amount=refund_amount,
+        reference_id=po_id,
+    )
+
+    return {
+        'success':        True,
+        'balance_due':    new_balance,
+        'payment_status': new_pay_status,
+        'message': (
+            f"Refund of ₹{refund_amount:,.2f} collected and logged. "
+            f"New balance_due: ₹{new_balance:,.2f}."
         ),
     }

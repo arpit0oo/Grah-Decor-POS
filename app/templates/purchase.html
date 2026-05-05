@@ -77,115 +77,214 @@
     </div>
 </div>
 
+<!-- Purchases Table Style Overrides -->
+<style>
+    /* ── Table cell baseline ─────────────────────────────────────────── */
+    .data-table thead th {
+        font-size: 0.7rem;
+        letter-spacing: 0.07em;
+        color: var(--text-secondary);
+        font-weight: 700;
+        text-transform: uppercase;
+        border-bottom: 2px solid var(--border);
+        padding: 0.6rem 0.85rem;
+    }
+    .data-table td {
+        padding: 0.9rem 0.85rem;
+        vertical-align: middle;
+        border-bottom: 1px solid var(--border);
+    }
+    .data-table tbody tr:last-child td { border-bottom: none; }
+    .data-table tbody tr:hover { background: var(--bg-body, #f8fafc); }
+
+    /* ── PO Info ─────────────────────────────────────────────────────── */
+    .po-number    { font-size: 0.92rem; font-weight: 700; color: var(--text-main); letter-spacing: 0.01em; }
+    .po-date      { font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px; }
+
+    /* ── Vendor ──────────────────────────────────────────────────────── */
+    .vendor-name  { font-size: 0.88rem; font-weight: 600; color: var(--text-main); }
+    .vendor-id    { font-size: 0.72rem; color: var(--text-secondary); margin-top: 1px; }
+
+    /* ── Items ───────────────────────────────────────────────────────── */
+    .item-name    { font-size: 0.875rem; font-weight: 500; color: var(--text-main); }
+    .badge-more   {
+        display: inline-block;
+        margin-left: 5px;
+        padding: 0.15em 0.5em;
+        font-size: 0.65rem;
+        font-weight: 700;
+        border-radius: 10px;
+        background: var(--bg-body, #f1f5f9);
+        color: var(--text-secondary);
+        border: 1px solid var(--border);
+        vertical-align: middle;
+        letter-spacing: 0.04em;
+    }
+
+    /* ── Fulfillment ─────────────────────────────────────────────────── */
+    .fulfillment-cell { min-width: 140px; }
+    .po-progress {
+        height: 8px;
+        border-radius: 6px;
+        background: var(--border, #e2e8f0);
+        overflow: hidden;
+        margin-bottom: 5px;
+    }
+    .po-progress-bar {
+        height: 100%;
+        border-radius: 6px;
+        transition: width 0.4s ease;
+    }
+    .progress-label { font-size: 0.72rem; color: var(--text-secondary); }
+
+    /* ── Payment Status ──────────────────────────────────────────────── */
+    .pay-amount  { font-size: 0.9rem; font-weight: 700; color: var(--text-main); }
+    .badge-pay {
+        display: inline-block;
+        margin-top: 4px;
+        padding: 0.2em 0.6em;
+        font-size: 0.65rem;
+        font-weight: 800;
+        border-radius: 5px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    .badge-pay.paid     { background: #dcfce7; color: #166534; }
+    .badge-pay.partial  { background: #fef9c3; color: #854d0e; }
+    .badge-pay.unpaid   { background: #fee2e2; color: #991b1b; }
+
+    /* ── Actions ─────────────────────────────────────────────────────── */
+    .actions-cell { min-width: 155px; }
+</style>
+
 <!-- Purchases Table -->
 <div class="table-wrapper">
     <table class="data-table">
         <thead>
             <tr>
-                <th>PO Number</th>
-                <th>Date</th>
-                <th>Status</th>
-                <th>Vendor</th>
-                <th>Item</th>
-                <th>Qty</th>
-                <th>Total Cost ₹</th>
-                <th>Invoice / Txn</th>
-                <th>Actions</th>
+                <th>PO INFO</th>
+                <th>VENDOR</th>
+                <th>ITEMS</th>
+                <th>FULFILLMENT</th>
+                <th>PAYMENT STATUS</th>
+                <th style="text-align:right;">BALANCE DUE</th>
+                <th style="text-align:center;">ACTIONS</th>
             </tr>
         </thead>
         <tbody>
             {% for p in purchases %}
             <tr>
-                <td><span class="text-mono">{{ p.po_number or '-' }}</span></td>
-                <td>{{ p.created_at.strftime('%d/%m/%Y') if p.created_at and p.created_at.strftime else '-' }}</td>
+                <!-- PO Info -->
                 <td>
-                    {% if p.status == 'Draft' %}
-                        <span class="badge" style="background:#fef3c7; color:#92400e; border:1px solid #fde68a;">Draft</span>
-                    {% elif p.status == 'Sent' %}
-                        <span class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">Sent</span>
-                    {% elif p.status == 'Partially Received' %}
-                        <span class="badge" style="background:#ffedd5; color:#c2410c; border:1px solid #fed7aa;">Partial Recv.</span>
-                    {% elif p.status == 'Received' %}
-                        <span class="badge bg-success">Received</span>
-                    {% elif p.status == 'Paid' %}
-                        <span class="badge bg-primary">Paid</span>
-                    {% elif p.status == 'Cancelled' %}
-                        <span class="badge bg-danger">Cancelled</span>
-                    {% elif p.status == 'Returned' %}
-                        <span class="badge" style="background:#ffedd5; color:#9a3412; border:1px solid #fdba74;">Returned</span>
+                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                        <span class="po-number">{{ p.po_number or '-' }}</span>
+                        {% if p.status == 'Cancelled' %}
+                            <span class="badge bg-danger ms-2">Cancelled</span>
+                        {% elif p.status == 'Draft' %}
+                            <span class="badge bg-secondary ms-2">Draft</span>
+                        {% endif %}
+                    </div>
+                    <div class="po-date">{{ p.created_at.strftime('%d %b, %Y') if p.created_at and p.created_at.strftime else '-' }}</div>
+                </td>
+
+                <!-- Vendor -->
+                <td>
+                    {% set vendor_parts = p.vendor_name.split(' - ', 1) if p.vendor_name else [] %}
+                    {% if vendor_parts|length == 2 %}
+                        <div class="vendor-id">{{ vendor_parts[0] }}</div>
+                        <div class="vendor-name">{{ vendor_parts[1] }}</div>
                     {% else %}
-                        <span class="badge">{{ p.status }}</span>
+                        <div class="vendor-name">{{ p.vendor_name or '-' }}</div>
                     {% endif %}
+                </td>
+
+                <!-- Items -->
+                <td>
+                    {% set po_items = p.get('items') or [] %}
+                    <span class="item-name">
+                        {% if not po_items and p.get('item') %}
+                            {{ p.item }}
+                        {% elif po_items|length > 0 %}
+                            {{ po_items[0].item }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </span>
+                    {% if po_items|length > 1 %}
+                        <span class="badge-more">+{{ po_items|length - 1 }} MORE</span>
+                    {% endif %}
+                </td>
+
+                <!-- Fulfillment -->
+                <td class="fulfillment-cell">
                     {%- set ns = namespace(ordered=0.0, received=0.0) -%}
                     {%- for it in (p.get('items') or []) -%}
                         {%- set ns.ordered = ns.ordered + (it.ordered_qty|default(it.quantity)|float) -%}
                         {%- set ns.received = ns.received + (it.received_qty|default(0)|float) -%}
                     {%- endfor -%}
-                    {% if p.inventory_status in ['partially_received', 'received'] %}
-                        <div style="font-size:0.72em; margin-top:3px; {% if p.inventory_status == 'received' %}color:#16a34a;{% else %}color:#d97706;{% endif %}">&#9685; {{ ns.received|int }}/{{ ns.ordered|int }} recvd</div>
-                    {% endif %}
-                    {% if p.balance_due is defined and p.balance_due > 0.005 %}
-                        <div style="font-size:0.72em; margin-top:2px; color:var(--danger);">&#8377;{{ "%.0f"|format(p.balance_due) }} due</div>
-                    {% elif p.payment_status == 'paid' %}
-                        <div style="font-size:0.72em; margin-top:2px; color:#16a34a;">&#10003; Paid</div>
-                    {% endif %}
+                    {% set progress = (ns.received / ns.ordered * 100)|int if ns.ordered > 0 else 0 %}
+                    <div class="po-progress">
+                        <div class="po-progress-bar" style="width:{{ progress }}%; background:{% if progress == 100 %}#16a34a{% elif progress > 0 %}#f59e0b{% else %}#cbd5e1{% endif %};"></div>
+                    </div>
+                    <div class="progress-label">{{ ns.received|int }} of {{ ns.ordered|int }} received &nbsp;<strong>{{ progress }}%</strong></div>
                 </td>
-                <td>{{ p.vendor_name }}</td>
+
+                <!-- Payment Status -->
                 <td>
-                    {% set po_items = p.get('items') or [] %}
-                    {% if not po_items and p.get('item') %}
-                        {{ p.item }}
-                    {% elif po_items|length > 0 %}
-                        {{ po_items[0].item }} {% if po_items|length > 1 %}<span class="text-muted" style="font-size:0.85em;">(+{{ po_items|length - 1 }} more)</span>{% endif %}
+                    <div class="pay-amount">₹{{ "%.2f"|format(p.total_cost) }}</div>
+                    {% if p.payment_status == 'paid' %}
+                        <span class="badge-pay paid">Paid</span>
+                    {% elif p.payment_status == 'partially_paid' %}
+                        <span class="badge-pay partial">Partial</span>
                     {% else %}
-                        -
+                        <span class="badge-pay unpaid">Unpaid</span>
                     {% endif %}
                 </td>
+                
+                <!-- Balance Due -->
                 <td class="text-right">
-                    {% set po_items = p.get('items') or [] %}
-                    {% if po_items|length > 0 %}
-                        {{ po_items | sum(attribute='ordered_qty') | int }}
+                    {% if p.balance_due is defined and p.balance_due > 0.005 %}
+                        <strong class="text-danger">₹{{ "%.2f"|format(p.balance_due) }} due</strong>
+                    {% elif p.balance_due is defined and p.balance_due < -0.005 %}
+                        <strong class="text-success">Refund Due: ₹{{ "%.2f"|format(p.balance_due | abs) }}</strong>
                     {% else %}
-                        {{ p.quantity }}
+                        <span class="text-muted">-</span>
                     {% endif %}
                 </td>
-                <td class="text-right text-bold">{{ "%.2f"|format(p.total_cost) }}</td>
-                <td>
-                    {% if p.payment_id %}<small class="text-muted">Txn: {{ p.payment_id }}</small>{% endif %}
-                </td>
-                <td class="actions-cell">
-                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                
+                <!-- Actions -->
+                <td class="actions-cell" style="min-width:150px;">
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
                         {% if p.status == 'Draft' %}
-                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_sent', po_id=p.id) }}" style="margin:0; width:100%;">
-                            <button type="submit" class="btn btn-xs btn-primary" style="width:100%;">Mark Sent</button>
-                        </form>
-                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0; width:100%;" onsubmit="return confirm('Cancel this PO?');">
-                            <button type="submit" class="btn btn-xs btn-outline-danger" style="width:100%;">Cancel</button>
-                        </form>
-                        {% elif p.status == 'Sent' %}
-                        <button type="button" class="btn btn-xs btn-outline-success" style="width:100%;" data-po-id="{{ p.id }}" data-po="{{ p|tojson|forceescape }}" onclick="openReceiveModal(this)">Receive Items</button>
-                        {% if ns.received <= 0 %}
-                        <form autocomplete="off" method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0; width:100%;" onsubmit="return confirm('Cancel this PO?');">
-                            <button type="submit" class="btn btn-xs btn-outline-danger" style="width:100%;">Cancel</button>
-                        </form>
+                            <form method="POST" action="{{ url_for('purchase.purchase_sent', po_id=p.id) }}" style="margin:0;">
+                                <button type="submit" class="btn btn-primary btn-sm w-100">Mark Sent</button>
+                            </form>
                         {% endif %}
-                        {% elif p.status == 'Partially Received' %}
-                        <button type="button" class="btn btn-xs btn-outline-success" style="width:100%;" data-po-id="{{ p.id }}" data-po="{{ p|tojson|forceescape }}" onclick="openReceiveModal(this)">Receive More</button>
-                        {% elif p.status in ['Received', 'Paid'] %}
-                        {% if p.balance_due is defined and p.balance_due > 0.005 %}
-                            <button type="button" class="btn btn-xs btn-outline-primary" style="width:100%;" data-po-id="{{ p.id }}" data-po="{{ p|tojson|forceescape }}" onclick="openPhase2PayModal(this)">Pay Balance</button>
-                        {% else %}
-                            <div></div>
+
+                        {% if p.status not in ['Draft', 'Cancelled'] and p.balance_due is defined and p.balance_due > 0.005 %}
+                            <button type="button" class="btn btn-primary btn-sm w-100" data-po-id="{{ p.id }}" data-po="{{ p|tojson|forceescape }}" onclick="openPhase2PayModal(this)">Pay Balance</button>
                         {% endif %}
-                        <button type="button" class="btn btn-xs btn-outline-danger" style="width:100%;" data-po-id="{{ p.id }}" data-po="{{ p|tojson|forceescape }}" onclick="openPhase2ReturnModal(this)">Return Defects</button>
-                        {% elif p.status == 'Returned' %}
-                        <div></div>
-                        <span style="font-size:0.65rem; font-weight:800; color:#991b1b; background:#fee2e2; padding:0.2rem 0.4rem; border-radius:4px; width:100%; text-align:center; text-transform:uppercase;">Returned</span>
-                        {% elif p.status == 'Cancelled' %}
-                        <div></div>
-                        <span style="font-size:0.65rem; font-weight:800; color:#991b1b; background:#fee2e2; padding:0.2rem 0.4rem; border-radius:4px; width:100%; text-align:center; text-transform:uppercase;">Cancelled</span>
+
+                        {% if p.status not in ['Draft', 'Cancelled'] and progress < 100 %}
+                            <button type="button" class="btn btn-success btn-sm w-100" data-po-id="{{ p.id }}" data-po="{{ p|tojson|forceescape }}" onclick="openReceiveModal(this)">Receive Items</button>
                         {% endif %}
-                        <button type="button" class="btn btn-xs btn-ghost" style="width:100%;" data-po="{{ p|tojson|forceescape }}" onclick="openViewPoModal(this)">History</button>
+
+                        {% if ns.received > 0 %}
+                            <button type="button" class="btn btn-outline-danger btn-sm w-100" data-po-id="{{ p.id }}" data-po="{{ p|tojson|forceescape }}" onclick="openPhase2ReturnModal(this)">Return Defects</button>
+                        {% endif %}
+
+                        {% if p.balance_due is defined and p.balance_due < -0.005 %}
+                            <button type="button" class="btn btn-outline-success btn-sm w-100" data-po-id="{{ p.id }}" data-po="{{ p|tojson|forceescape }}" onclick="openRefundModal(this)">Collect Refund</button>
+                        {% endif %}
+
+                        {% set amount_paid = p.total_cost - p.balance_due if p.balance_due is defined else (0 if p.payment_status == 'unpaid' else p.total_cost) %}
+                        {% if p.status in ['Draft', 'Sent'] and ns.received == 0 and amount_paid <= 0.005 %}
+                            <form method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0;">
+                                <button type="submit" class="btn btn-outline-danger btn-sm w-100" onclick="return confirm('Cancel this PO?');">Cancel</button>
+                            </form>
+                        {% endif %}
+
+                        <button type="button" class="btn btn-outline-secondary btn-sm w-100" data-po="{{ p|tojson|forceescape }}" onclick="openViewPoModal(this)">History</button>
                     </div>
                 </td>
             </tr>
@@ -301,19 +400,27 @@
         </div>
         <div class="form-group" style="margin-bottom:1rem;">
             <label>Payment Amount ₹ *</label>
-            <input type="number" id="p2-pay-amount" step="0.01" min="0.01" required>
+            <input type="number" id="p2-pay-amount" class="form-control" step="0.01" min="0.01" required>
         </div>
         <div class="form-group" style="margin-bottom:1rem;">
             <label>Payment Ref / UTR</label>
-            <input type="text" id="p2-pay-ref" placeholder="Optional">
+            <input type="text" id="p2-pay-ref" class="form-control" required placeholder="e.g. HDFC-1002">
         </div>
         <div style="margin-bottom:1rem; padding:0.75rem; background:var(--bg-body); border-radius:4px; border:1px dashed var(--border);">
             <label style="display:flex; align-items:center; gap:0.5rem; font-weight:600; cursor:pointer; margin-bottom:0.5rem;">
                 <input type="checkbox" id="p2-pay-extra-toggle" onchange="toggleExtraCharges()"> Add Extra Vendor Charges
             </label>
-            <div id="p2-pay-extra-fields" class="hidden" style="margin-top:0.5rem; display:flex; flex-direction:column; gap:0.5rem;">
-                <input type="text" id="p2-pay-extra-label" placeholder="Reason (e.g. Freight, Packing)">
-                <input type="number" id="p2-pay-extra-amount" step="0.01" min="0" placeholder="Charge Amount ₹">
+            <div id="p2-pay-extra-fields" class="hidden" style="margin-top:0.5rem;">
+                <div class="form-grid form-grid-2">
+                    <div class="form-group">
+                        <label>Charge Amount ₹</label>
+                        <input type="number" id="p2-pay-extra-amount" class="form-control" step="0.01" min="0" placeholder="Charge Amount ₹">
+                    </div>
+                    <div class="form-group">
+                        <label>Reason</label>
+                        <input type="text" id="p2-pay-extra-label" class="form-control" placeholder="Reason (e.g. Freight, Packing)">
+                    </div>
+                </div>
             </div>
         </div>
         <div id="p2-pay-error" style="color:var(--danger); font-size:0.85em; margin-bottom:0.75rem;"></div>
@@ -346,20 +453,40 @@
                 <tbody id="p2-ret-items"></tbody>
             </table>
         </div>
-        <div class="form-grid form-grid-2" style="margin-bottom:1rem;">
-            <div class="form-group">
-                <label>Refund Amount ₹ (Optional)</label>
-                <input type="number" id="p2-ret-refund" step="0.01" min="0" placeholder="Cash returned by vendor">
-            </div>
-            <div class="form-group">
-                <label>Reason Note</label>
-                <input type="text" id="p2-ret-reason" placeholder="e.g. Defective fabric">
-            </div>
+        <div class="form-group" style="margin-bottom:1rem;">
+            <label>Reason Note</label>
+            <input type="text" id="p2-ret-reason" class="form-control" placeholder="e.g. Defective fabric">
         </div>
         <div id="p2-ret-error" style="color:var(--danger); font-size:0.85em; margin-bottom:0.75rem;"></div>
         <div class="form-actions">
             <button id="p2-ret-submit" class="btn btn-danger" style="justify-content:center;" onclick="submitPhase2Return()">Confirm Return</button>
             <button class="btn btn-ghost" onclick="closeModal('phase2ReturnModal')">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Collect Refund -->
+<div class="modal-overlay hidden" id="refundModal">
+    <div class="modal" style="max-width:400px;">
+        <div class="modal-header">
+            <h3>Collect Refund &mdash; <span id="refund-po-label" class="text-mono"></span></h3>
+            <button class="modal-close" onclick="closeModal('refundModal')">×</button>
+        </div>
+        <div style="margin-bottom:1rem;">
+            <div><span class="text-muted">Refund Due:</span> <strong id="refund-amount-display" style="color:var(--success);"></strong></div>
+        </div>
+        <div class="form-group" style="margin-bottom:1rem;">
+            <label>Refund Received ₹ *</label>
+            <input type="number" id="refund-amount-input" class="form-control" step="0.01" min="0.01" required>
+        </div>
+        <div class="form-group" style="margin-bottom:1rem;">
+            <label>Reference / UTR *</label>
+            <input type="text" id="refund-ref-input" class="form-control" required placeholder="e.g. HDFC-5678">
+        </div>
+        <div id="refund-error" style="color:var(--danger); font-size:0.85em; margin-bottom:0.75rem;"></div>
+        <div class="form-actions">
+            <button id="refund-submit-btn" class="btn btn-success" style="width:100%; justify-content:center;" onclick="submitRefund()">Confirm Refund Receipt</button>
+            <button class="btn btn-ghost" onclick="closeModal('refundModal')">Cancel</button>
         </div>
     </div>
 </div>
@@ -564,6 +691,11 @@ async function submitPhase2Pay() {
         return;
     }
     
+    if (!ref.trim()) {
+        errEl.textContent = 'Payment Reference / UTR is required.';
+        return;
+    }
+    
     const payload = {
         payment_amount: amt,
         payment_reference: ref
@@ -638,7 +770,6 @@ function openPhase2ReturnModal(btn) {
         tbody.appendChild(tr);
     });
     
-    document.getElementById('p2-ret-refund').value = '';
     document.getElementById('p2-ret-reason').value = '';
     document.getElementById('p2-ret-error').textContent = '';
     
@@ -663,10 +794,9 @@ async function submitPhase2Return() {
         return;
     }
     
-    const refund = parseFloat(document.getElementById('p2-ret-refund').value) || 0;
     const reason = document.getElementById('p2-ret-reason').value;
     
-    const payload = { return_quantities, refund_amount: refund, reason_note: reason };
+    const payload = { return_quantities, refund_amount: 0, reason_note: reason };
     
     const btn = document.getElementById('p2-ret-submit');
     btn.disabled = true;
@@ -869,5 +999,65 @@ function openViewPoModal(btn) {
     document.getElementById('poViewModal').classList.remove('hidden');
 }
 
+/* ── Collect Refund Modal ───────────────────────────────────────────────── */
+let _refundPoId = null;
+
+function openRefundModal(btn) {
+    const po = JSON.parse(btn.getAttribute('data-po'));
+    _refundPoId = btn.getAttribute('data-po-id');
+
+    document.getElementById('refund-po-label').textContent = po.po_number || _refundPoId;
+    const refundDue = Math.abs(parseFloat(po.balance_due || 0));
+    document.getElementById('refund-amount-display').textContent = '₹ ' + refundDue.toFixed(2);
+    document.getElementById('refund-amount-input').value = refundDue.toFixed(2);
+    document.getElementById('refund-amount-input').max = refundDue.toFixed(2);
+    document.getElementById('refund-ref-input').value = '';
+    document.getElementById('refund-error').textContent = '';
+    const btn2 = document.getElementById('refund-submit-btn');
+    btn2.disabled = false;
+    btn2.textContent = 'Confirm Refund Receipt';
+    document.getElementById('refundModal').classList.remove('hidden');
+}
+
+async function submitRefund() {
+    const amt = parseFloat(document.getElementById('refund-amount-input').value);
+    const ref = document.getElementById('refund-ref-input').value.trim();
+    const errEl = document.getElementById('refund-error');
+
+    if (!amt || amt <= 0) {
+        errEl.textContent = 'Enter a valid refund amount.';
+        return;
+    }
+    if (!ref) {
+        errEl.textContent = 'Reference / UTR is required.';
+        return;
+    }
+
+    const btn = document.getElementById('refund-submit-btn');
+    btn.disabled = true;
+    btn.textContent = 'Processing…';
+    errEl.textContent = '';
+
+    try {
+        const res = await fetch(`/purchases/api/log-refund/${_refundPoId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refund_amount: amt, payment_reference: ref })
+        });
+        const result = await res.json();
+        if (result.success) {
+            closeModal('refundModal');
+            window.location.reload();
+        } else {
+            errEl.textContent = result.message || 'Error processing refund.';
+            btn.disabled = false;
+            btn.textContent = 'Confirm Refund Receipt';
+        }
+    } catch (e) {
+        errEl.textContent = 'Network error. Please try again.';
+        btn.disabled = false;
+        btn.textContent = 'Confirm Refund Receipt';
+    }
+}
 </script>
 {% endblock %}

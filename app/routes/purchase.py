@@ -12,6 +12,8 @@ from app.services.purchase_service import (
     partial_receive_po,
     partial_pay_po,
     partial_return_po,
+    # Phase 3 — decoupled refund
+    log_refund,
 )
 from app.services.inventory_service import get_all_raw_materials
 from app.services.contact_service import get_all_vendors
@@ -281,5 +283,36 @@ def api_partial_return(po_id):
         refund_amount=refund_amount,
         reason_note=reason_note,
     )
+    status_code = 200 if result.get('success') else 400
+    return jsonify(result), status_code
+
+
+@purchase_bp.route('/api/log-refund/<po_id>', methods=['POST'])
+def api_log_refund(po_id):
+    """
+    Record collection of a vendor refund on a PO whose balance_due is negative
+    (i.e. the vendor owes us money after a partial return).
+
+    Expected JSON body:
+    {
+        "refund_amount": 500,
+        "payment_reference": "HDFC-5678"   // required
+    }
+    """
+    body = request.get_json(silent=True) or {}
+
+    try:
+        refund_amount = float(body.get('refund_amount', 0))
+    except (TypeError, ValueError):
+        return _bad('refund_amount must be a number.')
+
+    if refund_amount <= 0:
+        return _bad('refund_amount must be greater than zero.')
+
+    reference = str(body.get('payment_reference', '')).strip()
+    if not reference:
+        return _bad('payment_reference (UTR / Ref) is required.')
+
+    result = log_refund(po_id, refund_amount=refund_amount, reference=reference)
     status_code = 200 if result.get('success') else 400
     return jsonify(result), status_code
