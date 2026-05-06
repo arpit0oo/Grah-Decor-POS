@@ -260,13 +260,16 @@ def api_raw_stock_ledger():
     if not name:
         return jsonify({'error': 'Name is required'}), 400
 
-    from app.services.purchase_service import get_all_purchase_orders
+    from app import get_db
     from app.services.inventory_service import get_product_inventory_logs
 
     events = []  # list of {iso_date, date_str, type, reference, delta}
 
     # ── 1. PO inflows (Received / Paid only) ──────────────────────────────
-    all_pos = get_all_purchase_orders()
+    db = get_db()
+    all_pos_docs = db.collection('purchase_orders').stream()
+    all_pos = [{'id': d.id, **d.to_dict()} for d in all_pos_docs]
+
     for po in all_pos:
         status = po.get('status', '')
         if status not in ('Received', 'Paid'):
