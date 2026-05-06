@@ -115,23 +115,64 @@ def generate_po_number():
 
 # ── read ─────────────────────────────────────────────────────────────────────
 
-def get_all_purchase_orders(date_from=None, date_to=None):
+def get_all_purchase_orders(date_from=None, date_to=None, status=None, cursor_id=None, direction='next', limit=20):
     db = get_db()
-    query = db.collection('purchase_orders').order_by('created_at', direction='DESCENDING')
+    query = db.collection('purchase_orders')
+
+    if status:
+        query = query.where(filter=FieldFilter('status', '==', status))
+        
+    if date_from:
+        df = datetime.combine(date_from, datetime.min.time()).replace(tzinfo=timezone.utc)
+        query = query.where(filter=FieldFilter('created_at', '>=', df))
+    if date_to:
+        dt = datetime.combine(date_to, datetime.max.time()).replace(tzinfo=timezone.utc)
+        query = query.where(filter=FieldFilter('created_at', '<=', dt))
+
+    cursor_doc = None
+    if cursor_id:
+        doc_ref = db.collection('purchase_orders').document(cursor_id).get()
+        if doc_ref.exists:
+            cursor_doc = doc_ref
+
+    is_prev = (direction == 'prev' and cursor_doc)
+    sort_dir = 'ASCENDING' if is_prev else 'DESCENDING'
+
+    query = query.order_by('created_at', direction=sort_dir)
+
+    if is_prev:
+        query = query.start_after(cursor_doc).limit(limit + 1)
+    else:
+        if cursor_doc:
+            query = query.start_after(cursor_doc)
+        query = query.limit(limit + 1)
+
     docs = list(query.stream())
+
+    has_prev = False
+    has_next = False
+
+    if is_prev:
+        docs.reverse()
+        if len(docs) > limit:
+            has_prev = True
+            docs.pop(0)
+        has_next = True
+    else:
+        if len(docs) > limit:
+            has_next = True
+            docs.pop()
+        if cursor_doc:
+            has_prev = True
+
     results = []
     for d in docs:
         entry = {'id': d.id, **d.to_dict()}
-        if date_from and entry.get('created_at'):
-            dt = entry['created_at']
-            if hasattr(dt, 'date') and dt.date() < date_from:
-                continue
-        if date_to and entry.get('created_at'):
-            dt = entry['created_at']
-            if hasattr(dt, 'date') and dt.date() > date_to:
-                continue
         results.append(_apply_po_shim(entry))
-    return results
+
+    results.sort(key=lambda x: x.get('created_at').isoformat() if hasattr(x.get('created_at'), 'isoformat') else str(x.get('created_at', '')), reverse=True)
+
+    return results, has_prev, has_next
 
 
 # ── create ───────────────────────────────────────────────────────────────────
@@ -750,12 +791,13 @@ def partial_return_po(
     po_number = data.get('po_number', po_id)
     reason    = f"PO {po_number} Partial Return" + (f" — {reason_note}" if reason_note else "")
 
-    raw_items      = data.get('items', [])
-    updated_items  = []
-    items_returned = []
-    total_ordered  = 0.0
-    total_received = 0.0
-    total_returned = 0.0
+    raw_items          = data.get('items', [])
+    updated_items      = []
+    items_returned     = []
+    total_ordered      = 0.0
+    total_received     = 0.0
+    total_returned     = 0.0
+    total_return_value = 0.0   # ← financial deduction accumulator
 
     for it in raw_items:
         item_name = it.get('item', '')
@@ -775,6 +817,10 @@ def partial_return_po(
 
         new_ret = prev_ret + returning
 
+        # ── Financial deduction for returned items ────────────────────────
+        unit_cost = float(it.get('unit_cost', 0))
+        return_value = returning * unit_cost          # value being deducted
+
         updated_it = {
             **it,
             'ordered_qty':  ordered,
@@ -782,9 +828,10 @@ def partial_return_po(
             'returned_qty': new_ret,
         }
         updated_items.append(updated_it)
-        total_ordered  += ordered
-        total_received += received
-        total_returned += new_ret
+        total_ordered        += ordered
+        total_received       += received
+        total_returned       += new_ret
+        total_return_value   += return_value
 
         # Reduce physical inventory for items being returned
         if returning > 0:
@@ -805,15 +852,36 @@ def partial_return_po(
     if reason_note:
         history_note += f" — {reason_note}"
 
-    db.collection('purchase_orders').document(po_id).update({
+    # ── Recalculate financials after return ───────────────────────────────
+    old_total    = float(data.get('total_cost', 0))
+    amount_paid  = float(data.get('amount_paid', 0))
+    new_total    = max(0.0, old_total - total_return_value)
+    new_balance  = new_total - amount_paid
+    # Round off float dust
+    if abs(new_balance) < 0.005:
+        new_balance = 0.0
+    if new_balance <= 0 and new_balance > -0.005:
+        new_balance = 0.0
+    new_pay_status = (
+        'paid'            if new_balance <= 0 and amount_paid >= new_total - 0.005
+        else 'partially_paid' if amount_paid > 0.005
+        else 'unpaid'
+    )
+
+    firestore_payload = {
         'items':            updated_items,
         'inventory_status': new_inv_status,
+        'total_cost':       new_total,
+        'balance_due':      new_balance,
+        'payment_status':   new_pay_status,
         'updated_at':       now,
         'status_history':   ArrayUnion([{
             'status':    history_note,
             'timestamp': now.isoformat(),
         }]),
-    })
+    }
+
+    db.collection('purchase_orders').document(po_id).update(firestore_payload)
 
     # Log vendor refund if provided
     if float(refund_amount) > 0:

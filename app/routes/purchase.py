@@ -25,6 +25,10 @@ def purchase_list():
     date_from = request.args.get('date_from')
     date_to = request.args.get('date_to')
 
+    status = request.args.get('status')
+    cursor_id = request.args.get('cursor_id')
+    direction = request.args.get('direction', 'next')
+
     df = None
     dt = None
     if date_from:
@@ -38,13 +42,22 @@ def purchase_list():
         except ValueError:
             pass
 
-    purchases = get_all_purchase_orders(date_from=df, date_to=dt)
+    purchases, has_prev, has_next = get_all_purchase_orders(
+        date_from=df, date_to=dt,
+        status=status or None,
+        cursor_id=cursor_id,
+        direction=direction,
+        limit=20
+    )
     total_spent = sum(p.get('total_cost', 0) for p in purchases if p.get('status') != 'Cancelled')
     raw_materials = get_all_raw_materials()
     vendors = get_all_vendors()
 
     return render_template('purchase.html', purchases=purchases, total_spent=total_spent,
-                           raw_materials=raw_materials, vendors=vendors, date_from=date_from or '', date_to=date_to or '')
+                           raw_materials=raw_materials, vendors=vendors, 
+                           date_from=date_from or '', date_to=date_to or '',
+                           filter_status=status or '',
+                           has_prev=has_prev, has_next=has_next)
 
 @purchase_bp.route('/add', methods=['POST'])
 def purchase_add():

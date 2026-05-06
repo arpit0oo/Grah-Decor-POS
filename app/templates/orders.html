@@ -172,15 +172,15 @@
 <!-- Summary -->
 <div class="summary-row">
     <div class="summary-item">
-        <span class="summary-label">Total Orders</span>
+        <span class="summary-label">Page Orders</span>
         <span class="summary-value">{{ orders|length }}</span>
     </div>
     <div class="summary-item">
-        <span class="summary-label">Total Sales</span>
+        <span class="summary-label">Page Sales</span>
         <span class="summary-value">₹ {{ "%.2f"|format(total_sales) }}</span>
     </div>
     <div class="summary-item">
-        <span class="summary-label">Total Settlement</span>
+        <span class="summary-label">Page Settlement</span>
         <span class="summary-value">₹ {{ "%.2f"|format(total_settlement) }}</span>
     </div>
 </div>
@@ -282,6 +282,29 @@
                 {% endif %}
             </tbody>
         </table>
+    </div>
+
+    <!-- Pagination Controls -->
+    <div class="pagination-controls" style="display:flex; justify-content:space-between; margin-top: 1rem; align-items: center;">
+        <div>
+            {% if has_prev and orders %}
+            <a href="{{ url_for('orders.orders_list', date_from=filter_date_from, date_to=filter_date_to, platform=filter_platform, status=filter_status, review_status=filter_review, cursor_id=(orders|first).id, direction='prev') }}" class="btn btn-ghost">&larr; Previous</a>
+            {% else %}
+            <button type="button" class="btn btn-ghost" disabled>&larr; Previous</button>
+            {% endif %}
+        </div>
+        
+        <div style="font-size: 0.9em; color: var(--text-secondary);">
+            Page size: 20
+        </div>
+
+        <div>
+            {% if has_next and orders %}
+            <a href="{{ url_for('orders.orders_list', date_from=filter_date_from, date_to=filter_date_to, platform=filter_platform, status=filter_status, review_status=filter_review, cursor_id=(orders|last).id, direction='next') }}" class="btn btn-ghost">Next &rarr;</a>
+            {% else %}
+            <button type="button" class="btn btn-ghost" disabled>Next &rarr;</button>
+            {% endif %}
+        </div>
     </div>
 </form>
 

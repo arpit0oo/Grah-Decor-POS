@@ -15,6 +15,10 @@
         ({{ customers|length }})</button>
 </div>
 
+<style>
+.pagination-hidden { display: none !important; }
+</style>
+
 <!-- ── VENDORS TAB ─────────────────────────────────────── -->
 <div class="tab-content {% if active_tab != 'vendors' %}hidden{% endif %}" id="tab-vendors">
     <div class="table-wrapper">
@@ -30,7 +34,7 @@
             </thead>
             <tbody>
                 {% for v in vendors %}
-                <tr>
+                <tr class="vendor-row" data-item-index="{{ loop.index }}">
                     <form method="POST" action="{{ url_for('contact.update_vendor_route', vendor_id=v.id) }}"
                         style="display: contents;">
                         <td class="text-mono">{{ v.vendor_id }}</td>
@@ -71,6 +75,13 @@
                 {% endif %}
             </tbody>
         </table>
+    </div>
+
+    <!-- Pagination Controls -->
+    <div class="pagination-controls" style="display:flex; justify-content:space-between; margin-top: 1rem; align-items: center;">
+        <button type="button" class="btn btn-ghost" id="vendorPrev" onclick="vendorPrev()">&larr; Previous</button>
+        <div style="font-size: 0.9em; color: var(--text-secondary);" id="vendorPageInfo">Page 1</div>
+        <button type="button" class="btn btn-ghost" id="vendorNext" onclick="vendorNext()">Next &rarr;</button>
     </div>
 </div>
 
@@ -170,6 +181,29 @@
                 {% endif %}
             </tbody>
         </table>
+    </div>
+
+    <!-- Pagination Controls -->
+    <div class="pagination-controls" style="display:flex; justify-content:space-between; margin-top: 1rem; align-items: center;">
+        <div>
+            {% if has_prev_customer and customers %}
+            <a href="{{ url_for('contact.contacts_list', tab='customers', cursor_id=(customers|first).id, direction='prev') }}" class="btn btn-ghost">&larr; Previous</a>
+            {% else %}
+            <button type="button" class="btn btn-ghost" disabled>&larr; Previous</button>
+            {% endif %}
+        </div>
+        
+        <div style="font-size: 0.9em; color: var(--text-secondary);">
+            Page size: 20
+        </div>
+
+        <div>
+            {% if has_next_customer and customers %}
+            <a href="{{ url_for('contact.contacts_list', tab='customers', cursor_id=(customers|last).id, direction='next') }}" class="btn btn-ghost">Next &rarr;</a>
+            {% else %}
+            <button type="button" class="btn btn-ghost" disabled>Next &rarr;</button>
+            {% endif %}
+        </div>
     </div>
 </div>
 
@@ -601,5 +635,55 @@
         .addEventListener('click', function (e) {
             if (e.target === this) closeModal('viewModal');
         });
+
+    // Client-side Pagination Logic
+    function initClientPagination(idPrefix, rowClass, pageSize = 50) {
+        let currentPage = 1;
+        const rows = document.querySelectorAll(rowClass);
+        const items = [];
+        let currentItem = null;
+        let lastIndex = null;
+
+        rows.forEach(r => {
+            const idx = r.getAttribute('data-item-index');
+            if (idx !== lastIndex) {
+                currentItem = [];
+                items.push(currentItem);
+                lastIndex = idx;
+            }
+            currentItem.push(r);
+        });
+
+        const totalPages = Math.ceil(items.length / pageSize) || 1;
+
+        function render() {
+            items.forEach((group, index) => {
+                const page = Math.floor(index / pageSize) + 1;
+                const show = (page === currentPage);
+                group.forEach(r => {
+                    if (show) {
+                        r.classList.remove('pagination-hidden');
+                    } else {
+                        r.classList.add('pagination-hidden');
+                    }
+                });
+            });
+            const pageInfo = document.getElementById(idPrefix + 'PageInfo');
+            if (pageInfo) pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+            const prevBtn = document.getElementById(idPrefix + 'Prev');
+            if (prevBtn) prevBtn.disabled = (currentPage === 1);
+            const nextBtn = document.getElementById(idPrefix + 'Next');
+            if (nextBtn) nextBtn.disabled = (currentPage === totalPages);
+        }
+
+        window[idPrefix + 'Prev'] = () => { if (currentPage > 1) { currentPage--; render(); } };
+        window[idPrefix + 'Next'] = () => { if (currentPage < totalPages) { currentPage++; render(); } };
+
+        render();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        initClientPagination('vendor', '.vendor-row', 50);
+    });
 </script>
 {% endblock %}

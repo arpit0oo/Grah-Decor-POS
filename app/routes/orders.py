@@ -52,10 +52,18 @@ def orders_list():
         except ValueError:
             pass
 
-    orders = get_all_orders(date_from=df, date_to=dt,
-                            platform=platform or None,
-                            status=status or None,
-                            review_status=review_status or None)
+    cursor_id = request.args.get('cursor_id')
+    direction = request.args.get('direction', 'next')
+
+    orders, has_prev, has_next = get_all_orders(
+        date_from=df, date_to=dt,
+        platform=platform or None,
+        status=status or None,
+        review_status=review_status or None,
+        cursor_id=cursor_id,
+        direction=direction,
+        limit=20
+    )
 
     total_sales = sum(o.get('selling_price', 0) for o in orders)
     total_settlement = sum(o.get('bank_settlement', 0) for o in orders)
@@ -79,7 +87,9 @@ def orders_list():
                            filter_date_to=date_to or '',
                            filter_platform=platform,
                            filter_status=status,
-                           filter_review=review_status)
+                           filter_review=review_status,
+                           has_prev=has_prev,
+                           has_next=has_next)
 
 
 @orders_bp.route('/add', methods=['POST'])

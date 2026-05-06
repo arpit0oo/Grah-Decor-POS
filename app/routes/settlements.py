@@ -19,7 +19,14 @@ def settlements_list():
     unsettled_orders = get_unsettled_orders(platform=platform_filter if platform_filter else None)
     total_expected = sum(o.get('bank_settlement', 0) for o in unsettled_orders)
     
-    batches = get_settlement_batches()
+    cursor_id = request.args.get('cursor_id')
+    direction = request.args.get('direction', 'next')
+    
+    batches, has_prev, has_next = get_settlement_batches(
+        cursor_id=cursor_id,
+        direction=direction,
+        limit=20
+    )
     returned = get_returned_orders()
 
     # Metrics for Returns tab
@@ -35,7 +42,9 @@ def settlements_list():
                            active_tab=tab,
                            returned_orders=returned,
                            total_damaged=total_damaged,
-                           total_penalties=total_penalties)
+                           total_penalties=total_penalties,
+                           has_prev_batch=has_prev,
+                           has_next_batch=has_next)
 
 @settlements_bp.route('/add', methods=['POST'])
 def add_settlement():

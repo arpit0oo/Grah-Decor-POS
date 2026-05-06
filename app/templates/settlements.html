@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Settlements — Grah Decor POS{% endblock %}
 {% block content %}
+<style>
+.pagination-hidden { display: none !important; }
+</style>
 
 <div class="page-header">
     <h1>Platform Settlements</h1>
@@ -58,7 +61,7 @@ TAB 1: UNSETTLED ORDERS
                         </thead>
                         <tbody>
                             {% for order in orders %}
-                            <tr>
+                            <tr class="unsettled-row" data-item-index="{{ loop.index }}">
                                 <td style="text-align: center;">
                                     <input type="checkbox" name="order_ids" value="{{ order.id }}"
                                         class="order-checkbox" data-expected="{{ order.bank_settlement|default(0) }}"
@@ -88,6 +91,13 @@ TAB 1: UNSETTLED ORDERS
                             {% endif %}
                         </tbody>
                     </table>
+                </div>
+
+                <!-- Pagination Controls -->
+                <div class="pagination-controls" style="display:flex; justify-content:space-between; margin-top: 1rem; align-items: center;">
+                    <button type="button" class="btn btn-ghost" id="unsettledPrev" onclick="unsettledPrev()">&larr; Previous</button>
+                    <div style="font-size: 0.9em; color: var(--text-secondary);" id="unsettledPageInfo">Page 1</div>
+                    <button type="button" class="btn btn-ghost" id="unsettledNext" onclick="unsettledNext()">Next &rarr;</button>
                 </div>
             </div>
 
@@ -228,6 +238,29 @@ TAB 2: SETTLEMENT LOGS (ACCORDION)
         </div>
         {% endfor %}
     </div>
+
+    <!-- Pagination Controls -->
+    <div class="pagination-controls" style="display:flex; justify-content:space-between; margin-top: 1rem; align-items: center;">
+        <div>
+            {% if has_prev_batch and batches %}
+            <a href="{{ url_for('settlements.settlements_list', tab='logs', cursor_id=(batches|first).id, direction='prev') }}" class="btn btn-ghost">&larr; Previous</a>
+            {% else %}
+            <button type="button" class="btn btn-ghost" disabled>&larr; Previous</button>
+            {% endif %}
+        </div>
+        
+        <div style="font-size: 0.9em; color: var(--text-secondary);">
+            Page size: 20
+        </div>
+
+        <div>
+            {% if has_next_batch and batches %}
+            <a href="{{ url_for('settlements.settlements_list', tab='logs', cursor_id=(batches|last).id, direction='next') }}" class="btn btn-ghost">Next &rarr;</a>
+            {% else %}
+            <button type="button" class="btn btn-ghost" disabled>Next &rarr;</button>
+            {% endif %}
+        </div>
+    </div>
     {% else %}
     <div class="empty-state"
         style="padding:3rem; text-align:center; border:1px dashed var(--border); border-radius:var(--radius);">
@@ -271,7 +304,7 @@ TAB 2: SETTLEMENT LOGS (ACCORDION)
             <tbody>
                 {% for order in returned_orders %}
                 {% set ret_date = order.updated_at or order.date %}
-                <tr>
+                <tr class="returned-row" data-item-index="{{ loop.index }}">
                     <td>{{ ret_date.strftime('%d/%m/%Y') if ret_date and ret_date.strftime else '-' }}</td>
                     <td class="text-mono">{{ order.order_id or '-' }}</td>
                     <td><span class="badge badge-platform">{{ order.platform }}</span></td>
@@ -301,6 +334,13 @@ TAB 2: SETTLEMENT LOGS (ACCORDION)
                 {% endif %}
             </tbody>
         </table>
+    </div>
+
+    <!-- Pagination Controls -->
+    <div class="pagination-controls" style="display:flex; justify-content:space-between; margin-top: 1rem; align-items: center;">
+        <button type="button" class="btn btn-ghost" id="returnedPrev" onclick="returnedPrev()">&larr; Previous</button>
+        <div style="font-size: 0.9em; color: var(--text-secondary);" id="returnedPageInfo">Page 1</div>
+        <button type="button" class="btn btn-ghost" id="returnedNext" onclick="returnedNext()">Next &rarr;</button>
     </div>
 </div>
 
@@ -525,5 +565,56 @@ PROCESS RETURN MODAL
             icon.style.transform = 'rotate(90deg)';
         }
     }
+
+    // Client-side Pagination Logic
+    function initClientPagination(idPrefix, rowClass, pageSize = 50) {
+        let currentPage = 1;
+        const rows = document.querySelectorAll(rowClass);
+        const items = [];
+        let currentItem = null;
+        let lastIndex = null;
+
+        rows.forEach(r => {
+            const idx = r.getAttribute('data-item-index');
+            if (idx !== lastIndex) {
+                currentItem = [];
+                items.push(currentItem);
+                lastIndex = idx;
+            }
+            currentItem.push(r);
+        });
+
+        const totalPages = Math.ceil(items.length / pageSize) || 1;
+
+        function render() {
+            items.forEach((group, index) => {
+                const page = Math.floor(index / pageSize) + 1;
+                const show = (page === currentPage);
+                group.forEach(r => {
+                    if (show) {
+                        r.classList.remove('pagination-hidden');
+                    } else {
+                        r.classList.add('pagination-hidden');
+                    }
+                });
+            });
+            const pageInfo = document.getElementById(idPrefix + 'PageInfo');
+            if (pageInfo) pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+            const prevBtn = document.getElementById(idPrefix + 'Prev');
+            if (prevBtn) prevBtn.disabled = (currentPage === 1);
+            const nextBtn = document.getElementById(idPrefix + 'Next');
+            if (nextBtn) nextBtn.disabled = (currentPage === totalPages);
+        }
+
+        window[idPrefix + 'Prev'] = () => { if (currentPage > 1) { currentPage--; render(); } };
+        window[idPrefix + 'Next'] = () => { if (currentPage < totalPages) { currentPage++; render(); } };
+
+        render();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        initClientPagination('unsettled', '.unsettled-row', 50);
+        initClientPagination('returned', '.returned-row', 50);
+    });
 </script>
 {% endblock %}

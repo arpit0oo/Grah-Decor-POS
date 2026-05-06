@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
+from app import get_db
 from app.services.snapshot_service import (
     get_all_snapshots,
     get_open_snapshot,
@@ -49,7 +50,11 @@ def closing_form(doc_id):
         flash('This period is already closed.', 'error')
         return redirect(url_for('snapshots.snapshots_list'))
 
-    return render_template('snapshots_closing.html', snapshot=snapshot, doc_id=doc_id)
+    db = get_db()
+    rm_docs = db.collection('raw_materials').stream()
+    system_qty_map = {d.to_dict().get('name'): float(d.to_dict().get('quantity', 0)) for d in rm_docs}
+
+    return render_template('snapshots_closing.html', snapshot=snapshot, doc_id=doc_id, system_qty_map=system_qty_map)
 
 
 # ── Closing submit ─────────────────────────────────────────────────────────────
@@ -79,6 +84,9 @@ def take_closing(doc_id):
         flash('This period is already closed.', 'error')
     elif result == 'no_opening':
         flash('No opening snapshot found for this period.', 'error')
+    elif result.startswith('invalid_count:'):
+        mat_name = result.split(':', 1)[1]
+        flash(f'Validation failed: Closing count cannot exceed current stock for {mat_name}.', 'error')
     else:
         flash('Could not close this period. Please try again.', 'error')
 

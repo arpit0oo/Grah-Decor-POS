@@ -23,10 +23,15 @@ def dashboard():
         except ValueError:
             pass
 
-    if df or dt:
-        transactions = get_all_transactions(date_from=df, date_to=dt)
-    else:
-        transactions = get_all_transactions()
+    cursor_id = request.args.get('cursor_id')
+    direction = request.args.get('direction', 'next')
+
+    transactions, has_prev, has_next = get_all_transactions(
+        date_from=df, date_to=dt,
+        cursor_id=cursor_id,
+        direction=direction,
+        limit=20
+    )
 
     balance = get_running_balance()
 
@@ -41,7 +46,9 @@ def dashboard():
                            filtered_outflow=filtered_outflow,
                            filtered_net=filtered_net,
                            date_from=date_from or '',
-                           date_to=date_to or '')
+                           date_to=date_to or '',
+                           has_prev=has_prev,
+                           has_next=has_next)
 
 @cashbook_bp.route('/add_expense', methods=['POST'])
 def add_expense():

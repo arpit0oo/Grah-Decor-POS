@@ -10,8 +10,16 @@ contact_bp = Blueprint('contact', __name__, url_prefix='/contacts')
 def contacts_list():
     tab = request.args.get('tab', 'vendors')
     vendors = get_all_vendors()
-    customers = get_all_customers()
-    return render_template('contacts.html', vendors=vendors, customers=customers, active_tab=tab)
+    cursor_id = request.args.get('cursor_id')
+    direction = request.args.get('direction', 'next')
+    
+    customers, has_prev, has_next = get_all_customers(
+        cursor_id=cursor_id,
+        direction=direction,
+        limit=20
+    )
+    return render_template('contacts.html', vendors=vendors, customers=customers, active_tab=tab,
+                           has_prev_customer=has_prev, has_next_customer=has_next)
 
 @contact_bp.route('/vendor/add', methods=['POST'])
 def add_vendor_route():

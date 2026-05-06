@@ -23,41 +23,75 @@ def get_stock_deltas(status):
     return (0, 1) # pending, reserved
 
 
-def get_all_orders(date_from=None, date_to=None, platform=None, status=None, review_status=None):
+def get_all_orders(date_from=None, date_to=None, platform=None, status=None, review_status=None, cursor_id=None, direction='next', limit=20):
     db = get_db()
-    query = db.collection('orders').order_by('date', direction='DESCENDING')
+    query = db.collection('orders')
+    
+    if platform:
+        query = query.where(filter=FieldFilter('platform', '==', platform))
+    if status:
+        query = query.where(filter=FieldFilter('status', '==', status))
+        
+    if review_status:
+        if review_status == 'Done':
+            query = query.where(filter=FieldFilter('reviews', '==', 'Done'))
+        elif review_status == 'Pending':
+            query = query.where(filter=FieldFilter('reviews', 'in', ['Pending', 'Not Responding', '']))
+
+    if date_from:
+        df = datetime.combine(date_from, datetime.min.time()).replace(tzinfo=timezone.utc)
+        query = query.where(filter=FieldFilter('date', '>=', df))
+    if date_to:
+        dt = datetime.combine(date_to, datetime.max.time()).replace(tzinfo=timezone.utc)
+        query = query.where(filter=FieldFilter('date', '<=', dt))
+
+    cursor_doc = None
+    if cursor_id:
+        doc_ref = db.collection('orders').document(cursor_id).get()
+        if doc_ref.exists:
+            cursor_doc = doc_ref
+
+    is_prev = (direction == 'prev' and cursor_doc)
+    sort_dir = 'ASCENDING' if is_prev else 'DESCENDING'
+
+    query = query.order_by('date', direction=sort_dir)
+
+    if is_prev:
+        query = query.start_after(cursor_doc).limit(limit + 1)
+    else:
+        if cursor_doc:
+            query = query.start_after(cursor_doc)
+        query = query.limit(limit + 1)
+        
     docs = list(query.stream())
+    
+    has_prev = False
+    has_next = False
+
+    if is_prev:
+        docs.reverse()
+        if len(docs) > limit:
+            has_prev = True
+            docs.pop(0)
+        has_next = True
+    else:
+        if len(docs) > limit:
+            has_next = True
+            docs.pop()
+        if cursor_doc:
+            has_prev = True
+
     results = []
     for d in docs:
         entry = {'id': d.id, **d.to_dict()}
-        # Date filtering (simplified for performance)
-        if date_from or date_to:
-            dt = entry.get('date')
-            if dt and hasattr(dt, 'date'):
-                order_dt = dt.date()
-                if date_from and order_dt < date_from: continue
-                if date_to and order_dt > date_to: continue
-        
-        if platform and entry.get('platform') != platform:
-            continue
-        if status and entry.get('status') != status:
-            continue
-            
-        if review_status:
-            rev = entry.get('reviews') or 'Pending'
-            if review_status == 'Done':
-                if rev != 'Done': continue
-            elif review_status == 'Pending':
-                if rev not in ['Pending', 'Not Responding']: continue
-
         results.append(entry)
 
-    # Secondary sort in memory (Python's sort is stable)
-    # This keeps 'date' as primary (from Firestore) but sorts ties by 'created_at'
+    # Secondary sort in memory for the current page to preserve chronological order for same-date orders
     results.sort(key=lambda x: x.get('created_at').isoformat() if hasattr(x.get('created_at'), 'isoformat') else str(x.get('created_at', '')), reverse=True)
+    # We must ensure the primary sort is still respected after the stable sort
     results.sort(key=lambda x: x.get('date').isoformat() if hasattr(x.get('date'), 'isoformat') else str(x.get('date', '')), reverse=True)
-    
-    return results
+
+    return results, has_prev, has_next
 
 
 def add_order(data):

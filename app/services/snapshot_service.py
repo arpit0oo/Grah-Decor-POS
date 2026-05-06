@@ -205,6 +205,9 @@ def take_closing_snapshot(doc_id, closing_counts):
         system_qty  = system_qty_map.get(name, opening_qty)
         closing_qty = float(closing_counts.get(name, system_qty))
 
+        if closing_qty > system_qty:
+            return f'invalid_count:{name}'
+
         purchases_qty = max(0.0, system_qty - opening_qty)   # net inflow during period
         consumed      = max(0.0, system_qty - closing_qty)   # usage during period
         adjustment    = closing_qty - system_qty              # ± shrinkage / surplus

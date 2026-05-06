@@ -101,17 +101,57 @@ def create_payment_settlement(platform, utr_number, amount_received, order_ids, 
     return doc_ref.id
 
 
-def get_settlement_batches():
-    """Fetch all settlement batch logs, newest first."""
+def get_settlement_batches(cursor_id=None, direction='next', limit=20):
+    """Fetch settlement batch logs, newest first, paginated."""
     db = get_db()
-    docs = db.collection('settlement_batches').order_by('created_at', direction='DESCENDING').stream()
+    query = db.collection('settlement_batches')
+    
+    cursor_doc = None
+    if cursor_id:
+        doc_ref = query.document(cursor_id).get()
+        if doc_ref.exists:
+            cursor_doc = doc_ref
+
+    is_prev = (direction == 'prev' and cursor_doc)
+    sort_dir = 'ASCENDING' if is_prev else 'DESCENDING'
+
+    query = query.order_by('created_at', direction=sort_dir)
+
+    if is_prev:
+        query = query.start_after(cursor_doc).limit(limit + 1)
+    else:
+        if cursor_doc:
+            query = query.start_after(cursor_doc)
+        query = query.limit(limit + 1)
+
+    docs = list(query.stream())
+
+    has_prev = False
+    has_next = False
+
+    if is_prev:
+        docs.reverse()
+        if len(docs) > limit:
+            has_prev = True
+            docs.pop(0)
+        has_next = True
+    else:
+        if len(docs) > limit:
+            has_next = True
+            docs.pop()
+        if cursor_doc:
+            has_prev = True
+
     results = []
     for d in docs:
         entry = {'id': d.id, **d.to_dict()}
         # Safely expose orders_snapshot avoiding dict.items() collision
         entry['order_lines'] = entry.pop('orders_snapshot', [])
         results.append(entry)
-    return results
+        
+    results.sort(key=lambda x: x.get('created_at').isoformat() if hasattr(x.get('created_at'), 'isoformat') else str(x.get('created_at', '')), reverse=True)
+
+    return results, has_prev, has_next
 
 
 def process_order_return(order_id, return_type, penalty_amount, item_condition):

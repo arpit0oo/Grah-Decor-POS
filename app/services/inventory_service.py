@@ -41,10 +41,52 @@ def log_inventory_note(item_type, item_name, color, reason, reference_id=''):
         'reference_id': reference_id
     })
 
-def get_inventory_logs(limit=100):
+def get_inventory_logs(item_name=None, color=None, cursor_id=None, direction='next', limit=20):
     db = get_db()
-    docs = db.collection('inventory_log').order_by('date', direction='DESCENDING').limit(limit).stream()
-    return [{'id': d.id, **d.to_dict()} for d in docs]
+    query = db.collection('inventory_log')
+    
+    if item_name:
+        query = query.where(filter=FieldFilter('item_name', '==', item_name))
+    if color:
+        query = query.where(filter=FieldFilter('color', '==', color))
+
+    cursor_doc = None
+    if cursor_id:
+        doc_ref = query.document(cursor_id).get()
+        if doc_ref.exists:
+            cursor_doc = doc_ref
+
+    is_prev = (direction == 'prev' and cursor_doc)
+    sort_dir = 'ASCENDING' if is_prev else 'DESCENDING'
+
+    query = query.order_by('date', direction=sort_dir)
+
+    if is_prev:
+        query = query.start_after(cursor_doc).limit(limit + 1)
+    else:
+        if cursor_doc:
+            query = query.start_after(cursor_doc)
+        query = query.limit(limit + 1)
+
+    docs = list(query.stream())
+
+    has_prev = False
+    has_next = False
+
+    if is_prev:
+        docs.reverse()
+        if len(docs) > limit:
+            has_prev = True
+            docs.pop(0)
+        has_next = True
+    else:
+        if len(docs) > limit:
+            has_next = True
+            docs.pop()
+        if cursor_doc:
+            has_prev = True
+
+    return [{'id': d.id, **d.to_dict()} for d in docs], has_prev, has_next
 
 def get_product_inventory_logs(name, color=None, limit=100):
     db = get_db()

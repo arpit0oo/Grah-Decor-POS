@@ -67,7 +67,7 @@
             </thead>
             <tbody>
                 {% for m in raw_materials %}
-                <tr>
+                <tr class="raw-row" data-item-index="{{ loop.index }}">
                     <td><span class="text-bold">{{ m.name }}</span></td>
                     <td class="text-right text-bold">{{ m.quantity }}</td>
                     <td class="text-muted">{{ m.unit or '-' }}</td>
@@ -89,6 +89,13 @@
             </tbody>
         </table>
     </div>
+
+    <!-- Pagination Controls -->
+    <div class="pagination-controls" style="display:flex; justify-content:space-between; margin-top: 1rem; align-items: center;">
+        <button type="button" class="btn btn-ghost" id="rawPrev" onclick="rawPrev()">&larr; Previous</button>
+        <div style="font-size: 0.9em; color: var(--text-secondary);" id="rawPageInfo">Page 1</div>
+        <button type="button" class="btn btn-ghost" id="rawNext" onclick="rawNext()">Next &rarr;</button>
+    </div>
 </div>
 
 <!-- ── READY STOCK TAB ───────────────────────────── -->
@@ -105,6 +112,7 @@
 .stock-filter-count-out { background:#fee2e2; color:#991b1b; }
 .stock-filter-active .stock-filter-count-low,
 .stock-filter-active .stock-filter-count-out { background:rgba(0,0,0,0.08); color:inherit; }
+.pagination-hidden { display: none !important; }
 </style>
 <div class="tab-content {% if active_tab != 'ready' %}hidden{% endif %}" id="tab-ready">
     <div class="form-card hidden" id="readyForm">
@@ -191,9 +199,9 @@
                     {% endif %}
                 {% endif %}
                 {# ── PARENT ROW ── #}
-                <tr class="{% if s.variants %}parent-row{% endif %} {% if not s.variants and avail <= 0 %}row-danger{% elif not s.variants and avail < 5 %}row-warning{% endif %}"
+                <tr class="{% if s.variants %}parent-row{% endif %} ready-row {% if not s.variants and avail <= 0 %}row-danger{% elif not s.variants and avail < 5 %}row-warning{% endif %}"
                     style="{% if s.variants %}background: var(--surface);{% endif %}"
-                    data-parent-id="{{ s.id }}" data-badge="{{ ns.pbadge }}">
+                    data-parent-id="{{ s.id }}" data-badge="{{ ns.pbadge }}" data-item-index="{{ loop.index }}">
                     <td style="text-align:center; cursor:pointer;" {% if s.variants
                         %}onclick="toggleVariants('{{ s.id }}')" {% endif %}>
                         {% if s.variants %}<span id="icon-{{ s.id }}" style="font-size:0.8em;">&#9654;</span>{% endif %}
@@ -264,8 +272,8 @@
                 {% if vavail <= 0 %}{% set v_badge = 'out' %}
                 {% elif v.min_stock > 0 and vavail <= v.min_stock %}{% set v_badge = 'low' %}
                 {% else %}{% set v_badge = '' %}{% endif %}
-                <tr class="variant-row hidden" id="variant-{{ s.id }}" style="background:#f8f8ff;"
-                    data-parent-id="{{ s.id }}" data-badge="{{ v_badge }}">
+                <tr class="variant-row hidden ready-row" id="variant-{{ s.id }}" style="background:#f8f8ff;"
+                    data-parent-id="{{ s.id }}" data-badge="{{ v_badge }}" data-item-index="{{ loop.index }}">
                     <td></td>
                     <td style="padding-left:2rem;">
                         <form autocomplete="off" method="POST" id="form-variant-{{ v.id }}"
@@ -315,6 +323,13 @@
             </tbody>
         </table>
     </div>
+
+    <!-- Pagination Controls -->
+    <div class="pagination-controls" style="display:flex; justify-content:space-between; margin-top: 1rem; align-items: center;">
+        <button type="button" class="btn btn-ghost" id="readyPrev" onclick="readyPrev()">&larr; Previous</button>
+        <div style="font-size: 0.9em; color: var(--text-secondary);" id="readyPageInfo">Page 1</div>
+        <button type="button" class="btn btn-ghost" id="readyNext" onclick="readyNext()">Next &rarr;</button>
+    </div>
 </div>
 
 <!-- ── INVENTORY LOGS TAB ──────────────────────────────── -->
@@ -322,28 +337,20 @@
 
     <!-- ── LOGS FILTER BAR ── -->
     <div class="card"
-        style="margin-bottom:1rem; padding:1rem; display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; background:white;">
-        <div class="form-group" style="flex:1; min-width:200px;">
-            <label>Search Item or Reason</label>
-            <input type="text" id="logSearch" placeholder="Type to search..." oninput="filterLogs()">
-        </div>
-        <div class="form-group" style="min-width:150px;">
-            <label>Log Type</label>
-            <select id="logTypeFilter" onchange="filterLogs()">
-                <option value="">All Types</option>
-                <option value="Raw Material">Raw Material</option>
-                <option value="Ready Stock">Ready Stock</option>
-            </select>
-        </div>
-        <div class="form-group" style="min-width:150px;">
-            <label>Date From</label>
-            <input type="date" id="logDateFrom" onchange="filterLogs()">
-        </div>
-        <div class="form-group" style="min-width:150px;">
-            <label>Date To</label>
-            <input type="date" id="logDateTo" onchange="filterLogs()">
-        </div>
-        <button class="btn btn-ghost" onclick="clearLogFilters()" style="margin-bottom:4px;">Clear</button>
+        style="margin-bottom:1rem; padding:1rem; background:white;">
+        <form autocomplete="off" method="GET" action="{{ url_for('inventory.inventory_list') }}" style="display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap;">
+            <input type="hidden" name="tab" value="logs">
+            <div class="form-group" style="flex:1; min-width:200px;">
+                <label>Item Name</label>
+                <input type="text" name="item_name" value="{{ filter_item_name }}" placeholder="e.g. A4 Frame">
+            </div>
+            <div class="form-group" style="min-width:150px;">
+                <label>Color</label>
+                <input type="text" name="color" value="{{ filter_color }}" placeholder="e.g. Black">
+            </div>
+            <button type="submit" class="btn btn-primary" style="margin-bottom:4px;">Filter</button>
+            <a href="{{ url_for('inventory.inventory_list', tab='logs') }}" class="btn btn-ghost" style="margin-bottom:4px;">Clear</a>
+        </form>
     </div>
 
     <div class="table-wrapper">
@@ -388,6 +395,29 @@
                 {% endif %}
             </tbody>
         </table>
+    </div>
+
+    <!-- Pagination Controls -->
+    <div class="pagination-controls" style="display:flex; justify-content:space-between; margin-top: 1rem; align-items: center;">
+        <div>
+            {% if has_prev_log and logs %}
+            <a href="{{ url_for('inventory.inventory_list', tab='logs', item_name=filter_item_name, color=filter_color, cursor_id=(logs|first).id, direction='prev') }}" class="btn btn-ghost">&larr; Previous</a>
+            {% else %}
+            <button type="button" class="btn btn-ghost" disabled>&larr; Previous</button>
+            {% endif %}
+        </div>
+        
+        <div style="font-size: 0.9em; color: var(--text-secondary);">
+            Page size: 20
+        </div>
+
+        <div>
+            {% if has_next_log and logs %}
+            <a href="{{ url_for('inventory.inventory_list', tab='logs', item_name=filter_item_name, color=filter_color, cursor_id=(logs|last).id, direction='next') }}" class="btn btn-ghost">Next &rarr;</a>
+            {% else %}
+            <button type="button" class="btn btn-ghost" disabled>Next &rarr;</button>
+            {% endif %}
+        </div>
     </div>
 </div>
 
@@ -485,7 +515,7 @@
             <button class="modal-close" onclick="closeModal('rawHistoryModal')">&#x00D7;</button>
         </div>
         <p id="rawHistoryTotals" class="text-muted" style="font-size:0.85em; margin-bottom:1rem;">Loading...</p>
-        <div style="overflow-x:auto; max-height:60vh; overflow-y:auto;">
+        <div style="overflow-x:auto; max-height:60vh; overflow-y:auto; margin-bottom: 1rem;">
             <table class="data-table">
                 <thead>
                     <tr>
@@ -500,6 +530,14 @@
                 </tbody>
             </table>
         </div>
+        <!-- Pagination Controls -->
+        <div class="pagination-controls" style="display:flex; justify-content:space-between; align-items: center;" id="rawHistoryPagination">
+            <button type="button" class="btn btn-ghost" id="rawHistoryPrevBtn" onclick="prevRawHistoryPage()">&larr; Previous</button>
+            <div style="font-size: 0.9em; color: var(--text-secondary);" id="rawHistoryPageInfo">
+                Page 1
+            </div>
+            <button type="button" class="btn btn-ghost" id="rawHistoryNextBtn" onclick="nextRawHistoryPage()">Next &rarr;</button>
+        </div>
     </div>
 </div>
 
@@ -507,58 +545,7 @@
 
 {% block scripts %}
 <script>
-    // ── LOGS FILTERING LOGIC ──
-    function filterLogs() {
-        const searchVal = document.getElementById('logSearch').value.toLowerCase();
-        const typeVal = document.getElementById('logTypeFilter').value;
-        const dateFrom = document.getElementById('logDateFrom').value;
-        const dateTo = document.getElementById('logDateTo').value;
 
-        const rows = document.querySelectorAll('#logsTableBody .log-row');
-        let visibleCount = 0;
-
-        rows.forEach(row => {
-            const rowSearchText = row.getAttribute('data-search');
-            const rowType = row.getAttribute('data-type');
-            const rowDate = row.getAttribute('data-date'); // YYYY-MM-DD
-
-            // Search Check
-            const matchSearch = rowSearchText.indexOf(searchVal) !== -1;
-
-            // Type Check
-            const matchType = typeVal === "" || rowType === typeVal;
-
-            // Date Check (simple string comparison works for YYYY-MM-DD)
-            let matchDate = true;
-            if (rowDate) {
-                if (dateFrom && rowDate < dateFrom) matchDate = false;
-                if (dateTo && rowDate > dateTo) matchDate = false;
-            } else if (dateFrom || dateTo) {
-                matchDate = false; // no date on row but filter is active
-            }
-
-            if (matchSearch && matchType && matchDate) {
-                row.style.display = '';
-                visibleCount++;
-            } else {
-                row.style.display = 'none';
-            }
-        });
-
-        // Toggle Empty State row
-        const emptyRow = document.getElementById('logsEmptyState');
-        if (emptyRow) {
-            emptyRow.style.display = visibleCount === 0 ? '' : 'none';
-        }
-    }
-
-    function clearLogFilters() {
-        document.getElementById('logSearch').value = '';
-        document.getElementById('logTypeFilter').value = '';
-        document.getElementById('logDateFrom').value = '';
-        document.getElementById('logDateTo').value = '';
-        filterLogs();
-    }
 
     async function openRawHistoryModal(name) {
         document.getElementById('rawHistoryTitle').textContent = name;
@@ -567,6 +554,7 @@
         tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding:2rem;">Loading…</td></tr>';
         totalsDiv.textContent = 'Loading…';
         document.getElementById('rawHistoryModal').classList.remove('hidden');
+        document.getElementById('rawHistoryPagination').style.display = 'none';
 
         try {
             const res = await fetch('/inventory/api/raw-stock-ledger?name=' + encodeURIComponent(name));
@@ -584,38 +572,11 @@
                 return;
             }
 
-            // Type badge colours
-            const typeStyle = {
-                'PO Received': { bg: '#d1fae5', color: '#065f46', border: '#6ee7b7' },
-                'PO Return': { bg: '#ffedd5', color: '#9a3412', border: '#fdba74' },
-                'Production': { bg: '#fee2e2', color: '#991b1b', border: '#fca5a5' },
-                'Audit Adjustment': { bg: '#ede9fe', color: '#5b21b6', border: '#c4b5fd' },
-                'Manual': { bg: '#fef3c7', color: '#92400e', border: '#fcd34d' },
-                'Inflow': { bg: '#dbeafe', color: '#1e40af', border: '#93c5fd' },
-                'Outflow': { bg: '#f3f4f6', color: '#374151', border: '#d1d5db' },
-            };
-
             let totalIn = 0, totalOut = 0;
             data.forEach(ev => {
                 const d = ev.delta || 0;
                 if (d > 0) totalIn += d;
                 else totalOut += Math.abs(d);
-
-                const s = typeStyle[ev.type] || { bg: '#f3f4f6', color: '#374151', border: '#d1d5db' };
-                const badgeHtml = `<span class="badge" style="background:${s.bg};color:${s.color};border:1px solid ${s.border};font-size:0.75em;">${ev.type}</span>`;
-
-                const movHtml = d > 0
-                    ? `<span style="color:#059669;font-weight:700;">+${d.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>`
-                    : `<span style="color:#dc2626;font-weight:700;">${d.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>`;
-
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td class="text-muted" style="white-space:nowrap;">${ev.date_str || '-'}</td>
-                    <td>${badgeHtml}</td>
-                    <td style="font-size:0.85em;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(ev.reference || '').replace(/"/g, "&quot;")}">  ${ev.reference || '-'}</td>
-                    <td style="text-align:right;">${movHtml}</td>
-                `;
-                tbody.appendChild(tr);
             });
 
             totalsDiv.innerHTML =
@@ -623,10 +584,84 @@
                 &nbsp;|&nbsp;
                 Total Out: <strong style="color:#dc2626;">−${totalOut.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong>`;
 
+            window._rawHistoryData = data;
+            window._rawHistoryCurrentPage = 1;
+            renderRawHistoryPage();
+
         } catch (err) {
             console.error(err);
             tbody.innerHTML = '<tr><td colspan="5" class="empty-state text-danger">Failed to load ledger.</td></tr>';
             totalsDiv.textContent = '';
+        }
+    }
+
+    function renderRawHistoryPage() {
+        const data = window._rawHistoryData || [];
+        const tbody = document.getElementById('rawHistoryTableBody');
+        const pagination = document.getElementById('rawHistoryPagination');
+        
+        if (data.length === 0) {
+            pagination.style.display = 'none';
+            return;
+        }
+
+        pagination.style.display = 'flex';
+        const pageSize = 20;
+        const totalPages = Math.ceil(data.length / pageSize);
+        const page = window._rawHistoryCurrentPage;
+        
+        const start = (page - 1) * pageSize;
+        const end = start + pageSize;
+        const pageData = data.slice(start, end);
+
+        const typeStyle = {
+            'PO Received': { bg: '#d1fae5', color: '#065f46', border: '#6ee7b7' },
+            'PO Return': { bg: '#ffedd5', color: '#9a3412', border: '#fdba74' },
+            'Production': { bg: '#fee2e2', color: '#991b1b', border: '#fca5a5' },
+            'Audit Adjustment': { bg: '#ede9fe', color: '#5b21b6', border: '#c4b5fd' },
+            'Manual': { bg: '#fef3c7', color: '#92400e', border: '#fcd34d' },
+            'Inflow': { bg: '#dbeafe', color: '#1e40af', border: '#93c5fd' },
+            'Outflow': { bg: '#f3f4f6', color: '#374151', border: '#d1d5db' },
+        };
+
+        tbody.innerHTML = '';
+        pageData.forEach(ev => {
+            const d = ev.delta || 0;
+            const s = typeStyle[ev.type] || { bg: '#f3f4f6', color: '#374151', border: '#d1d5db' };
+            const badgeHtml = `<span class="badge" style="background:${s.bg};color:${s.color};border:1px solid ${s.border};font-size:0.75em;">${ev.type}</span>`;
+
+            const movHtml = d > 0
+                ? `<span style="color:#059669;font-weight:700;">+${d.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>`
+                : `<span style="color:#dc2626;font-weight:700;">${d.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>`;
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="text-muted" style="white-space:nowrap;">${ev.date_str || '-'}</td>
+                <td>${badgeHtml}</td>
+                <td style="font-size:0.85em;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(ev.reference || '').replace(/"/g, "&quot;")}">  ${ev.reference || '-'}</td>
+                <td style="text-align:right;">${movHtml}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        document.getElementById('rawHistoryPageInfo').textContent = `Page ${page} of ${totalPages}`;
+        document.getElementById('rawHistoryPrevBtn').disabled = (page === 1);
+        document.getElementById('rawHistoryNextBtn').disabled = (page === totalPages);
+    }
+
+    function prevRawHistoryPage() {
+        if (window._rawHistoryCurrentPage > 1) {
+            window._rawHistoryCurrentPage--;
+            renderRawHistoryPage();
+        }
+    }
+
+    function nextRawHistoryPage() {
+        const pageSize = 20;
+        const totalPages = Math.ceil((window._rawHistoryData || []).length / pageSize);
+        if (window._rawHistoryCurrentPage < totalPages) {
+            window._rawHistoryCurrentPage++;
+            renderRawHistoryPage();
         }
     }
 
@@ -669,6 +704,57 @@
         td.querySelector('.save-variant-btn').classList.remove('hidden');
         inp.focus();
     }
+
+    // Client-side Pagination Logic
+    function initClientPagination(idPrefix, rowClass, pageSize = 50) {
+        let currentPage = 1;
+        const rows = document.querySelectorAll(rowClass);
+        const items = [];
+        let currentItem = null;
+        let lastIndex = null;
+
+        rows.forEach(r => {
+            const idx = r.getAttribute('data-item-index');
+            if (idx !== lastIndex) {
+                currentItem = [];
+                items.push(currentItem);
+                lastIndex = idx;
+            }
+            currentItem.push(r);
+        });
+
+        const totalPages = Math.ceil(items.length / pageSize) || 1;
+
+        function render() {
+            items.forEach((group, index) => {
+                const page = Math.floor(index / pageSize) + 1;
+                const show = (page === currentPage);
+                group.forEach(r => {
+                    if (show) {
+                        r.classList.remove('pagination-hidden');
+                    } else {
+                        r.classList.add('pagination-hidden');
+                    }
+                });
+            });
+            const pageInfo = document.getElementById(idPrefix + 'PageInfo');
+            if (pageInfo) pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+            const prevBtn = document.getElementById(idPrefix + 'Prev');
+            if (prevBtn) prevBtn.disabled = (currentPage === 1);
+            const nextBtn = document.getElementById(idPrefix + 'Next');
+            if (nextBtn) nextBtn.disabled = (currentPage === totalPages);
+        }
+
+        window[idPrefix + 'Prev'] = () => { if (currentPage > 1) { currentPage--; render(); } };
+        window[idPrefix + 'Next'] = () => { if (currentPage < totalPages) { currentPage++; render(); } };
+
+        render();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        initClientPagination('raw', '.raw-row', 50);
+        initClientPagination('ready', '.ready-row', 50);
+    });
 
     function filterStock(mode) {
         // Update active tab

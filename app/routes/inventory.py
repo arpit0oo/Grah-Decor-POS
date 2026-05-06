@@ -15,7 +15,18 @@ from datetime import datetime, timezone
 def inventory_list():
     raw = get_all_raw_materials()
     ready = get_all_ready_stock()
-    logs = get_inventory_logs(limit=200)
+    item_name = request.args.get('item_name')
+    color = request.args.get('color')
+    cursor_id = request.args.get('cursor_id')
+    direction = request.args.get('direction', 'next')
+    
+    logs, has_prev, has_next = get_inventory_logs(
+        item_name=item_name or None,
+        color=color or None,
+        cursor_id=cursor_id,
+        direction=direction,
+        limit=20
+    )
     
     # Calculate Quick Analytics
     today = datetime.now(timezone.utc).date()
@@ -42,8 +53,9 @@ def inventory_list():
     tab = request.args.get('tab', 'ready')
     return render_template('inventory.html', 
                            raw_materials=raw, ready_stock=get_ready_stock_grouped(), logs=logs, active_tab=tab,
-                           today_in=today_in, today_out=today_out, 
-                           today_log_count=today_log_count, today_shipped=today_shipped)
+                           today_log_count=today_log_count, today_shipped=today_shipped,
+                           filter_item_name=item_name or '', filter_color=color or '',
+                           has_prev_log=has_prev, has_next_log=has_next)
 
 
 # ── Raw Materials ──────────────────────────────────────────────

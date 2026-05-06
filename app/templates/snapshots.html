@@ -26,7 +26,7 @@
 {% for snap in snapshots %}
 {% set status = snap.status if snap.status else 'none' %}
 
-<div class="snapshot-card snapshot-card--{{ status }}">
+<div class="snapshot-card snapshot-card--{{ status }} snap-row" data-item-index="{{ loop.index }}">
 
     {# Card Header #}
     <div class="snapshot-card__header">
@@ -152,11 +152,22 @@
 {% endfor %}
 
 </div>{# /.list #}
+
+    <!-- Pagination Controls -->
+    {% if snapshots|length > 0 %}
+    <div class="pagination-controls" style="display:flex; justify-content:space-between; margin-top: 1rem; align-items: center; max-width:960px;">
+        <button type="button" class="btn btn-ghost" id="snapPrev" onclick="snapPrev()">&larr; Previous</button>
+        <div style="font-size: 0.9em; color: var(--text-secondary);" id="snapPageInfo">Page 1</div>
+        <button type="button" class="btn btn-ghost" id="snapNext" onclick="snapNext()">Next &rarr;</button>
+    </div>
+    {% endif %}
+
 {% endblock %}
 
 
 {% block scripts %}
 <style>
+    .pagination-hidden { display: none !important; }
     /* ── Audit notice ────────────────────────────── */
     .audit-notice {
         display: inline-flex;
@@ -205,6 +216,58 @@
     .meta-sub   { font-size:0.78rem;  color:var(--text-secondary); margin-top:0.15rem; }
 </style>
 <script>
+    // Client-side Pagination Logic
+    function initClientPagination(idPrefix, rowClass, pageSize = 50) {
+        let currentPage = 1;
+        const rows = document.querySelectorAll(rowClass);
+        const items = [];
+        let currentItem = null;
+        let lastIndex = null;
+
+        if (rows.length === 0) return;
+
+        rows.forEach(r => {
+            const idx = r.getAttribute('data-item-index');
+            if (idx !== lastIndex) {
+                currentItem = [];
+                items.push(currentItem);
+                lastIndex = idx;
+            }
+            currentItem.push(r);
+        });
+
+        const totalPages = Math.ceil(items.length / pageSize) || 1;
+
+        function render() {
+            items.forEach((group, index) => {
+                const page = Math.floor(index / pageSize) + 1;
+                const show = (page === currentPage);
+                group.forEach(r => {
+                    if (show) {
+                        r.classList.remove('pagination-hidden');
+                    } else {
+                        r.classList.add('pagination-hidden');
+                    }
+                });
+            });
+            const pageInfo = document.getElementById(idPrefix + 'PageInfo');
+            if (pageInfo) pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+            const prevBtn = document.getElementById(idPrefix + 'Prev');
+            if (prevBtn) prevBtn.disabled = (currentPage === 1);
+            const nextBtn = document.getElementById(idPrefix + 'Next');
+            if (nextBtn) nextBtn.disabled = (currentPage === totalPages);
+        }
+
+        window[idPrefix + 'Prev'] = () => { if (currentPage > 1) { currentPage--; render(); } };
+        window[idPrefix + 'Next'] = () => { if (currentPage < totalPages) { currentPage++; render(); } };
+
+        render();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        initClientPagination('snap', '.snap-row', 50);
+    });
+
     function toggleReport(id, btn) {
         const el = document.getElementById(id);
         if (!el) return;
