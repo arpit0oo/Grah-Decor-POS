@@ -154,7 +154,50 @@
     .badge-pay.unpaid   { background: #fee2e2; color: #991b1b; }
 
     /* ── Actions ─────────────────────────────────────────────────────── */
-    .actions-cell { min-width: 155px; }
+    .actions-cell { min-width: 130px; text-align: center; }
+
+    /* ── Action Dropdown ─────────────────────────────────────────────── */
+    .po-action-dropdown { position: relative; display: inline-block; }
+    .po-action-toggle {
+        display: flex; align-items: center; gap: 6px;
+        padding: 0.35rem 0.75rem;
+        font-size: 0.8rem; font-weight: 600;
+        border-radius: 6px; cursor: pointer;
+        border: 1px solid var(--border);
+        background: var(--bg-card, #fff);
+        color: var(--text-main);
+        white-space: nowrap;
+        transition: background 0.15s, box-shadow 0.15s;
+    }
+    .po-action-toggle:hover { background: var(--bg-body, #f8fafc); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+    .po-action-toggle .caret { font-size: 0.6rem; opacity: 0.5; transition: transform 0.2s; }
+    .po-action-dropdown.open .po-action-toggle .caret { transform: rotate(180deg); }
+    .po-action-menu {
+        display: none;
+        position: absolute; right: 0; top: calc(100% + 4px);
+        min-width: 170px; z-index: 500;
+        background: var(--bg-card, #fff);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        box-shadow: 0 8px 24px rgba(0,0,0,.12);
+        padding: 4px 0;
+        overflow: hidden;
+    }
+    .po-action-dropdown.open .po-action-menu { display: block; }
+    .po-action-menu .dd-item {
+        display: block; width: 100%;
+        padding: 0.45rem 1rem;
+        font-size: 0.82rem; font-weight: 500;
+        text-align: left; cursor: pointer;
+        background: none; border: none;
+        color: var(--text-main);
+        transition: background 0.1s;
+        white-space: nowrap;
+    }
+    .po-action-menu .dd-item:hover { background: var(--bg-body, #f5f5f5); }
+    .po-action-menu .dd-item.danger { color: var(--danger, #dc2626); }
+    .po-action-menu .dd-item.success { color: #16a34a; }
+    .po-action-menu .dd-divider { height: 1px; background: var(--border); margin: 4px 0; }
 </style>
 
 <!-- Purchases Table -->
@@ -253,38 +296,48 @@
                 </td>
                 
                 <!-- Actions -->
-                <td class="actions-cell" style="min-width:150px;">
-                    <div style="display: flex; flex-direction: column; gap: 6px;">
-                        {% if p.status == 'Draft' %}
-                            <form method="POST" action="{{ url_for('purchase.purchase_sent', po_id=p.id) }}" style="margin:0;">
-                                <button type="submit" class="btn btn-primary btn-sm w-100">Mark Sent</button>
-                            </form>
-                        {% endif %}
+                <td class="actions-cell">
+                    {% set amount_paid = p.total_cost - p.balance_due if p.balance_due is defined else (0 if p.payment_status == 'unpaid' else p.total_cost) %}
+                    <div class="po-action-dropdown" id="dd-{{ p.id }}">
+                        <button class="po-action-toggle" onclick="toggleActionDd('dd-{{ p.id }}')">
+                            Actions <span class="caret">▼</span>
+                        </button>
+                        <div class="po-action-menu">
 
-                        {% if p.status not in ['Draft', 'Cancelled'] and p.balance_due is defined and p.balance_due > 0.005 %}
-                            <button type="button" class="btn btn-primary btn-sm w-100" data-po-id="{{ p.id }}" data-po="{{ p|tojson|forceescape }}" onclick="openPhase2PayModal(this)">Pay Balance</button>
-                        {% endif %}
+                            {# ── Primary workflow actions ── #}
+                            {% if p.status == 'Draft' %}
+                                <form method="POST" action="{{ url_for('purchase.purchase_sent', po_id=p.id) }}" style="margin:0;">
+                                    <button type="submit" class="dd-item">&#128228; Mark Sent</button>
+                                </form>
+                            {% endif %}
 
-                        {% if p.status not in ['Draft', 'Cancelled'] and progress < 100 %}
-                            <button type="button" class="btn btn-success btn-sm w-100" data-po-id="{{ p.id }}" data-po="{{ p|tojson|forceescape }}" onclick="openReceiveModal(this)">Receive Items</button>
-                        {% endif %}
+                            {% if p.status not in ['Draft', 'Cancelled'] and p.balance_due is defined and p.balance_due > 0.005 %}
+                                <button class="dd-item" data-po-id="{{ p.id }}" data-po="{{ p|tojson|forceescape }}" onclick="closeAllDd(); openPhase2PayModal(this)">&#128178; Pay Balance</button>
+                            {% endif %}
 
-                        {% if ns.received > 0 %}
-                            <button type="button" class="btn btn-outline-danger btn-sm w-100" data-po-id="{{ p.id }}" data-po="{{ p|tojson|forceescape }}" onclick="openPhase2ReturnModal(this)">Return Defects</button>
-                        {% endif %}
+                            {% if p.status not in ['Draft', 'Cancelled'] and progress < 100 %}
+                                <button class="dd-item" data-po-id="{{ p.id }}" data-po="{{ p|tojson|forceescape }}" onclick="closeAllDd(); openReceiveModal(this)">&#128230; Receive Items</button>
+                            {% endif %}
 
-                        {% if p.balance_due is defined and p.balance_due < -0.005 %}
-                            <button type="button" class="btn btn-outline-success btn-sm w-100" data-po-id="{{ p.id }}" data-po="{{ p|tojson|forceescape }}" onclick="openRefundModal(this)">Collect Refund</button>
-                        {% endif %}
+                            {% if ns.received > 0 %}
+                                <button class="dd-item danger" data-po-id="{{ p.id }}" data-po="{{ p|tojson|forceescape }}" onclick="closeAllDd(); openPhase2ReturnModal(this)">&#8617; Return Defects</button>
+                            {% endif %}
 
-                        {% set amount_paid = p.total_cost - p.balance_due if p.balance_due is defined else (0 if p.payment_status == 'unpaid' else p.total_cost) %}
-                        {% if p.status in ['Draft', 'Sent'] and ns.received == 0 and amount_paid <= 0.005 %}
-                            <form method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0;">
-                                <button type="submit" class="btn btn-outline-danger btn-sm w-100" onclick="return confirm('Cancel this PO?');">Cancel</button>
-                            </form>
-                        {% endif %}
+                            {% if p.balance_due is defined and p.balance_due < -0.005 %}
+                                <button class="dd-item success" data-po-id="{{ p.id }}" data-po="{{ p|tojson|forceescape }}" onclick="closeAllDd(); openRefundModal(this)">&#10003; Collect Refund</button>
+                            {% endif %}
 
-                        <button type="button" class="btn btn-outline-secondary btn-sm w-100" data-po="{{ p|tojson|forceescape }}" onclick="openViewPoModal(this)">History</button>
+                            {# ── Divider before destructive/neutral actions ── #}
+                            <div class="dd-divider"></div>
+
+                            {% if p.status in ['Draft', 'Sent'] and ns.received == 0 and amount_paid <= 0.005 %}
+                                <form method="POST" action="{{ url_for('purchase.purchase_cancel', po_id=p.id) }}" style="margin:0;">
+                                    <button type="submit" class="dd-item danger" onclick="return confirm('Cancel this PO?');">&#10005; Cancel PO</button>
+                                </form>
+                            {% endif %}
+
+                            <button class="dd-item" data-po="{{ p|tojson|forceescape }}" onclick="closeAllDd(); openViewPoModal(this)">&#128203; View History</button>
+                        </div>
                     </div>
                 </td>
             </tr>
@@ -399,7 +452,10 @@
             <div><span class="text-muted">Balance Due:</span> <strong id="p2-pay-balance" style="color:var(--danger);"></strong></div>
         </div>
         <div class="form-group" style="margin-bottom:1rem;">
-            <label>Payment Amount ₹ *</label>
+            <label style="display:flex; justify-content:space-between; align-items:baseline;">
+                Payment Amount ₹ *
+                <span id="p2-pay-max-hint" style="font-size:0.72rem; color:var(--text-secondary); font-weight:400;"></span>
+            </label>
             <input type="number" id="p2-pay-amount" class="form-control" step="0.01" min="0.01" required>
         </div>
         <div class="form-group" style="margin-bottom:1rem;">
@@ -637,6 +693,7 @@ async function submitPartialReceive() {
 
 /* ── Phase 3B: Partial Pay ───────────────────────────────────────────────── */
 let _payPoId = null;
+let currentPoBalance = 0;  // tracks balance_due of the currently-open pay modal
 
 function openPhase2PayModal(btn) {
     const po = JSON.parse(btn.getAttribute('data-po'));
@@ -644,9 +701,11 @@ function openPhase2PayModal(btn) {
     
     document.getElementById('p2-pay-po').textContent = po.po_number || _payPoId;
     const balance = parseFloat(po.balance_due || 0);
+    currentPoBalance = balance;  // store for validation
     document.getElementById('p2-pay-balance').textContent = '₹ ' + balance.toFixed(2);
     document.getElementById('p2-pay-amount').value = balance.toFixed(2);
     document.getElementById('p2-pay-amount').max = balance.toFixed(2);
+    document.getElementById('p2-pay-max-hint').textContent = 'Max: ₹' + balance.toFixed(2);
     
     document.getElementById('p2-pay-ref').value = '';
     document.getElementById('p2-pay-extra-toggle').checked = false;
@@ -688,6 +747,12 @@ async function submitPhase2Pay() {
     const errEl = document.getElementById('p2-pay-error');
     if (!amt || amt <= 0) {
         errEl.textContent = 'Enter a valid payment amount.';
+        return;
+    }
+
+    const isExtraCheck = document.getElementById('p2-pay-extra-toggle').checked;
+    if (!isExtraCheck && amt > currentPoBalance + 0.005) {
+        errEl.textContent = `Amount cannot exceed the balance due of ₹${currentPoBalance.toFixed(2)}.`;
         return;
     }
     
@@ -1059,5 +1124,22 @@ async function submitRefund() {
         btn.textContent = 'Confirm Refund Receipt';
     }
 }
+/* ── Action Dropdown ────────────────────────────────────────────────────── */
+function toggleActionDd(id) {
+    const dd = document.getElementById(id);
+    const isOpen = dd.classList.contains('open');
+    closeAllDd();
+    if (!isOpen) dd.classList.add('open');
+}
+
+function closeAllDd() {
+    document.querySelectorAll('.po-action-dropdown.open')
+            .forEach(el => el.classList.remove('open'));
+}
+
+// Close dropdown when clicking anywhere outside
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.po-action-dropdown')) closeAllDd();
+});
 </script>
 {% endblock %}
