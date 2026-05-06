@@ -178,6 +178,7 @@ TAB 2: SETTLEMENT LOGS (ACCORDION)
             style="border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;">
             <!-- Accordion Header -->
             <div class="accordion-header" onclick="toggleAccordion(this)"
+                data-utr="{{ batch.utr_number }}"
                 style="display:flex; justify-content:space-between; align-items:center; padding:1rem 1.25rem; cursor:pointer; background:var(--surface); transition: background 0.2s;">
                 <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
                     <span class="text-bold" style="font-size:1em;">
@@ -615,6 +616,42 @@ PROCESS RETURN MODAL
     document.addEventListener('DOMContentLoaded', () => {
         initClientPagination('unsettled', '.unsettled-row', 50);
         initClientPagination('returned', '.returned-row', 50);
+
+        // ── Deep-link: auto-expand a Settlement Log by UTR ──
+        const params = new URLSearchParams(window.location.search);
+        const targetUtr = params.get('utr');
+        if (targetUtr) {
+            // 1. Switch to the Settlement Logs tab
+            switchSettlementTab('logs');
+
+            // 2. Find the accordion header whose data-utr matches
+            const header = document.querySelector(
+                `.accordion-header[data-utr="${targetUtr}"]`
+            );
+
+            if (header) {
+                // 3. Expand it (only if currently collapsed)
+                const body = header.nextElementSibling;
+                if (body && body.classList.contains('hidden')) {
+                    toggleAccordion(header);
+                }
+
+                // 4. Scroll into view with a brief visual highlight
+                setTimeout(() => {
+                    header.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    const card = header.closest('.accordion-item');
+                    if (card) {
+                        card.style.transition = 'box-shadow 0.3s, outline 0.3s';
+                        card.style.outline = '2px solid var(--primary, #6366f1)';
+                        card.style.boxShadow = '0 0 0 4px rgba(99,102,241,0.18)';
+                        setTimeout(() => {
+                            card.style.outline = '';
+                            card.style.boxShadow = '';
+                        }, 2500);
+                    }
+                }, 150);
+            }
+        }
     });
 </script>
 {% endblock %}
