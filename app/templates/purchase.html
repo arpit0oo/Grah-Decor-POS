@@ -652,13 +652,27 @@ function openReceiveModal(btn) {
 
 async function submitPartialReceive() {
     const inputs = document.querySelectorAll('.recv-qty-input');
+    const errEl  = document.getElementById('recv-modal-error');
+    errEl.textContent = '';
+
+    // ── Strict max validation ────────────────────────────────────────────────
+    for (const inp of inputs) {
+        const entered = parseFloat(inp.value) || 0;
+        const maxAllowed = parseFloat(inp.getAttribute('max')) || 0;
+        if (entered > maxAllowed + 0.001) {   // 0.001 tolerance for float noise
+            const itemName = inp.dataset.item || 'an item';
+            errEl.textContent = `"${itemName}": quantity ${entered} exceeds remaining receivable amount (${maxAllowed}).`;
+            inp.focus();
+            return;
+        }
+    }
+
     const quantities = {};
     inputs.forEach(inp => {
         const qty = parseFloat(inp.value) || 0;
         if (qty > 0) quantities[inp.dataset.item] = qty;
     });
 
-    const errEl = document.getElementById('recv-modal-error');
     if (Object.keys(quantities).length === 0) {
         errEl.textContent = 'Please enter at least one quantity to receive.';
         return;
