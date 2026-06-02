@@ -22,7 +22,12 @@
     </div>
     <div class="closing-info-item">
         <span class="info-label">Materials</span>
-        <span class="info-value">{{ snapshot.opening.materials|length if snapshot.opening and snapshot.opening.materials else 0 }}</span>
+        <span class="info-value">{{ merged_materials|length }}
+            {% set new_count = merged_materials | selectattr('is_new') | list | length %}
+            {% if new_count > 0 %}
+            <span style="font-size:0.72em; font-weight:500; color:#b45309; margin-left:0.35rem;">(+{{ new_count }} new)</span>
+            {% endif %}
+        </span>
     </div>
     <div class="closing-info-item">
         <span class="info-label">Opening Source</span>
@@ -52,12 +57,18 @@
                 </tr>
             </thead>
             <tbody>
-                {% for m in snapshot.opening.materials %}
+                {% for m in merged_materials %}
                 {% set sys_qty = system_qty_map.get(m.name, m.opening_qty) %}
                 {% set diff = sys_qty - m.opening_qty %}
                 {% set purchases = diff if diff > 0 else 0 %}
-                <tr>
-                    <td class="text-bold">{{ m.name }}</td>
+                <tr{% if m.is_new %} style="background:#fffbeb;"{% endif %}>
+                    <td class="text-bold">
+                        {{ m.name }}
+                        {% if m.is_new %}
+                        <span style="display:inline-block; margin-left:0.4rem; padding:0.1rem 0.45rem; background:#fef3c7; color:#b45309; border:1px solid #fde68a; border-radius:50px; font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; vertical-align:middle;">NEW</span>
+                        <div style="font-size:0.72rem; font-weight:400; color:#92400e; margin-top:0.1rem;">Added after period opened</div>
+                        {% endif %}
+                    </td>
                     <td class="text-muted">{{ m.unit }}</td>
                     <td style="text-align:right;">{{ "%.2f"|format(m.opening_qty) }}</td>
                     <td style="text-align:right; color:var(--text-secondary);">{{ "%.2f"|format(sys_qty) }}</td>
@@ -82,7 +93,7 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="4" class="empty-state">No materials in this period's opening snapshot.</td></tr>
+                <tr><td colspan="6" class="empty-state">No materials found.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

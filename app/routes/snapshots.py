@@ -70,10 +70,51 @@ def closing_form(doc_id):
         return redirect(url_for('snapshots.snapshots_list'))
 
     db = get_db()
-    rm_docs = db.collection('raw_materials').stream()
-    system_qty_map = {d.to_dict().get('name'): float(d.to_dict().get('quantity', 0)) for d in rm_docs}
 
-    return render_template('snapshots_closing.html', snapshot=snapshot, doc_id=doc_id, system_qty_map=system_qty_map)
+    # Fetch all current raw_materials in one pass
+    rm_docs_raw = list(db.collection('raw_materials').order_by('name').stream())
+    system_qty_map  = {}  # name → current system qty (for template display)
+    live_rm_map     = {}  # name → full rm dict (unit, price, qty)
+    for d in rm_docs_raw:
+        m    = d.to_dict()
+        name = m.get('name', '')
+        if name:
+            system_qty_map[name] = float(m.get('quantity', 0))
+            live_rm_map[name]    = m
+
+    # Build merged materials list:
+    # 1. All materials from the opening snapshot (with their stored opening_qty)
+    opening_names  = set()
+    merged_materials = []
+    for m in (snapshot.get('opening') or {}).get('materials', []):
+        name = m.get('name', '')
+        opening_names.add(name)
+        merged_materials.append({
+            'name':        name,
+            'unit':        m.get('unit', 'pcs'),
+            'opening_qty': float(m.get('opening_qty', 0)),
+            'price':       float(m.get('price', 0)),
+            'is_new':      False,
+        })
+
+    # 2. New materials added after opening — opening_qty = 0
+    for name, rm in live_rm_map.items():
+        if name not in opening_names:
+            merged_materials.append({
+                'name':        name,
+                'unit':        rm.get('unit', 'pcs'),
+                'opening_qty': 0.0,
+                'price':       float(rm.get('price', 0)),
+                'is_new':      True,
+            })
+
+    return render_template(
+        'snapshots_closing.html',
+        snapshot=snapshot,
+        doc_id=doc_id,
+        system_qty_map=system_qty_map,
+        merged_materials=merged_materials,
+    )
 
 
 # ── Raw Material Audit — Closing submit ───────────────────────────────────────
@@ -86,14 +127,30 @@ def take_closing(doc_id):
         return redirect(url_for('snapshots.snapshots_list'))
 
     opening_materials = snapshot.get('opening', {}).get('materials', [])
+    opening_names     = {m['name'] for m in opening_materials}
+
     closing_counts = {}
+
+    # Pass 1 — collect counts for materials present at opening
     for m in opening_materials:
         name = m['name']
-        raw = request.form.get(f'closing_{name}', '').strip()
+        raw  = request.form.get(f'closing_{name}', '').strip()
         try:
             closing_counts[name] = float(raw)
         except (ValueError, TypeError):
             closing_counts[name] = 0.0
+
+    # Pass 2 — collect counts for new materials added after opening
+    db = get_db()
+    rm_docs = db.collection('raw_materials').stream()
+    for d in rm_docs:
+        name = d.to_dict().get('name', '')
+        if name and name not in opening_names:
+            raw = request.form.get(f'closing_{name}', '').strip()
+            try:
+                closing_counts[name] = float(raw)
+            except (ValueError, TypeError):
+                closing_counts[name] = 0.0
 
     result = take_closing_snapshot(doc_id, closing_counts)
 

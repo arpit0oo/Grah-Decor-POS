@@ -185,15 +185,22 @@ def take_closing_snapshot(doc_id, closing_counts):
     now              = datetime.now(timezone.utc)
     opening_materials = existing['opening']['materials']
 
-    # Fetch live raw_materials quantities in one pass
+    # Build a set of names already covered by the opening snapshot
+    opening_names = {m['name'] for m in opening_materials}
+
+    # Fetch live raw_materials in one pass — capture qty, unit, and price
     rm_docs = db.collection('raw_materials').order_by('name').stream()
-    system_qty_map = {}  # name → current system qty
-    rm_id_map      = {}  # name → firestore doc id
+    system_qty_map = {}   # name → current system qty
+    rm_id_map      = {}   # name → firestore doc id
+    rm_unit_map    = {}   # name → unit string
+    rm_price_map   = {}   # name → current price (for WAC pricing foundation)
     for d in rm_docs:
-        m = d.to_dict()
+        m    = d.to_dict()
         name = m.get('name', '')
         system_qty_map[name] = float(m.get('quantity', 0))
         rm_id_map[name]      = d.id
+        rm_unit_map[name]    = m.get('unit', 'pcs')
+        rm_price_map[name]   = float(m.get('price', 0))
 
     period_start = existing.get('period_start')
     start_label  = _fmt_date(period_start)
@@ -201,6 +208,8 @@ def take_closing_snapshot(doc_id, closing_counts):
     audit_reason = f'Stock Audit Closing — {start_label} → {end_label}'
 
     closing_materials = []
+
+    # ── Pass 1: Materials present at opening ──────────────────────────────
     for m in opening_materials:
         name        = m['name']
         opening_qty = float(m.get('opening_qty', 0))
@@ -215,12 +224,42 @@ def take_closing_snapshot(doc_id, closing_counts):
         adjustment    = closing_qty - system_qty              # ± shrinkage / surplus
 
         closing_materials.append({
-            'name':         name,
-            'system_qty':   system_qty,
-            'closing_qty':  closing_qty,
+            'name':          name,
+            'unit':          m.get('unit', rm_unit_map.get(name, 'pcs')),
+            'system_qty':    system_qty,
+            'closing_qty':   closing_qty,
             'purchases_qty': purchases_qty,
-            'consumed':     consumed,
-            'adjustment':   adjustment,
+            'consumed':      consumed,
+            'adjustment':    adjustment,
+            'price':         float(m.get('price', rm_price_map.get(name, 0))),
+            'is_new':        False,
+        })
+
+    # ── Pass 2: New materials added after opening (opening_qty = 0) ───────
+    for name, system_qty in system_qty_map.items():
+        if name in opening_names:
+            continue  # already handled above
+
+        closing_qty = float(closing_counts.get(name, system_qty))
+
+        if closing_qty > system_qty:
+            return f'invalid_count:{name}'
+
+        # opening_qty is 0 — the material didn't exist at period start
+        purchases_qty = max(0.0, system_qty - 0.0)
+        consumed      = max(0.0, system_qty - closing_qty)
+        adjustment    = closing_qty - system_qty
+
+        closing_materials.append({
+            'name':          name,
+            'unit':          rm_unit_map.get(name, 'pcs'),
+            'system_qty':    system_qty,
+            'closing_qty':   closing_qty,
+            'purchases_qty': purchases_qty,
+            'consumed':      consumed,
+            'adjustment':    adjustment,
+            'price':         rm_price_map.get(name, 0.0),
+            'is_new':        True,
         })
 
     closing = {
