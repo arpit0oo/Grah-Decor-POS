@@ -370,8 +370,55 @@ def api_raw_material_price_history(material_id):
         e = dict(entry)
         if hasattr(e.get('date'), 'isoformat'):
             e['date'] = e['date'].isoformat()
+        e['qty_received'] = float(e.get('qty_received', 0))
         serialised.append(e)
 
     # Sort newest-first
     serialised.sort(key=lambda x: x.get('date', ''), reverse=True)
     return jsonify(serialised)
+
+
+@inventory_bp.route('/api/raw-materials-wac-summary', methods=['GET'])
+def api_raw_materials_wac_summary():
+    """
+    Returns the total WAC stock value across all raw materials.
+    WAC per material = sum(unit_cost × qty_received) / sum(qty_received)
+    Total = sum over all materials of WAC × current_quantity.
+    Materials with no price_history entries are valued at price × quantity.
+    """
+    db = get_db()
+    docs = db.collection('raw_materials').stream()
+
+    total_wac_value = 0.0
+    breakdown = []
+
+    for d in docs:
+        m    = d.to_dict()
+        name = m.get('name', '')
+        qty  = float(m.get('quantity', 0))
+        history = m.get('price_history', [])
+
+        if history:
+            total_cost_x_qty = sum(
+                float(e.get('unit_cost', 0)) * float(e.get('qty_received', 0))
+                for e in history
+            )
+            total_qty_received = sum(float(e.get('qty_received', 0)) for e in history)
+            wac = (total_cost_x_qty / total_qty_received) if total_qty_received > 0 else 0.0
+        else:
+            # Fall back to the stored price field for materials with no PO history
+            wac = float(m.get('price', 0))
+
+        material_value = wac * qty
+        total_wac_value += material_value
+        breakdown.append({
+            'name':            name,
+            'quantity':        qty,
+            'wac':             round(wac, 4),
+            'material_value':  round(material_value, 2),
+        })
+
+    return jsonify({
+        'total_wac_value': round(total_wac_value, 2),
+        'breakdown':       breakdown,
+    })

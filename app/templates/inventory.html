@@ -52,6 +52,25 @@
 
     <button class="btn btn-sm" onclick="toggleForm('rawForm')" style="margin-bottom:1rem">+ Add Material</button>
 
+    <!-- WAC Total Value Card -->
+    <div id="wacSummaryCard" style="
+        display:inline-flex; align-items:center; gap:1.5rem;
+        background:var(--bg-card); border:1px solid var(--border);
+        border-radius:var(--radius); padding:0.65rem 1.25rem;
+        box-shadow:var(--shadow-sm); margin-bottom:1rem;
+    ">
+        <div>
+            <div
+                style="font-size:0.72rem; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin-bottom:0.2rem;">
+                Total Stock Value (WAC)</div>
+            <div id="wacTotalValue" style="font-size:1.2rem; font-weight:700; color:var(--primary);">Loading…</div>
+        </div>
+        <div
+            style="font-size:0.75rem; color:var(--text-muted); border-left:1px solid var(--border); padding-left:1rem;">
+            Weighted Avg Cost<br>across all materials
+        </div>
+    </div>
+
     <div class="table-wrapper">
         <table class="data-table">
             <thead>
@@ -71,8 +90,7 @@
                     <td>
                         <form autocomplete="off" method="POST" id="form-raw-{{ m.id }}"
                             action="{{ url_for('inventory.raw_edit', doc_id=m.id) }}" class="inline-edit-form">
-                            <input type="text" name="name" value="{{ m.name }}"
-                                class="inline-input text-bold" readonly
+                            <input type="text" name="name" value="{{ m.name }}" class="inline-input text-bold" readonly
                                 style="pointer-events:none; border-color:transparent; background:transparent; width:100%; max-width:320px; font-weight:bold;"
                                 form="form-raw-{{ m.id }}" required>
                     </td>
@@ -106,7 +124,8 @@
     </div>
 
     <!-- Pagination Controls -->
-    <div class="pagination-controls" style="display:flex; justify-content:space-between; margin-top: 1rem; align-items: center;">
+    <div class="pagination-controls"
+        style="display:flex; justify-content:space-between; margin-top: 1rem; align-items: center;">
         <button type="button" class="btn btn-ghost" id="rawPrev" onclick="rawPrev()">&larr; Previous</button>
         <div style="font-size: 0.9em; color: var(--text-secondary);" id="rawPageInfo">Page 1</div>
         <button type="button" class="btn btn-ghost" id="rawNext" onclick="rawNext()">Next &rarr;</button>
@@ -115,19 +134,90 @@
 
 <!-- ── READY STOCK TAB ───────────────────────────── -->
 <style>
-.stock-badge { display:inline-block; padding:1px 6px; border-radius:10px; font-size:0.72em; font-weight:700; letter-spacing:0.04em; margin-left:5px; vertical-align:middle; }
-.stock-badge-out { background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; }
-.stock-badge-low { background:#fef3c7; color:#92400e; border:1px solid #fcd34d; }
-/* ── Stock filter tabs ── */
-.stock-filter-tab { padding:6px 15px; border:none; border-radius:6px; background:transparent; cursor:pointer; font-size:0.85em; font-weight:500; color:#64748b; transition:all 0.15s; white-space:nowrap; display:inline-flex; align-items:center; gap:6px; line-height:1; }
-.stock-filter-tab:hover:not(.stock-filter-active) { color:#1e293b; background:rgba(255,255,255,0.6); }
-.stock-filter-active { background:#fff !important; color:#1e293b !important; box-shadow:0 1px 3px rgba(0,0,0,0.12),0 1px 2px rgba(0,0,0,0.06); }
-.stock-filter-count { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; border-radius:9px; font-size:0.72em; font-weight:700; padding:0 5px; line-height:1; }
-.stock-filter-count-low { background:#fef3c7; color:#92400e; }
-.stock-filter-count-out { background:#fee2e2; color:#991b1b; }
-.stock-filter-active .stock-filter-count-low,
-.stock-filter-active .stock-filter-count-out { background:rgba(0,0,0,0.08); color:inherit; }
-.pagination-hidden { display: none !important; }
+    .stock-badge {
+        display: inline-block;
+        padding: 1px 6px;
+        border-radius: 10px;
+        font-size: 0.72em;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        margin-left: 5px;
+        vertical-align: middle;
+    }
+
+    .stock-badge-out {
+        background: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #fca5a5;
+    }
+
+    .stock-badge-low {
+        background: #fef3c7;
+        color: #92400e;
+        border: 1px solid #fcd34d;
+    }
+
+    /* ── Stock filter tabs ── */
+    .stock-filter-tab {
+        padding: 6px 15px;
+        border: none;
+        border-radius: 6px;
+        background: transparent;
+        cursor: pointer;
+        font-size: 0.85em;
+        font-weight: 500;
+        color: #64748b;
+        transition: all 0.15s;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        line-height: 1;
+    }
+
+    .stock-filter-tab:hover:not(.stock-filter-active) {
+        color: #1e293b;
+        background: rgba(255, 255, 255, 0.6);
+    }
+
+    .stock-filter-active {
+        background: #fff !important;
+        color: #1e293b !important;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.06);
+    }
+
+    .stock-filter-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 18px;
+        height: 18px;
+        border-radius: 9px;
+        font-size: 0.72em;
+        font-weight: 700;
+        padding: 0 5px;
+        line-height: 1;
+    }
+
+    .stock-filter-count-low {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .stock-filter-count-out {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .stock-filter-active .stock-filter-count-low,
+    .stock-filter-active .stock-filter-count-out {
+        background: rgba(0, 0, 0, 0.08);
+        color: inherit;
+    }
+
+    .pagination-hidden {
+        display: none !important;
+    }
 </style>
 <div class="tab-content {% if active_tab != 'ready' %}hidden{% endif %}" id="tab-ready">
     <div class="form-card hidden" id="readyForm">
@@ -176,37 +266,38 @@
         </form>
     </div>
     <script>
-    function toggleVariantMode(checked) {
-        var colorGroup    = document.getElementById('ready-color-group');
-        var qtyGroup      = document.getElementById('ready-qty-group');
-        var minStockGroup = document.getElementById('ready-min-stock-group');
-        var colorInput    = document.getElementById('ready-color');
-        var qtyInput      = document.getElementById('ready-qty');
-        var minInput      = document.getElementById('ready-min-stock');
-        if (checked) {
-            colorInput.value    = '';
-            colorInput.disabled = true;
-            colorGroup.style.opacity = '0.4';
-            qtyInput.value    = '0';
-            qtyInput.disabled = true;
-            qtyGroup.style.opacity = '0.4';
-            minInput.value    = '0';
-            minInput.disabled = true;
-            minStockGroup.style.opacity = '0.4';
-        } else {
-            colorInput.disabled = false;
-            colorGroup.style.opacity = '1';
-            qtyInput.disabled = false;
-            qtyGroup.style.opacity = '1';
-            minInput.disabled = false;
-            minStockGroup.style.opacity = '1';
+        function toggleVariantMode(checked) {
+            var colorGroup = document.getElementById('ready-color-group');
+            var qtyGroup = document.getElementById('ready-qty-group');
+            var minStockGroup = document.getElementById('ready-min-stock-group');
+            var colorInput = document.getElementById('ready-color');
+            var qtyInput = document.getElementById('ready-qty');
+            var minInput = document.getElementById('ready-min-stock');
+            if (checked) {
+                colorInput.value = '';
+                colorInput.disabled = true;
+                colorGroup.style.opacity = '0.4';
+                qtyInput.value = '0';
+                qtyInput.disabled = true;
+                qtyGroup.style.opacity = '0.4';
+                minInput.value = '0';
+                minInput.disabled = true;
+                minStockGroup.style.opacity = '0.4';
+            } else {
+                colorInput.disabled = false;
+                colorGroup.style.opacity = '1';
+                qtyInput.disabled = false;
+                qtyGroup.style.opacity = '1';
+                minInput.disabled = false;
+                minStockGroup.style.opacity = '1';
+            }
         }
-    }
     </script>
 
     <button class="btn btn-sm" onclick="toggleForm('readyForm')" style="margin-bottom:1rem">+ Add Product</button>
 
-    <div id="stockFilterBar" style="margin-bottom:1.25rem; display:inline-flex; background:#f1f5f9; border-radius:8px; padding:3px; gap:2px;">
+    <div id="stockFilterBar"
+        style="margin-bottom:1.25rem; display:inline-flex; background:#f1f5f9; border-radius:8px; padding:3px; gap:2px;">
         <button id="filter-all" class="stock-filter-tab stock-filter-active" onclick="filterStock('all')">All</button>
         <button id="filter-low" class="stock-filter-tab" onclick="filterStock('low')">
             Low Stock
@@ -238,149 +329,153 @@
                 {# ── Parent badge: any variant OUT → OUT; no OUT but any LOW → LOW #}
                 {% set ns = namespace(pbadge='') %}
                 {% if s.variants %}
-                    {% for v in s.variants %}
-                        {% set va = v.quantity - (v.reserved_quantity or 0) %}
-                        {% if va <= 0 %}
-                            {% set ns.pbadge = 'out' %}
-                        {% elif v.min_stock > 0 and va <= v.min_stock and ns.pbadge != 'out' %}
-                            {% set ns.pbadge = 'low' %}
-                        {% endif %}
-                    {% endfor %}
-                {% else %}
-                    {% if avail <= 0 %}
-                        {% set ns.pbadge = 'out' %}
-                    {% elif avail > 0 and s.min_stock > 0 and avail <= s.min_stock %}
-                        {% set ns.pbadge = 'low' %}
-                    {% endif %}
-                {% endif %}
-                {# ── PARENT ROW ── #}
-                <tr class="{% if s.variants %}parent-row{% endif %} ready-row {% if not s.variants and avail <= 0 %}row-danger{% elif not s.variants and avail < 5 %}row-warning{% endif %}"
-                    style="{% if s.variants %}background: var(--surface);{% endif %}"
-                    data-parent-id="{{ s.id }}" data-badge="{{ ns.pbadge }}" data-item-index="{{ loop.index }}">
-                    <td style="text-align:center; cursor:pointer;" {% if s.variants
-                        %}onclick="toggleVariants('{{ s.id }}')" {% endif %}>
-                        {% if s.variants %}<span id="icon-{{ s.id }}" style="font-size:0.8em;">&#9654;</span>{% endif %}
-                    </td>
-                    <td>
-                        <form autocomplete="off" method="POST" id="form-ready-{{ s.id }}"
-                            action="{{ url_for('inventory.ready_edit', doc_id=s.id) }}" class="inline-edit-form">
-                            <input type="hidden" name="name" value="{{ s.name }}" form="form-ready-{{ s.id }}">
-                            <input type="hidden" name="quantity" value="{{ s.quantity }}" form="form-ready-{{ s.id }}">
-                            <strong>{{ s.name }}</strong>
-                            {% if not s.variants and s.color %}
-                            <span class="text-muted" style="font-size:0.85em;">({{ s.color }})</span>
-                            {% endif %}
-                    </td>
-                    <td>
-                        {% if s.variants %}
-                        <span class="text-muted" style="font-size:0.85em;">{{ s.quantity|int }} total</span>
-                        {% else %}
-                        <span class="text-bold">{{ s.quantity|int }}</span>
-                        {% endif %}
-                    </td>
-                    <td class="text-warning text-bold">{{ (s.reserved_quantity or 0) | int }}</td>
-                    <td class="{% if avail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">
-                        {{ avail|int }}
-                        {% if ns.pbadge == 'out' %}<span class="stock-badge stock-badge-out">OUT</span>{% endif %}
-                        {% if ns.pbadge == 'low' %}<span class="stock-badge stock-badge-low">LOW</span>{% endif %}
-                    </td>
-                    <td>
-                        {% if s.variants %}
-                        <span class="text-muted" style="font-size:0.85em;">—</span>
-                        {% else %}
-                        <input type="number" name="min_stock" value="{{ s.min_stock or 0 }}" step="1" min="0"
-                            class="inline-input inline-input-sm" readonly
-                            style="pointer-events:none;border-color:transparent;background:transparent;width:60px;"
-                            form="form-ready-{{ s.id }}">
-                        {% endif %}
-                    </td>
-                    <td>
-                        <input type="number" name="cost_price" value="{{ s.cost_price or 0 }}" step="1"
-                            class="inline-input inline-input-sm cost-input" readonly
-                            style="pointer-events:none; border-color:transparent; background:transparent;"
-                            form="form-ready-{{ s.id }}">
-                    </td>
-                    <td class="text-muted">{{ s.updated_at.strftime('%d/%m/%Y') if s.updated_at and
-                        s.updated_at.strftime else '-' }}</td>
-                    <td class="actions-cell">
-                        <button type="button" class="btn btn-xs edit-cost-btn"
-                            onclick="toggleEditParent(this)">Edit</button>
-                        <button type="submit" class="btn btn-xs save-cost-btn hidden"
-                            form="form-ready-{{ s.id }}">Save</button>
-                        </form>
-                        <button type="button" class="btn btn-xs btn-ghost"
-                            onclick="openHistoryModal('{{ s.name|escape }}', '')">History</button>
-                        <button type="button" class="btn btn-xs btn-ghost"
-                            style="color:var(--primary); border-color:var(--primary);"
-                            onclick="openVariantModal('{{ s.id }}', '{{ s.name|escape }}')">+ Variant</button>
-                        {% if not s.variants %}
-                        <button type="button" class="btn btn-xs"
-                            style="color:var(--success); border-color:var(--success);"
-                            onclick="openAdjustModal('{{ s.id }}', '{{ s.name|escape }}', '')">Add New Stock</button>
-                        {% endif %}
-                    </td>
-                </tr>
-
-                {# ── VARIANT ROWS ── #}
                 {% for v in s.variants %}
-                {% set vavail = v.quantity - (v.reserved_quantity or 0) %}
-                {% if vavail <= 0 %}{% set v_badge = 'out' %}
-                {% elif v.min_stock > 0 and vavail <= v.min_stock %}{% set v_badge = 'low' %}
-                {% else %}{% set v_badge = '' %}{% endif %}
-                <tr class="variant-row hidden ready-row" id="variant-{{ s.id }}" style="background:#f8f8ff;"
-                    data-parent-id="{{ s.id }}" data-badge="{{ v_badge }}" data-item-index="{{ loop.index }}">
-                    <td></td>
-                    <td style="padding-left:2rem;">
-                        <form autocomplete="off" method="POST" id="form-variant-{{ v.id }}"
-                            action="{{ url_for('inventory.ready_edit', doc_id=v.id) }}" class="inline-edit-form">
-                            <input type="hidden" name="name" value="{{ v.name }}" form="form-variant-{{ v.id }}">
-                            <input type="hidden" name="quantity" value="{{ v.quantity }}" form="form-variant-{{ v.id }}">
-                            <span class="text-muted" style="font-size:0.8em;">&#9492;</span>
-                            <span class="text-bold">{{ v.color }}</span>
-                    </td>
-                    <td><span class="text-bold">{{ v.quantity|int }}</span></td>
-                    <td class="text-warning text-bold">{{ (v.reserved_quantity or 0) | int }}</td>
-                    <td class="{% if vavail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">
-                        {{ vavail|int }}
-                        {% if v_badge == 'out' %}<span class="stock-badge stock-badge-out">OUT</span>{% endif %}
-                        {% if v_badge == 'low' %}<span class="stock-badge stock-badge-low">LOW</span>{% endif %}
-                    </td>
-                    <td>
-                        <input type="number" name="min_stock" value="{{ v.min_stock or 0 }}" step="1" min="0"
-                            class="inline-input inline-input-sm variant-min-input" readonly
-                            style="pointer-events:none;border-color:transparent;background:transparent;width:60px;"
-                            form="form-variant-{{ v.id }}">
-                    </td>
-                    <td class="text-muted" style="font-size:0.8em;">Inherits parent</td>
-                    <td class="text-muted">{{ v.updated_at.strftime('%d/%m/%Y') if v.updated_at and
-                        v.updated_at.strftime else '-' }}</td>
-                    <td class="actions-cell">
-                        <button type="button" class="btn btn-xs edit-variant-btn"
-                            onclick="toggleEditVariant(this)">Edit</button>
-                        <button type="submit" class="btn btn-xs save-variant-btn hidden"
-                            form="form-variant-{{ v.id }}">Save</button>
-                        </form>
-                        <button type="button" class="btn btn-xs btn-ghost"
-                            onclick="openHistoryModal('{{ v.name|escape }}', '{{ v.color|escape }}')">History</button>
-                        <button type="button" class="btn btn-xs"
-                            style="color:var(--success); border-color:var(--success);"
-                            onclick="openAdjustModal('{{ v.id }}', '{{ v.name|escape }}', '{{ v.color|escape }}')">Add New Stock</button>
-                    </td>
-                </tr>
-                {% endfor %}
+                {% set va = v.quantity - (v.reserved_quantity or 0) %}
+                {% if va <= 0 %} {% set ns.pbadge='out' %} {% elif v.min_stock> 0 and va <= v.min_stock and ns.pbadge
+                        !='out' %} {% set ns.pbadge='low' %} {% endif %} {% endfor %} {% else %} {% if avail <=0 %} {%
+                        set ns.pbadge='out' %} {% elif avail> 0 and s.min_stock > 0 and avail <= s.min_stock %} {% set
+                            ns.pbadge='low' %} {% endif %} {% endif %} {# ── PARENT ROW ── #} <tr
+                            class="{% if s.variants %}parent-row{% endif %} ready-row {% if not s.variants and avail <= 0 %}row-danger{% elif not s.variants and avail < 5 %}row-warning{% endif %}"
+                            style="{% if s.variants %}background: var(--surface);{% endif %}"
+                            data-parent-id="{{ s.id }}" data-badge="{{ ns.pbadge }}" data-item-index="{{ loop.index }}">
+                            <td style="text-align:center; cursor:pointer;" {% if s.variants
+                                %}onclick="toggleVariants('{{ s.id }}')" {% endif %}>
+                                {% if s.variants %}<span id="icon-{{ s.id }}" style="font-size:0.8em;">&#9654;</span>{%
+                                endif %}
+                            </td>
+                            <td>
+                                <form autocomplete="off" method="POST" id="form-ready-{{ s.id }}"
+                                    action="{{ url_for('inventory.ready_edit', doc_id=s.id) }}"
+                                    class="inline-edit-form">
+                                    <input type="hidden" name="name" value="{{ s.name }}" form="form-ready-{{ s.id }}">
+                                    <input type="hidden" name="quantity" value="{{ s.quantity }}"
+                                        form="form-ready-{{ s.id }}">
+                                    <strong>{{ s.name }}</strong>
+                                    {% if not s.variants and s.color %}
+                                    <span class="text-muted" style="font-size:0.85em;">({{ s.color }})</span>
+                                    {% endif %}
+                            </td>
+                            <td>
+                                {% if s.variants %}
+                                <span class="text-muted" style="font-size:0.85em;">{{ s.quantity|int }} total</span>
+                                {% else %}
+                                <span class="text-bold">{{ s.quantity|int }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-warning text-bold">{{ (s.reserved_quantity or 0) | int }}</td>
+                            <td class="{% if avail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">
+                                {{ avail|int }}
+                                {% if ns.pbadge == 'out' %}<span class="stock-badge stock-badge-out">OUT</span>{% endif
+                                %}
+                                {% if ns.pbadge == 'low' %}<span class="stock-badge stock-badge-low">LOW</span>{% endif
+                                %}
+                            </td>
+                            <td>
+                                {% if s.variants %}
+                                <span class="text-muted" style="font-size:0.85em;">—</span>
+                                {% else %}
+                                <input type="number" name="min_stock" value="{{ s.min_stock or 0 }}" step="1" min="0"
+                                    class="inline-input inline-input-sm" readonly
+                                    style="pointer-events:none;border-color:transparent;background:transparent;width:60px;"
+                                    form="form-ready-{{ s.id }}">
+                                {% endif %}
+                            </td>
+                            <td>
+                                <input type="number" name="cost_price" value="{{ s.cost_price or 0 }}" step="1"
+                                    class="inline-input inline-input-sm cost-input" readonly
+                                    style="pointer-events:none; border-color:transparent; background:transparent;"
+                                    form="form-ready-{{ s.id }}">
+                            </td>
+                            <td class="text-muted">{{ s.updated_at.strftime('%d/%m/%Y') if s.updated_at and
+                                s.updated_at.strftime else '-' }}</td>
+                            <td class="actions-cell">
+                                <button type="button" class="btn btn-xs edit-cost-btn"
+                                    onclick="toggleEditParent(this)">Edit</button>
+                                <button type="submit" class="btn btn-xs save-cost-btn hidden"
+                                    form="form-ready-{{ s.id }}">Save</button>
+                                </form>
+                                <button type="button" class="btn btn-xs btn-ghost"
+                                    onclick="openHistoryModal('{{ s.name|escape }}', '')">History</button>
+                                <button type="button" class="btn btn-xs btn-ghost"
+                                    style="color:var(--primary); border-color:var(--primary);"
+                                    onclick="openVariantModal('{{ s.id }}', '{{ s.name|escape }}')">+ Variant</button>
+                                {% if not s.variants %}
+                                <button type="button" class="btn btn-xs"
+                                    style="color:var(--success); border-color:var(--success);"
+                                    onclick="openAdjustModal('{{ s.id }}', '{{ s.name|escape }}', '')">Add New
+                                    Stock</button>
+                                {% endif %}
+                            </td>
+                            </tr>
 
-                {% endfor %}
-                {% if not ready_stock %}
-                <tr>
-                    <td colspan="9" class="empty-state">No ready stock. Add items.</td>
-                </tr>
-                {% endif %}
+                            {# ── VARIANT ROWS ── #}
+                            {% for v in s.variants %}
+                            {% set vavail = v.quantity - (v.reserved_quantity or 0) %}
+                            {% if vavail <= 0 %}{% set v_badge='out' %} {% elif v.min_stock> 0 and vavail <= v.min_stock
+                                    %}{% set v_badge='low' %} {% else %}{% set v_badge='' %}{% endif %} <tr
+                                    class="variant-row hidden ready-row" id="variant-{{ s.id }}"
+                                    style="background:#f8f8ff;" data-parent-id="{{ s.id }}" data-badge="{{ v_badge }}"
+                                    data-item-index="{{ loop.index }}">
+                                    <td></td>
+                                    <td style="padding-left:2rem;">
+                                        <form autocomplete="off" method="POST" id="form-variant-{{ v.id }}"
+                                            action="{{ url_for('inventory.ready_edit', doc_id=v.id) }}"
+                                            class="inline-edit-form">
+                                            <input type="hidden" name="name" value="{{ v.name }}"
+                                                form="form-variant-{{ v.id }}">
+                                            <input type="hidden" name="quantity" value="{{ v.quantity }}"
+                                                form="form-variant-{{ v.id }}">
+                                            <span class="text-muted" style="font-size:0.8em;">&#9492;</span>
+                                            <span class="text-bold">{{ v.color }}</span>
+                                    </td>
+                                    <td><span class="text-bold">{{ v.quantity|int }}</span></td>
+                                    <td class="text-warning text-bold">{{ (v.reserved_quantity or 0) | int }}</td>
+                                    <td
+                                        class="{% if vavail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">
+                                        {{ vavail|int }}
+                                        {% if v_badge == 'out' %}<span class="stock-badge stock-badge-out">OUT</span>{%
+                                        endif %}
+                                        {% if v_badge == 'low' %}<span class="stock-badge stock-badge-low">LOW</span>{%
+                                        endif %}
+                                    </td>
+                                    <td>
+                                        <input type="number" name="min_stock" value="{{ v.min_stock or 0 }}" step="1"
+                                            min="0" class="inline-input inline-input-sm variant-min-input" readonly
+                                            style="pointer-events:none;border-color:transparent;background:transparent;width:60px;"
+                                            form="form-variant-{{ v.id }}">
+                                    </td>
+                                    <td class="text-muted" style="font-size:0.8em;">Inherits parent</td>
+                                    <td class="text-muted">{{ v.updated_at.strftime('%d/%m/%Y') if v.updated_at and
+                                        v.updated_at.strftime else '-' }}</td>
+                                    <td class="actions-cell">
+                                        <button type="button" class="btn btn-xs edit-variant-btn"
+                                            onclick="toggleEditVariant(this)">Edit</button>
+                                        <button type="submit" class="btn btn-xs save-variant-btn hidden"
+                                            form="form-variant-{{ v.id }}">Save</button>
+                                        </form>
+                                        <button type="button" class="btn btn-xs btn-ghost"
+                                            onclick="openHistoryModal('{{ v.name|escape }}', '{{ v.color|escape }}')">History</button>
+                                        <button type="button" class="btn btn-xs"
+                                            style="color:var(--success); border-color:var(--success);"
+                                            onclick="openAdjustModal('{{ v.id }}', '{{ v.name|escape }}', '{{ v.color|escape }}')">Add
+                                            New Stock</button>
+                                    </td>
+                                    </tr>
+                                    {% endfor %}
+
+                                    {% endfor %}
+                                    {% if not ready_stock %}
+                                    <tr>
+                                        <td colspan="9" class="empty-state">No ready stock. Add items.</td>
+                                    </tr>
+                                    {% endif %}
             </tbody>
         </table>
     </div>
 
     <!-- Pagination Controls -->
-    <div class="pagination-controls" style="display:flex; justify-content:space-between; margin-top: 1rem; align-items: center;">
+    <div class="pagination-controls"
+        style="display:flex; justify-content:space-between; margin-top: 1rem; align-items: center;">
         <button type="button" class="btn btn-ghost" id="readyPrev" onclick="readyPrev()">&larr; Previous</button>
         <div style="font-size: 0.9em; color: var(--text-secondary);" id="readyPageInfo">Page 1</div>
         <button type="button" class="btn btn-ghost" id="readyNext" onclick="readyNext()">Next &rarr;</button>
@@ -391,9 +486,9 @@
 <div class="tab-content {% if active_tab != 'logs' %}hidden{% endif %}" id="tab-logs">
 
     <!-- ── LOGS FILTER BAR ── -->
-    <div class="card"
-        style="margin-bottom:1rem; padding:1rem; background:white;">
-        <form autocomplete="off" method="GET" action="{{ url_for('inventory.inventory_list') }}" style="display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap;">
+    <div class="card" style="margin-bottom:1rem; padding:1rem; background:white;">
+        <form autocomplete="off" method="GET" action="{{ url_for('inventory.inventory_list') }}"
+            style="display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap;">
             <input type="hidden" name="tab" value="logs">
             <div class="form-group" style="flex:1; min-width:200px;">
                 <label>Item Name</label>
@@ -404,7 +499,8 @@
                 <input type="text" name="color" value="{{ filter_color }}" placeholder="e.g. Black">
             </div>
             <button type="submit" class="btn btn-primary" style="margin-bottom:4px;">Filter</button>
-            <a href="{{ url_for('inventory.inventory_list', tab='logs') }}" class="btn btn-ghost" style="margin-bottom:4px;">Clear</a>
+            <a href="{{ url_for('inventory.inventory_list', tab='logs') }}" class="btn btn-ghost"
+                style="margin-bottom:4px;">Clear</a>
         </form>
     </div>
 
@@ -453,22 +549,25 @@
     </div>
 
     <!-- Pagination Controls -->
-    <div class="pagination-controls" style="display:flex; justify-content:space-between; margin-top: 1rem; align-items: center;">
+    <div class="pagination-controls"
+        style="display:flex; justify-content:space-between; margin-top: 1rem; align-items: center;">
         <div>
             {% if has_prev_log and logs %}
-            <a href="{{ url_for('inventory.inventory_list', tab='logs', item_name=filter_item_name, color=filter_color, cursor_id=(logs|first).id, direction='prev') }}" class="btn btn-ghost">&larr; Previous</a>
+            <a href="{{ url_for('inventory.inventory_list', tab='logs', item_name=filter_item_name, color=filter_color, cursor_id=(logs|first).id, direction='prev') }}"
+                class="btn btn-ghost">&larr; Previous</a>
             {% else %}
             <button type="button" class="btn btn-ghost" disabled>&larr; Previous</button>
             {% endif %}
         </div>
-        
+
         <div style="font-size: 0.9em; color: var(--text-secondary);">
             Page size: 20
         </div>
 
         <div>
             {% if has_next_log and logs %}
-            <a href="{{ url_for('inventory.inventory_list', tab='logs', item_name=filter_item_name, color=filter_color, cursor_id=(logs|last).id, direction='next') }}" class="btn btn-ghost">Next &rarr;</a>
+            <a href="{{ url_for('inventory.inventory_list', tab='logs', item_name=filter_item_name, color=filter_color, cursor_id=(logs|last).id, direction='next') }}"
+                class="btn btn-ghost">Next &rarr;</a>
             {% else %}
             <button type="button" class="btn btn-ghost" disabled>Next &rarr;</button>
             {% endif %}
@@ -591,30 +690,51 @@
             </table>
         </div>
         <!-- Pagination Controls -->
-        <div class="pagination-controls" style="display:flex; justify-content:space-between; align-items: center;" id="rawHistoryPagination">
-            <button type="button" class="btn btn-ghost" id="rawHistoryPrevBtn" onclick="prevRawHistoryPage()">&larr; Previous</button>
+        <div class="pagination-controls" style="display:flex; justify-content:space-between; align-items: center;"
+            id="rawHistoryPagination">
+            <button type="button" class="btn btn-ghost" id="rawHistoryPrevBtn" onclick="prevRawHistoryPage()">&larr;
+                Previous</button>
             <div style="font-size: 0.9em; color: var(--text-secondary);" id="rawHistoryPageInfo">
                 Page 1
             </div>
-            <button type="button" class="btn btn-ghost" id="rawHistoryNextBtn" onclick="nextRawHistoryPage()">Next &rarr;</button>
+            <button type="button" class="btn btn-ghost" id="rawHistoryNextBtn" onclick="nextRawHistoryPage()">Next
+                &rarr;</button>
         </div>
     </div>
 </div>
 
 <!-- ── RAW MATERIAL PRICE HISTORY MODAL ───────────── -->
 <div class="modal-overlay hidden" id="rawPriceModal">
-    <div class="modal" style="max-width:680px;">
+    <div class="modal" style="max-width:720px;">
         <div class="modal-header">
             <h3>Price History: <span id="rawPriceTitle" style="color:var(--primary);"></span></h3>
             <button class="modal-close" onclick="closeModal('rawPriceModal')">&#x00D7;</button>
         </div>
-        <div style="overflow-x:auto; max-height:60vh; overflow-y:auto; margin-bottom:1rem;">
+        <!-- WAC card -->
+        <div id="rawPriceWacCard" style="
+            display:none; align-items:center; gap:2rem;
+            background:var(--primary-light); border:1px solid #c7d2fe;
+            border-radius:var(--radius); padding:0.65rem 1.25rem;
+            margin-bottom:1rem;
+        ">
+            <div>
+                <div
+                    style="font-size:0.7rem; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:#4338ca; margin-bottom:0.15rem;">
+                    Weighted Avg Cost</div>
+                <div id="rawPriceWacValue" style="font-size:1.3rem; font-weight:700; color:#3730a3;"></div>
+            </div>
+            <div style="font-size:0.78rem; color:#6366f1; border-left:1px solid #c7d2fe; padding-left:1.25rem;">
+                <span id="rawPriceWacDetail"></span>
+            </div>
+        </div>
+        <div style="overflow-x:auto; max-height:55vh; overflow-y:auto; margin-bottom:1rem;">
             <table class="data-table">
                 <thead>
                     <tr>
                         <th>Date</th>
                         <th>PO ID</th>
                         <th>Vendor</th>
+                        <th style="text-align:right;">Qty Recieved</th>
                         <th style="text-align:right;">Cost / Unit ₹</th>
                     </tr>
                 </thead>
@@ -684,7 +804,7 @@
         const data = window._rawHistoryData || [];
         const tbody = document.getElementById('rawHistoryTableBody');
         const pagination = document.getElementById('rawHistoryPagination');
-        
+
         if (data.length === 0) {
             pagination.style.display = 'none';
             return;
@@ -694,7 +814,7 @@
         const pageSize = 20;
         const totalPages = Math.ceil(data.length / pageSize);
         const page = window._rawHistoryCurrentPage;
-        
+
         const start = (page - 1) * pageSize;
         const end = start + pageSize;
         const pageData = data.slice(start, end);
@@ -753,7 +873,11 @@
     async function openRawPriceModal(materialId, name) {
         document.getElementById('rawPriceTitle').textContent = name;
         const tbody = document.getElementById('rawPriceTableBody');
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding:2rem;">Loading…</td></tr>';
+        const wacCard = document.getElementById('rawPriceWacCard');
+        const wacValue = document.getElementById('rawPriceWacValue');
+        const wacDetail = document.getElementById('rawPriceWacDetail');
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted" style="padding:2rem;">Loading…</td></tr>';
+        wacCard.style.display = 'none';
         document.getElementById('rawPriceModal').classList.remove('hidden');
 
         try {
@@ -762,37 +886,54 @@
             tbody.innerHTML = '';
 
             if (data.error) {
-                tbody.innerHTML = `<tr><td colspan="4" class="empty-state text-danger">${data.error}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" class="empty-state text-danger">${data.error}</td></tr>`;
                 return;
             }
             if (!data.length) {
-                tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No price history recorded yet.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No price history recorded yet.</td></tr>';
                 return;
             }
 
+            // ── Compute WAC ──────────────────────────────────────────────
+            let totalCostXQty = 0, totalQtyRcvd = 0;
+            data.forEach(e => {
+                const q = parseFloat(e.qty_received) || 0;
+                const c = parseFloat(e.unit_cost) || 0;
+                totalCostXQty += c * q;
+                totalQtyRcvd += q;
+            });
+            const wac = totalQtyRcvd > 0 ? totalCostXQty / totalQtyRcvd : 0;
+            wacValue.textContent = '₹' + wac.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            wacDetail.innerHTML = `${data.length} receipt${data.length !== 1 ? 's' : ''} · `
+                + `Total qty: <strong>${totalQtyRcvd.toLocaleString()}</strong>`;
+            wacCard.style.display = 'flex';
+
+            // ── Render rows ──────────────────────────────────────────────
             data.forEach(entry => {
                 const d = new Date(entry.date);
                 const dateStr = isNaN(d)
                     ? (entry.date || '-')
                     : d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 const vendor = entry.vendor_name || entry.vendor_id || '-';
-                const poId   = entry.po_id || '-';
-                const cost   = typeof entry.unit_cost === 'number'
+                const poId = entry.po_id || '-';
+                const cost = typeof entry.unit_cost === 'number'
                     ? '₹' + entry.unit_cost.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                     : '-';
+                const qtyRcvd = (parseFloat(entry.qty_received) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td class="text-muted" style="white-space:nowrap;">${dateStr}</td>
                     <td style="font-size:0.85em;">${poId}</td>
                     <td>${vendor}</td>
+                    <td style="text-align:right; font-weight:600;">${qtyRcvd}</td>
                     <td style="text-align:right; font-weight:700;">${cost}</td>
                 `;
                 tbody.appendChild(tr);
             });
         } catch (err) {
             console.error(err);
-            tbody.innerHTML = '<tr><td colspan="4" class="empty-state text-danger">Failed to load price history.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="empty-state text-danger">Failed to load price history.</td></tr>';
         }
     }
 
@@ -909,9 +1050,9 @@
         const activeBtn = document.getElementById('filter-' + mode);
         if (activeBtn) activeBtn.classList.add('stock-filter-active');
 
-        const allTagged   = [...document.querySelectorAll('tr[data-parent-id]')];
-        const parentRows  = allTagged.filter(r => !r.classList.contains('variant-row'));
-        const variantRows = allTagged.filter(r =>  r.classList.contains('variant-row'));
+        const allTagged = [...document.querySelectorAll('tr[data-parent-id]')];
+        const parentRows = allTagged.filter(r => !r.classList.contains('variant-row'));
+        const variantRows = allTagged.filter(r => r.classList.contains('variant-row'));
 
         if (mode === 'all') {
             // Restore all parent rows; variant rows go back to their collapse (.hidden) state
@@ -1049,9 +1190,9 @@
     }
 
     function updateFilterCounts() {
-        const allTagged   = [...document.querySelectorAll('tr[data-parent-id]')];
-        const parentRows  = allTagged.filter(r => !r.classList.contains('variant-row'));
-        const variantRows = allTagged.filter(r =>  r.classList.contains('variant-row'));
+        const allTagged = [...document.querySelectorAll('tr[data-parent-id]')];
+        const parentRows = allTagged.filter(r => !r.classList.contains('variant-row'));
+        const variantRows = allTagged.filter(r => r.classList.contains('variant-row'));
 
         let lowCount = 0, outCount = 0;
         parentRows.forEach(parentRow => {
@@ -1071,10 +1212,26 @@
 
         const bl = document.getElementById('badge-low');
         const bo = document.getElementById('badge-out');
-        if (bl) { bl.textContent = lowCount;  bl.style.display = lowCount  > 0 ? '' : 'none'; }
-        if (bo) { bo.textContent = outCount;  bo.style.display = outCount  > 0 ? '' : 'none'; }
+        if (bl) { bl.textContent = lowCount; bl.style.display = lowCount > 0 ? '' : 'none'; }
+        if (bo) { bo.textContent = outCount; bo.style.display = outCount > 0 ? '' : 'none'; }
     }
 
-    document.addEventListener('DOMContentLoaded', updateFilterCounts);
+    async function fetchWacSummary() {
+        const el = document.getElementById('wacTotalValue');
+        if (!el) return;
+        try {
+            const res = await fetch('/inventory/api/raw-materials-wac-summary');
+            const data = await res.json();
+            const val = data.total_wac_value;
+            el.textContent = '₹' + val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        } catch (e) {
+            el.textContent = 'Unavailable';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        updateFilterCounts();
+        fetchWacSummary();
+    });
 </script>
 {% endblock %}

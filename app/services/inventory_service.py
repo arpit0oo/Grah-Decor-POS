@@ -172,11 +172,12 @@ def adjust_raw_material_qty(name, delta, reason='Manual Adjustment', ref_id='', 
         if price is not None:
             update_data['price'] = float(price)
             update_data['price_history'] = ArrayUnion([{
-                'po_id':       ref_id,
-                'vendor_id':   vendor_id,
-                'vendor_name': vendor_name,
-                'unit_cost':   float(price),
-                'date':        datetime.now(timezone.utc),
+                'po_id':        ref_id,
+                'vendor_id':    vendor_id,
+                'vendor_name':  vendor_name,
+                'unit_cost':    float(price),
+                'qty_received': adjusted_delta,
+                'date':         datetime.now(timezone.utc),
             }])
 
         db.collection('raw_materials').document(doc.id).update(update_data)
