@@ -270,46 +270,9 @@ def api_raw_stock_ledger():
 
     events = []  # list of {iso_date, date_str, type, reference, delta}
 
-    # ── 1. PO inflows (Received / Paid only) ──────────────────────────────
-    db = get_db()
-    all_pos_docs = db.collection('purchase_orders').stream()
-    all_pos = [{'id': d.id, **d.to_dict()} for d in all_pos_docs]
-
-    for po in all_pos:
-        status = po.get('status', '')
-        if status not in ('Received', 'Paid'):
-            continue
-
-        matched_qty = 0.0
-
-        items = po.get('items', [])
-        if items:
-            for it in items:
-                if (it.get('item') or '').strip().lower() == name.lower():
-                    matched_qty += float(it.get('quantity', 0))
-        else:
-            if (po.get('item') or '').strip().lower() == name.lower():
-                matched_qty = float(po.get('quantity', 0))
-
-        if matched_qty == 0:
-            continue
-
-        # Use updated_at if available (when it was actually received), else created_at
-        dt = po.get('updated_at') or po.get('created_at')
-        iso = dt.isoformat() if dt and hasattr(dt, 'isoformat') else ''
-        date_str = dt.strftime('%d/%m/%Y') if dt and hasattr(dt, 'strftime') else '-'
-        vendor = po.get('vendor_name') or '-'
-        po_num = po.get('po_number') or '-'
-
-        events.append({
-            'iso_date':  iso,
-            'date_str':  date_str,
-            'type':      'PO Received',
-            'reference': f'{po_num} — {vendor}',
-            'delta':     matched_qty,
-        })
-
-    # ── 2. inventory_log entries (all deltas != 0) ─────────────────────────
+    # ── inventory_log entries (all deltas != 0) ────────────────────────────
+    # Single authoritative source — adjust_raw_material_qty() always writes
+    # here on every PO receipt, so no separate purchase_orders read is needed.
     logs = get_product_inventory_logs(name, color=None, limit=500)
     for log in logs:
         delta = float(log.get('delta', 0))

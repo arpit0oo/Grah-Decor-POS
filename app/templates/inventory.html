@@ -78,15 +78,19 @@
                     <th>Material Name</th>
                     <th class="text-right">Quantity</th>
                     <th>Unit</th>
-                    <th class="text-right">Price / Unit ₹</th>
-                    <th class="text-right">Total Value ₹</th>
+                    <th class="text-right">Latest Price ₹</th>
+                    <th class="text-right">Avg Cost ₹</th>
+                    <th class="text-right">Stock Value ₹</th>
                     <th>Last Updated</th>
                     <th class="text-right">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for m in raw_materials %}
-                <tr class="raw-row" data-item-index="{{ loop.index }}">
+                <tr class="raw-row" data-item-index="{{ loop.index }}"
+                    data-material-name="{{ m.name|escape }}"
+                    data-latest-price="{{ m.calc_price or 0 }}"
+                    data-qty="{{ m.quantity }}">
                     <td>
                         <form autocomplete="off" method="POST" id="form-raw-{{ m.id }}"
                             action="{{ url_for('inventory.raw_edit', doc_id=m.id) }}" class="inline-edit-form">
@@ -96,8 +100,9 @@
                     </td>
                     <td class="text-right text-bold">{{ m.quantity }}</td>
                     <td class="text-muted">{{ m.unit or '-' }}</td>
-                    <td class="text-right text-bold">{{ "%.2f"|format(m.calc_price or 0) }}</td>
-                    <td class="text-right text-bold">{{ "%.2f"|format(m.calc_total_value or 0) }}</td>
+                    <td class="text-right text-bold" data-col="latest-price">{{ "%.2f"|format(m.calc_price or 0) }}</td>
+                    <td class="text-right text-bold" data-col="avg-cost">—</td>
+                    <td class="text-right text-bold" data-col="stock-value">—</td>
                     <td class="text-muted">{{ m.updated_at.strftime('%d/%m/%Y %H:%M') if m.updated_at and
                         m.updated_at.strftime else '-' }}</td>
                     <td class="actions-cell">
@@ -116,7 +121,7 @@
                 {% endfor %}
                 {% if not raw_materials %}
                 <tr>
-                    <td colspan="7" class="empty-state">No raw materials. Add your first one above.</td>
+                    <td colspan="8" class="empty-state">No raw materials. Add your first one above.</td>
                 </tr>
                 {% endif %}
             </tbody>
@@ -1222,8 +1227,29 @@
         try {
             const res = await fetch('/inventory/api/raw-materials-wac-summary');
             const data = await res.json();
+
+            // ── Total WAC value card ──────────────────────────────────────
             const val = data.total_wac_value;
             el.textContent = '₹' + val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            // ── Populate AVG COST & STOCK VALUE cells per row ─────────────
+            const breakdown = data.breakdown || [];
+            breakdown.forEach(item => {
+                const row = document.querySelector(
+                    `tr.raw-row[data-material-name="${CSS.escape(item.name)}"]`
+                );
+                if (!row) return;
+
+                const wac = parseFloat(item.wac) || 0;
+                const qty = parseFloat(row.dataset.qty) || 0;
+                const stockVal = qty * wac;
+
+                const avgCell = row.querySelector('td[data-col="avg-cost"]');
+                const svCell  = row.querySelector('td[data-col="stock-value"]');
+
+                if (avgCell) avgCell.textContent = wac.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                if (svCell)  svCell.textContent  = stockVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            });
         } catch (e) {
             el.textContent = 'Unavailable';
         }
