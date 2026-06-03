@@ -27,13 +27,86 @@ def _period_label(period_start_dt, period_end_dt=None):
 # ── Queries ────────────────────────────────────────────────────────────────────
 
 def get_all_snapshots():
-    """Return all period snapshot docs, newest first (by period_start desc)."""
+    """Return all period snapshot docs, newest first (by period_start desc).
+
+    For closed periods, enriches each material row in closing.materials with:
+      - period_wac      : Weighted Average Cost during the period window
+      - consumed_value  : consumed_qty × period_wac  (0 if no receipts in window)
+    Also attaches total_consumed_value (sum of consumed_value) to each closed snap.
+
+    Uses ONE additional raw_materials read shared across all snapshots.
+    """
     db = get_db()
     docs = db.collection('monthly_snapshots').stream()
     results = [{'id': d.id, **d.to_dict()} for d in docs]
     # Sort in Python — avoids needing a Firestore composite index
     results.sort(key=lambda s: s.get('period_start') or '', reverse=True)
+
+    # ── Build price_history_map from a single raw_materials read ───────────
+    # Only needed if there is at least one closed period
+    closed_snaps = [s for s in results if s.get('status') == 'closed']
+    if closed_snaps:
+        price_history_map = {}   # material_name → {history: [...], price: float}
+        rm_docs = db.collection('raw_materials').stream()
+        for d in rm_docs:
+            m    = d.to_dict()
+            name = m.get('name', '')
+            if name:
+                price_history_map[name] = {
+                    'history': m.get('price_history', []),
+                    'price':   float(m.get('price', 0)),
+                }
+
+        # ── Enrich each closed snapshot ────────────────────────────────────
+        for snap in closed_snaps:
+            period_start = snap.get('period_start')
+            period_end   = snap.get('period_end')
+            closing_mats = (snap.get('closing') or {}).get('materials', [])
+
+            total_consumed_value = 0.0
+
+            for row in closing_mats:
+                name         = row.get('name', '')
+                consumed_qty = float(row.get('consumed', 0))
+                history       = price_history_map.get(name, {}).get('history', [])
+                current_price = price_history_map.get(name, {}).get('price', 0.0)
+
+                period_wac      = 0.0
+                consumed_value  = 0.0
+
+                if history and period_start and period_end:
+                    # Filter entries whose date falls within [period_start, period_end]
+                    filtered = []
+                    for entry in history:
+                        entry_date = entry.get('date')
+                        if entry_date and period_start <= entry_date <= period_end:
+                            filtered.append(entry)
+
+                    if filtered:
+                        total_cost_x_qty  = sum(
+                            float(e.get('unit_cost', 0)) * float(e.get('qty_received', 0))
+                            for e in filtered
+                        )
+                        total_qty_received = sum(
+                            float(e.get('qty_received', 0)) for e in filtered
+                        )
+                        if total_qty_received > 0:
+                            period_wac     = total_cost_x_qty / total_qty_received
+                            consumed_value = round(consumed_qty * period_wac, 2)
+                        else:
+                            # Legacy entries (pre qty_received field): fall back to
+                            # the current price stored on the raw_material document
+                            period_wac     = current_price
+                            consumed_value = round(consumed_qty * current_price, 2)
+
+                row['period_wac']     = round(period_wac, 4)
+                row['consumed_value'] = consumed_value
+                total_consumed_value += consumed_value
+
+            snap['total_consumed_value'] = round(total_consumed_value, 2)
+
     return results
+
 
 
 def get_open_snapshot():

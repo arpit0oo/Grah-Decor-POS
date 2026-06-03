@@ -645,7 +645,8 @@ function validatePoItems() {
 
 /* ── Phase 3A: Partial Receive ───────────────────────────────────────────── */
 
-let _receivePoId = null;
+let _receivePoId    = null;
+let _receiveInFlight = false;
 
 function openReceiveModal(btn) {
     const po = JSON.parse(btn.getAttribute('data-po'));
@@ -688,10 +689,13 @@ function openReceiveModal(btn) {
     const submitBtn = document.getElementById('recv-submit-btn');
     submitBtn.disabled = !anyOutstanding;
     submitBtn.textContent = 'Confirm Receipt';
+    _receiveInFlight = false;   // reset guard for this new receipt
     document.getElementById('receiveModal').classList.remove('hidden');
 }
 
 async function submitPartialReceive() {
+    if (_receiveInFlight) return;          // block any concurrent submission
+
     const inputs = document.querySelectorAll('.recv-qty-input');
     const errEl  = document.getElementById('recv-modal-error');
     errEl.textContent = '';
@@ -719,9 +723,10 @@ async function submitPartialReceive() {
         return;
     }
 
+    _receiveInFlight = true;
     const btn = document.getElementById('recv-submit-btn');
     btn.disabled = true;
-    btn.textContent = 'Saving\u2026';
+    btn.textContent = 'Saving…';
     errEl.textContent = '';
 
     try {
@@ -732,14 +737,17 @@ async function submitPartialReceive() {
         });
         const result = await res.json();
         if (result.success) {
+            _receiveInFlight = false;
             closeModal('receiveModal');
             window.location.reload();
         } else {
+            _receiveInFlight = false;
             errEl.textContent = result.message || 'An error occurred.';
             btn.disabled = false;
             btn.textContent = 'Confirm Receipt';
         }
     } catch (e) {
+        _receiveInFlight = false;
         errEl.textContent = 'Network error. Please try again.';
         btn.disabled = false;
         btn.textContent = 'Confirm Receipt';

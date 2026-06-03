@@ -83,6 +83,7 @@
                             <th style="text-align:right;">− Closing</th>
                             <th style="text-align:right;color:var(--primary);">= Consumed</th>
                             <th style="text-align:right;">Adjustment</th>
+                            <th style="text-align:right;color:#4338ca;">Consumed Value ₹</th>
                         </tr></thead>
                         <tbody>
                         {% set opening_map = {} %}
@@ -95,7 +96,7 @@
                             {% set adj = row.adjustment if row.adjustment is defined else 0 %}
                             <tr>
                                 <td class="text-bold">{{ row.name }}</td>
-                                <td class="text-muted">{{ om.get('unit','—') if om else '—' }}</td>
+                                <td class="text-muted">{{ row.unit if row.unit is defined else (om.get('unit','—') if om else '—') }}</td>
                                 <td style="text-align:right;">{{ "%.2f"|format(om.get('opening_qty',0)) if om else '—' }}</td>
                                 <td style="text-align:right;color:#059669;">+{{ "%.2f"|format(row.purchases_qty) }}</td>
                                 <td style="text-align:right;color:#dc2626;">−{{ "%.2f"|format(row.closing_qty|abs) }}</td>
@@ -103,12 +104,35 @@
                                 <td style="text-align:right;{% if adj < 0 %}color:#dc2626;{% elif adj > 0 %}color:#059669;{% else %}opacity:.4;{% endif %}">
                                     {% if adj > 0 %}+{% endif %}{{ "%.2f"|format(adj) }}
                                 </td>
+                                <td style="text-align:right;font-weight:700;color:#3730a3;">
+                                    {% if row.consumed_value is defined and row.consumed_value > 0 %}
+                                        ₹ {{ "%.2f"|format(row.consumed_value) }}
+                                    {% else %}
+                                        <span style="opacity:.35;">—</span>
+                                    {% endif %}
+                                </td>
                             </tr>
                             {% endfor %}
                         {% else %}
-                            <tr><td colspan="7" class="empty-state">No closing data available.</td></tr>
+                            <tr><td colspan="8" class="empty-state">No closing data available.</td></tr>
                         {% endif %}
                         </tbody>
+                        {% if snap.closing and snap.closing.materials and snap.total_consumed_value is defined %}
+                        <tfoot>
+                            <tr style="background:#eef2ff;border-top:2px solid #c7d2fe;">
+                                <td colspan="7" style="text-align:right;font-size:.8rem;font-weight:600;color:#4338ca;padding:.55rem .75rem;text-transform:uppercase;letter-spacing:.04em;">
+                                    Total Consumed Value
+                                </td>
+                                <td style="text-align:right;font-weight:700;font-size:.95rem;color:#3730a3;padding:.55rem .75rem;">
+                                    {% if snap.total_consumed_value > 0 %}
+                                        ₹ {{ "%.2f"|format(snap.total_consumed_value) }}
+                                    {% else %}
+                                        <span style="opacity:.4;">—</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </tfoot>
+                        {% endif %}
                     </table>
                 </div>
             </div>
