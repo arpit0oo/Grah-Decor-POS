@@ -82,7 +82,7 @@
                             <th style="text-align:right;">+ Purchases</th>
                             <th style="text-align:right;">− Closing</th>
                             <th style="text-align:right;color:var(--primary);">= Consumed</th>
-                            <th style="text-align:right;">Adjustment</th>
+                            <th style="text-align:right;color:#0369a1;cursor:help;" title="Weighted Average Cost used to value inventory consumption">AVG COST ₹</th>
                             <th style="text-align:right;color:#4338ca;">Consumed Value ₹</th>
                         </tr></thead>
                         <tbody>
@@ -93,7 +93,6 @@
                         {% if snap.closing and snap.closing.materials %}
                             {% for row in snap.closing.materials %}
                             {% set om = opening_map.get(row.name, {}) %}
-                            {% set adj = row.adjustment if row.adjustment is defined else 0 %}
                             <tr>
                                 <td class="text-bold">{{ row.name }}</td>
                                 <td class="text-muted">{{ row.unit if row.unit is defined else (om.get('unit','—') if om else '—') }}</td>
@@ -101,8 +100,12 @@
                                 <td style="text-align:right;color:#059669;">+{{ "%.2f"|format(row.purchases_qty) }}</td>
                                 <td style="text-align:right;color:#dc2626;">−{{ "%.2f"|format(row.closing_qty|abs) }}</td>
                                 <td style="text-align:right;font-weight:700;color:var(--primary);">{{ "%.2f"|format(row.consumed) }}</td>
-                                <td style="text-align:right;{% if adj < 0 %}color:#dc2626;{% elif adj > 0 %}color:#059669;{% else %}opacity:.4;{% endif %}">
-                                    {% if adj > 0 %}+{% endif %}{{ "%.2f"|format(adj) }}
+                                <td style="text-align:right;color:#0369a1;">
+                                    {% if row.period_wac is defined and row.period_wac > 0 %}
+                                        ₹ {{ "%.2f"|format(row.period_wac) }}
+                                    {% else %}
+                                        <span style="opacity:.35;">—</span>
+                                    {% endif %}
                                 </td>
                                 <td style="text-align:right;font-weight:700;color:#3730a3;">
                                     {% if row.consumed_value is defined and row.consumed_value > 0 %}
