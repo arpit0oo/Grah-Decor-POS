@@ -597,6 +597,9 @@ body {
     white-space: nowrap;
 }
 
+.data-table thead th.text-right { text-align: right; }
+.data-table thead th.text-center { text-align: center; }
+
 .data-table tbody td {
     padding: 0.55rem 0.75rem;
     border-bottom: 1px solid #f3f4f6;
@@ -607,6 +610,7 @@ body {
 .data-table tbody tr:hover { background: #f9fafb; }
 
 .text-right { text-align: right; }
+.text-center { text-align: center; }
 .text-bold { font-weight: 600; }
 .text-mono { font-family: 'SF Mono', 'Consolas', monospace; font-size: 0.8rem; }
 .text-muted { color: var(--text-muted); }

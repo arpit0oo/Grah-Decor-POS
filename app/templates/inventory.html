@@ -82,7 +82,7 @@
                     <th class="text-right">Avg Cost ₹</th>
                     <th class="text-right">Stock Value ₹</th>
                     <th>Last Updated</th>
-                    <th class="text-right">Actions</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -319,11 +319,11 @@
                 <tr>
                     <th style="width:30px"></th>
                     <th>Product / Variant</th>
-                    <th>Quantity</th>
-                    <th>Reserved</th>
-                    <th>Available</th>
-                    <th>Min Stock</th>
-                    <th>Cost / Unit ₹</th>
+                    <th class="text-right">Quantity</th>
+                    <th class="text-right">Reserved</th>
+                    <th class="text-right">Available</th>
+                    <th class="text-right">Min Stock</th>
+                    <th class="text-right">Cost / Unit ₹</th>
                     <th>Last Updated</th>
                     <th>Actions</th>
                 </tr>
@@ -360,35 +360,35 @@
                                     <span class="text-muted" style="font-size:0.85em;">({{ s.color }})</span>
                                     {% endif %}
                             </td>
-                            <td>
+                            <td class="text-right">
                                 {% if s.variants %}
                                 <span class="text-muted" style="font-size:0.85em;">{{ s.quantity|int }} total</span>
                                 {% else %}
                                 <span class="text-bold">{{ s.quantity|int }}</span>
                                 {% endif %}
                             </td>
-                            <td class="text-warning text-bold">{{ (s.reserved_quantity or 0) | int }}</td>
-                            <td class="{% if avail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">
+                            <td class="text-right text-warning text-bold">{{ (s.reserved_quantity or 0) | int }}</td>
+                            <td class="text-right {% if avail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">
                                 {{ avail|int }}
                                 {% if ns.pbadge == 'out' %}<span class="stock-badge stock-badge-out">OUT</span>{% endif
                                 %}
                                 {% if ns.pbadge == 'low' %}<span class="stock-badge stock-badge-low">LOW</span>{% endif
                                 %}
                             </td>
-                            <td>
+                            <td class="text-right">
                                 {% if s.variants %}
                                 <span class="text-muted" style="font-size:0.85em;">—</span>
                                 {% else %}
                                 <input type="number" name="min_stock" value="{{ s.min_stock or 0 }}" step="1" min="0"
                                     class="inline-input inline-input-sm" readonly
-                                    style="pointer-events:none;border-color:transparent;background:transparent;width:60px;"
+                                    style="pointer-events:none;border-color:transparent;background:transparent;width:60px;text-align:right;"
                                     form="form-ready-{{ s.id }}">
                                 {% endif %}
                             </td>
-                            <td>
+                            <td class="text-right">
                                 <input type="number" name="cost_price" value="{{ s.cost_price or 0 }}" step="1"
                                     class="inline-input inline-input-sm cost-input" readonly
-                                    style="pointer-events:none; border-color:transparent; background:transparent;"
+                                    style="pointer-events:none; border-color:transparent; background:transparent;text-align:right;"
                                     form="form-ready-{{ s.id }}">
                             </td>
                             <td class="text-muted">{{ s.updated_at.strftime('%d/%m/%Y') if s.updated_at and
@@ -433,23 +433,23 @@
                                             <span class="text-muted" style="font-size:0.8em;">&#9492;</span>
                                             <span class="text-bold">{{ v.color }}</span>
                                     </td>
-                                    <td><span class="text-bold">{{ v.quantity|int }}</span></td>
-                                    <td class="text-warning text-bold">{{ (v.reserved_quantity or 0) | int }}</td>
+                                    <td class="text-right"><span class="text-bold">{{ v.quantity|int }}</span></td>
+                                    <td class="text-right text-warning text-bold">{{ (v.reserved_quantity or 0) | int }}</td>
                                     <td
-                                        class="{% if vavail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">
+                                        class="text-right {% if vavail <= 0 %}text-danger{% else %}text-success{% endif %} text-bold">
                                         {{ vavail|int }}
                                         {% if v_badge == 'out' %}<span class="stock-badge stock-badge-out">OUT</span>{%
                                         endif %}
                                         {% if v_badge == 'low' %}<span class="stock-badge stock-badge-low">LOW</span>{%
                                         endif %}
                                     </td>
-                                    <td>
+                                    <td class="text-right">
                                         <input type="number" name="min_stock" value="{{ v.min_stock or 0 }}" step="1"
                                             min="0" class="inline-input inline-input-sm variant-min-input" readonly
-                                            style="pointer-events:none;border-color:transparent;background:transparent;width:60px;"
+                                            style="pointer-events:none;border-color:transparent;background:transparent;width:60px;text-align:right;"
                                             form="form-variant-{{ v.id }}">
                                     </td>
-                                    <td class="text-muted" style="font-size:0.8em;">Inherits parent</td>
+                                    <td class="text-right text-muted" style="font-size:0.8em;">Inherits parent</td>
                                     <td class="text-muted">{{ v.updated_at.strftime('%d/%m/%Y') if v.updated_at and
                                         v.updated_at.strftime else '-' }}</td>
                                     <td class="actions-cell">
