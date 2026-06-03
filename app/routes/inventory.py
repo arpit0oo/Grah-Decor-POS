@@ -10,7 +10,8 @@ from app.services.inventory_service import (
 inventory_bp = Blueprint('inventory', __name__, url_prefix='/inventory')
 
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date as date_type
+from google.cloud.firestore_v1 import FieldFilter
 
 @inventory_bp.route('/')
 def inventory_list():
@@ -384,4 +385,132 @@ def api_raw_materials_wac_summary():
     return jsonify({
         'total_wac_value': round(total_wac_value, 2),
         'breakdown':       breakdown,
+    })
+
+
+@inventory_bp.route('/api/free-gifts', methods=['GET'])
+def api_free_gifts():
+    """
+    Return all free-gift order items across all orders, with optional
+    date filtering (date_from / date_to query params, YYYY-MM-DD).
+    Defaults to the current calendar month when no filters are supplied.
+
+    Each item in the response:
+      date, order_id, customer_id, customer_name,
+      product_name, variant, qty, unit_cost, total_cost_absorbed
+
+    Also returns summary totals:
+      total_gift_items, total_qty_gifted, total_cost_absorbed
+    """
+    db = get_db()
+    now = datetime.now(timezone.utc)
+
+    # ── Date range parsing (default = current month) ───────────────────────
+    date_from_str = request.args.get('date_from', '')
+    date_to_str   = request.args.get('date_to', '')
+
+    if date_from_str:
+        try:
+            date_from_dt = datetime.strptime(date_from_str, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+        except ValueError:
+            date_from_dt = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    else:
+        date_from_dt = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    if date_to_str:
+        try:
+            import calendar
+            dt = datetime.strptime(date_to_str, '%Y-%m-%d')
+            # end of day
+            date_to_dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=timezone.utc)
+        except ValueError:
+            import calendar
+            last_day = calendar.monthrange(now.year, now.month)[1]
+            date_to_dt = now.replace(day=last_day, hour=23, minute=59, second=59, microsecond=999999)
+    else:
+        import calendar
+        last_day = calendar.monthrange(now.year, now.month)[1]
+        date_to_dt = now.replace(day=last_day, hour=23, minute=59, second=59, microsecond=999999)
+
+    # ── Fetch orders within the date range ────────────────────────────────
+    orders_query = (
+        db.collection('orders')
+          .where(filter=FieldFilter('date', '>=', date_from_dt))
+          .where(filter=FieldFilter('date', '<=', date_to_dt))
+          .stream()
+    )
+
+    # ── Collect gift items + unique customer_ids for name lookup ──────────
+    gift_rows = []
+    customer_ids_needed = set()
+
+    for order_doc in orders_query:
+        order = order_doc.to_dict()
+        order_date = order.get('date')
+        order_id   = order.get('order_id', '')
+        cust_id    = order.get('customer_id', '')
+
+        for item in order.get('order_items', []):
+            if not item.get('is_free_gift', False):
+                continue
+
+            qty       = float(item.get('quantity', 1))
+            unit_cost = float(item.get('unit_cost', 0) or 0)
+            gift_rows.append({
+                '_order_date': order_date,
+                'date':        order_date.strftime('%d/%m/%Y') if order_date and hasattr(order_date, 'strftime') else '',
+                'date_iso':    order_date.isoformat() if order_date and hasattr(order_date, 'isoformat') else '',
+                'order_id':    order_id,
+                'customer_id': cust_id,
+                'customer_name': order.get('customer', ''),  # pre-filled, may be overwritten by lookup
+                'product_name': item.get('product', ''),
+                'variant':      item.get('color', '') or '\u2014',
+                'qty':          qty,
+                'unit_cost':    unit_cost,
+                'total_cost_absorbed': round(qty * unit_cost, 2),
+            })
+            if cust_id:
+                customer_ids_needed.add(cust_id)
+
+    # ── Bulk customer name lookup ──────────────────────────────────────────
+    # Firestore 'in' queries are limited to 30 values; chunk as needed.
+    if customer_ids_needed:
+        id_list = list(customer_ids_needed)
+        cust_map = {}  # customer_id -> display name
+        chunk_size = 30
+        for i in range(0, len(id_list), chunk_size):
+            chunk = id_list[i:i + chunk_size]
+            cust_docs = (
+                db.collection('customers')
+                  .where(filter=FieldFilter('customer_id', 'in', chunk))
+                  .stream()
+            )
+            for cdoc in cust_docs:
+                cd = cdoc.to_dict()
+                cust_map[cd.get('customer_id', '')] = cd.get('name', '')
+
+        for row in gift_rows:
+            cid = row['customer_id']
+            if cid and cid in cust_map:
+                row['customer_name'] = cust_map[cid]
+
+    # ── Sort newest-first ──────────────────────────────────────────────────
+    gift_rows.sort(key=lambda r: r.get('date_iso', ''), reverse=True)
+
+    # Strip internal sort key before returning
+    for row in gift_rows:
+        row.pop('_order_date', None)
+
+    # ── Summary totals ────────────────────────────────────────────────────
+    total_gift_items    = len(gift_rows)
+    total_qty_gifted    = sum(r['qty'] for r in gift_rows)
+    total_cost_absorbed = round(sum(r['total_cost_absorbed'] for r in gift_rows), 2)
+
+    return jsonify({
+        'items':               gift_rows,
+        'total_gift_items':    total_gift_items,
+        'total_qty_gifted':    total_qty_gifted,
+        'total_cost_absorbed': total_cost_absorbed,
+        'date_from':           date_from_str or date_from_dt.strftime('%Y-%m-%d'),
+        'date_to':             date_to_str   or date_to_dt.strftime('%Y-%m-%d'),
     })

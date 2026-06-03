@@ -14,6 +14,7 @@
         raw_materials|length }})</button>
     <button class="tab {% if active_tab == 'logs' %}active{% endif %}" onclick="switchTab('logs')">Inventory
         Log</button>
+    <button class="tab {% if active_tab == 'gifts' %}active{% endif %}" onclick="switchTab('gifts')">🎁 Free Gifts</button>
 </div>
 
 <!-- ── RAW MATERIALS TAB ───────────────────────────────── -->
@@ -581,6 +582,70 @@
 </div>
 
 
+<!-- ── FREE GIFTS TAB ────────────────────────────── -->
+<div class="tab-content {% if active_tab != 'gifts' %}hidden{% endif %}" id="tab-gifts">
+
+    <!-- ── FILTER BAR ── -->
+    <div class="card" style="margin-bottom:1rem; padding:1rem; background:white;">
+        <form autocomplete="off" id="giftsFilterForm"
+            style="display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap;">
+            <div class="form-group" style="min-width:160px;">
+                <label>Date From</label>
+                <input type="date" id="gifts-date-from" name="date_from">
+            </div>
+            <div class="form-group" style="min-width:160px;">
+                <label>Date To</label>
+                <input type="date" id="gifts-date-to" name="date_to">
+            </div>
+            <button type="button" class="btn btn-primary" style="margin-bottom:4px;"
+                onclick="loadFreeGifts()">Filter</button>
+            <button type="button" class="btn btn-ghost" style="margin-bottom:4px;"
+                onclick="clearGiftsFilter()">Clear (This Month)</button>
+        </form>
+    </div>
+
+    <!-- ── SUMMARY CARDS ── -->
+    <div id="gifts-summary-cards"
+        style="display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.25rem;">
+        <div class="card" style="flex:1; min-width:160px; padding:0.9rem 1.25rem; background:#fff; border:1px solid var(--border); border-radius:var(--radius);">
+            <div style="font-size:0.72rem; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin-bottom:0.3rem;">Total Gift Items</div>
+            <div id="gifts-stat-items" style="font-size:1.4rem; font-weight:700; color:var(--primary);">—</div>
+        </div>
+        <div class="card" style="flex:1; min-width:160px; padding:0.9rem 1.25rem; background:#fff; border:1px solid var(--border); border-radius:var(--radius);">
+            <div style="font-size:0.72rem; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin-bottom:0.3rem;">Total Qty Gifted</div>
+            <div id="gifts-stat-qty" style="font-size:1.4rem; font-weight:700; color:#7c3aed;">—</div>
+        </div>
+        <div class="card" style="flex:1; min-width:160px; padding:0.9rem 1.25rem; background:#fff; border:1px solid var(--border); border-radius:var(--radius);">
+            <div style="font-size:0.72rem; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin-bottom:0.3rem;">Total Cost Absorbed ₹</div>
+            <div id="gifts-stat-cost" style="font-size:1.4rem; font-weight:700; color:#dc2626;">—</div>
+        </div>
+    </div>
+
+    <!-- ── TABLE ── -->
+    <div class="table-wrapper">
+        <table class="data-table" id="giftsTable">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Order ID</th>
+                    <th>Customer</th>
+                    <th>Product</th>
+                    <th>Variant</th>
+                    <th class="text-right">Qty</th>
+                    <th class="text-right">Unit Cost ₹</th>
+                    <th class="text-right">Total Cost Absorbed ₹</th>
+                </tr>
+            </thead>
+            <tbody id="giftsTableBody">
+                <tr id="giftsLoadingRow">
+                    <td colspan="8" class="empty-state" style="color:var(--text-muted);">Loading free gift data…</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
 
 <!-- ── HISTORY MODAL ───────────────────────────────────── -->
 <div class="modal-overlay hidden" id="historyModal">
@@ -1117,6 +1182,8 @@
         document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
         event.target.classList.add('active');
         document.getElementById('tab-' + tab).classList.remove('hidden');
+        // Auto-load free gifts on first switch to that tab
+        if (tab === 'gifts' && !window._giftsLoaded) loadFreeGifts();
     }
 
     function toggleVariants(parentId) {
@@ -1255,9 +1322,98 @@
         }
     }
 
+    // ── Free Gifts Tab ────────────────────────────────────────────────
+    function fmtCur(n) {
+        return '₹\u00a0' + (parseFloat(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    async function loadFreeGifts() {
+        const tbody = document.getElementById('giftsTableBody');
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-state" style="color:var(--text-muted);">Loading…</td></tr>';
+
+        const dateFrom = document.getElementById('gifts-date-from').value;
+        const dateTo   = document.getElementById('gifts-date-to').value;
+
+        let url = '/inventory/api/free-gifts';
+        const params = [];
+        if (dateFrom) params.push('date_from=' + encodeURIComponent(dateFrom));
+        if (dateTo)   params.push('date_to='   + encodeURIComponent(dateTo));
+        if (params.length) url += '?' + params.join('&');
+
+        try {
+            const res  = await fetch(url);
+            const data = await res.json();
+
+            // ── Summary cards ──
+            document.getElementById('gifts-stat-items').textContent = data.total_gift_items ?? 0;
+            document.getElementById('gifts-stat-qty').textContent   = (data.total_qty_gifted ?? 0).toLocaleString();
+            document.getElementById('gifts-stat-cost').textContent  = fmtCur(data.total_cost_absorbed ?? 0);
+
+            // Pre-fill filter inputs with the dates actually used
+            if (!dateFrom && data.date_from) document.getElementById('gifts-date-from').value = data.date_from;
+            if (!dateTo   && data.date_to)   document.getElementById('gifts-date-to').value   = data.date_to;
+
+            const items = data.items || [];
+            tbody.innerHTML = '';
+
+            if (items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No free gifts recorded for this period.</td></tr>';
+                window._giftsLoaded = true;
+                return;
+            }
+
+            items.forEach(row => {
+                const custLink = row.customer_id
+                    ? `<a href="/contacts?expand=${encodeURIComponent(row.customer_id)}" style="color:var(--primary); text-decoration:underline;">${row.customer_name || row.customer_id} (${row.customer_id})</a>`
+                    : (row.customer_name || '—');
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="text-muted" style="white-space:nowrap;">${row.date || '—'}</td>
+                    <td class="text-mono">${row.order_id || '—'}</td>
+                    <td>${custLink}</td>
+                    <td class="text-bold">${row.product_name || '—'}</td>
+                    <td class="text-muted">${row.variant || '—'}</td>
+                    <td class="text-right">${row.qty}</td>
+                    <td class="text-right">${fmtCur(row.unit_cost)}</td>
+                    <td class="text-right text-bold">${fmtCur(row.total_cost_absorbed)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // ── Totals footer row ──
+            const tfoot = document.createElement('tr');
+            tfoot.style.cssText = 'border-top:2px solid var(--border); font-weight:700; background:#fcfcfc;';
+            tfoot.innerHTML = `
+                <td colspan="5" style="padding:0.6rem 0.75rem; text-align:right; text-transform:uppercase; font-size:0.75rem; color:var(--text-muted);">Totals:</td>
+                <td class="text-right" style="padding:0.6rem 0.75rem;">${(data.total_qty_gifted ?? 0).toLocaleString()}</td>
+                <td></td>
+                <td class="text-right" style="padding:0.6rem 0.75rem; color:#dc2626;">${fmtCur(data.total_cost_absorbed)}</td>
+            `;
+            tbody.appendChild(tfoot);
+
+            window._giftsLoaded = true;
+        } catch (err) {
+            console.error('Free gifts load error:', err);
+            tbody.innerHTML = '<tr><td colspan="8" class="empty-state" style="color:#dc2626;">Failed to load free gift data. Please try again.</td></tr>';
+        }
+    }
+
+    function clearGiftsFilter() {
+        document.getElementById('gifts-date-from').value = '';
+        document.getElementById('gifts-date-to').value   = '';
+        window._giftsLoaded = false;  // force reload
+        loadFreeGifts();
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         updateFilterCounts();
         fetchWacSummary();
+        // Auto-load Free Gifts if that tab is active on page load
+        const activeTabEl = document.querySelector('.tab.active');
+        if (activeTabEl && activeTabEl.textContent.includes('Free Gifts')) {
+            loadFreeGifts();
+        }
     });
 </script>
 {% endblock %}
