@@ -12,6 +12,31 @@ RETURNED_STATUSES = ['RTO', 'Returned', 'Customer Return']
 CANCELLED_STATUSES = ['Cancelled']
 TERMINAL_STATUSES = ['Cancelled', 'Settled', 'Returned', 'RTO']
 
+
+def fetch_unit_cost(db, product_name, color):
+    """Return the cost_price for a ready_stock item.
+
+    Resolution order:
+    1. Find the ready_stock doc by name + color.
+    2. If that doc has a parent_id, fetch the parent doc and use its cost_price.
+    3. Otherwise use the doc's own cost_price.
+    4. Return 0 if nothing is found.
+    """
+    query = db.collection('ready_stock').where(filter=FieldFilter('name', '==', product_name))
+    if color:
+        query = query.where(filter=FieldFilter('color', '==', color))
+    docs = list(query.limit(1).stream())
+    if not docs:
+        return 0.0
+    doc_data = docs[0].to_dict()
+    parent_id = doc_data.get('parent_id')
+    if parent_id:
+        parent_doc = db.collection('ready_stock').document(parent_id).get()
+        if parent_doc.exists:
+            return float(parent_doc.to_dict().get('cost_price', 0) or 0)
+        return 0.0
+    return float(doc_data.get('cost_price', 0) or 0)
+
 def get_stock_deltas(status):
     """Returns (qty_delta, reserved_delta) based on order status."""
     if status in DISPATCHED_STATUSES:
@@ -98,15 +123,38 @@ def add_order(data):
     db = get_db()
     now = datetime.now(timezone.utc)
 
-    order_items = data.get('order_items', [])
-    selling_price = sum(float(item.get('price', 0)) * float(item.get('quantity', 1)) for item in order_items)
-    
+    raw_items = data.get('order_items', [])
+
+    # ── Enrich each item with is_free_gift, per-item selling_price, and unit_cost ──
+    enriched_items = []
+    for item in raw_items:
+        is_free_gift = bool(item.get('is_free_gift', False))
+        # For a free gift the selling_price stored on the item is always 0;
+        # the price field from the form records the RRP for reference but does
+        # not contribute to any financial total.
+        item_selling_price = 0.0 if is_free_gift else float(item.get('price', 0))
+        unit_cost = fetch_unit_cost(db, item.get('product', ''), item.get('color', ''))
+        enriched_items.append({
+            **item,
+            'is_free_gift':    is_free_gift,
+            'selling_price':   item_selling_price,
+            'unit_cost':       unit_cost,
+        })
+
+    # ── Financial totals: exclude free-gift items ──────────────────────────────
+    items_total = sum(
+        float(item.get('selling_price', 0)) * float(item.get('quantity', 1))
+        for item in enriched_items
+        if not item.get('is_free_gift', False)
+    )
+    selling_price = items_total
+
     shipping = max(0, float(data.get('shipping', 0)))
     refund = max(0, float(data.get('refund', 0)))
     tax = max(0, float(data.get('tax', 0)))
     marketplace_fee = max(0, float(data.get('marketplace_fee', 0)))
     other_charges = max(0, float(data.get('other_charges', 0)))
-    
+
     status = data.get('status', 'Pending')
     if status in CANCELLED_STATUSES:
         bank_settlement = 0.0
@@ -128,7 +176,7 @@ def add_order(data):
         'customer': data.get('customer', ''),
         'customer_id': data.get('customer_id', ''),
         'number': data.get('number', ''),
-        'order_items': order_items,
+        'order_items': enriched_items,
         'platform': data.get('platform', ''),
         'selling_price': selling_price,
         'shipping': shipping,
@@ -145,12 +193,12 @@ def add_order(data):
 
     _, doc_ref = db.collection('orders').add(order)
 
-    # Adjust stock based on status for each item
-    for item in order_items:
+    # Adjust stock based on status for each item (gift items are still tracked in inventory)
+    for item in enriched_items:
         product = item.get('product', '')
         color = item.get('color', '')
         qty = float(item.get('quantity', 1))
-        
+
         if product:
             qty_delta, res_delta = get_stock_deltas(status)
             if qty_delta != 0 or res_delta != 0:
@@ -205,8 +253,25 @@ def update_order(doc_id, data):
         update_data['shipping_id'] = data.get('shipping_id') or ''
 
     if 'order_items' in data:
-        update_data['order_items'] = data['order_items']
-        update_data['selling_price'] = sum(float(item.get('price', 0)) * float(item.get('quantity', 1)) for item in data['order_items'])
+        # Enrich items with is_free_gift, per-item selling_price, and unit_cost
+        enriched = []
+        for item in data['order_items']:
+            is_free_gift = bool(item.get('is_free_gift', False))
+            item_selling_price = 0.0 if is_free_gift else float(item.get('price', 0))
+            unit_cost = fetch_unit_cost(db, item.get('product', ''), item.get('color', ''))
+            enriched.append({
+                **item,
+                'is_free_gift':  is_free_gift,
+                'selling_price': item_selling_price,
+                'unit_cost':     unit_cost,
+            })
+        update_data['order_items'] = enriched
+        # selling_price = sum of non-gift items only
+        update_data['selling_price'] = sum(
+            float(item.get('selling_price', 0)) * float(item.get('quantity', 1))
+            for item in enriched
+            if not item.get('is_free_gift', False)
+        )
 
     for field in ['shipping', 'refund', 'tax', 'marketplace_fee', 'other_charges']:
         if field in data:

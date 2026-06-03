@@ -618,6 +618,14 @@
                     <label>Selling Price ₹ *</label>
                     <input type="number" name="price[]" class="item-price" value="0" min="0" step="0.01" oninput="calcSettlement('${prefix}')" required>
                 </div>
+                <div class="item-field item-field-gift" style="display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:0.25rem; min-width:72px;">
+                    <label style="font-size:0.75rem; color:var(--text-secondary); white-space:nowrap;">Free Gift</label>
+                    <div style="display:flex; align-items:center; gap:0.35rem;">
+                        <input type="checkbox" class="item-free-gift" style="width:16px; height:16px; cursor:pointer; accent-color:#f59e0b;"
+                            onchange="toggleFreeGift(this, '${prefix}')">
+                        <span class="gift-badge" style="display:none; font-size:0.7rem; font-weight:700; background:#fef3c7; color:#92400e; border:1px solid #fde68a; border-radius:999px; padding:2px 7px; white-space:nowrap;">🎁 Gift</span>
+                    </div>
+                </div>
                 <div class="item-field item-field-remove">
                     <label>&nbsp;</label>
                     <button type="button" class="btn btn-xs" style="background:var(--danger);color:white;border:none;" onclick="this.closest('.order-item-row').remove(); calcSettlement('${prefix}');">✕</button>
@@ -628,6 +636,35 @@
 
     function addOrderItemRow(containerId, prefix) {
         document.getElementById(containerId).insertAdjacentHTML('beforeend', getOrderItemRowHtml(prefix));
+    }
+
+    function toggleFreeGift(cb, prefix) {
+        const row = cb.closest('.order-item-row');
+        const priceInput = row.querySelector('.item-price');
+        const badge = row.querySelector('.gift-badge');
+        if (cb.checked) {
+            priceInput._savedPrice = priceInput.value;  // stash so we can restore
+            priceInput.value = '0';
+            priceInput.readOnly = true;
+            priceInput.style.background = '#f3f4f6';
+            priceInput.style.color = '#9ca3af';
+            priceInput.style.cursor = 'not-allowed';
+            row.style.background = '#fffbea';
+            row.style.borderRadius = '6px';
+            if (badge) badge.style.display = 'inline-block';
+        } else {
+            if (priceInput._savedPrice !== undefined) {
+                priceInput.value = priceInput._savedPrice;
+            }
+            priceInput.readOnly = false;
+            priceInput.style.background = '';
+            priceInput.style.color = '';
+            priceInput.style.cursor = '';
+            row.style.background = '';
+            row.style.borderRadius = '';
+            if (badge) badge.style.display = 'none';
+        }
+        calcSettlement(prefix);
     }
 
     function checkDuplicates(row) {
@@ -756,19 +793,23 @@
         if (data.order_items && data.order_items.length > 0) {
             data.order_items.forEach(item => {
                 const qty = item.quantity || 1;
-                const price = item.price || 0;
-                const lineTotal = qty * price;
-                sellingPrice += lineTotal;
+                // Use stored selling_price (0 for gifts); fall back to price for legacy docs
+                const price = (item.selling_price !== undefined && item.selling_price !== null)
+                    ? item.selling_price : (item.price || 0);
+                const isGift = !!item.is_free_gift;
+                const lineTotal = isGift ? 0 : qty * price;
+                if (!isGift) sellingPrice += lineTotal;
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>
                         ${item.product || '-'}
                         ${item.color ? `<span class="text-muted" style="font-size:0.85em;">(${item.color})</span>` : ''}
+                        ${isGift ? '<span style="font-size:0.7rem; font-weight:700; background:#fef3c7; color:#92400e; border:1px solid #fde68a; border-radius:999px; padding:1px 6px; margin-left:4px;">🎁 Gift</span>' : ''}
                     </td>
                     <td>${item.color || '-'}</td>
                     <td class="text-right">${qty}</td>
-                    <td class="text-right">₹ ${parseFloat(price).toFixed(2)}</td>
-                    <td class="text-right text-bold">₹ ${lineTotal.toFixed(2)}</td>
+                    <td class="text-right" style="${isGift ? 'color:#9ca3af; text-decoration:line-through;' : ''}">₹ ${parseFloat(item.price || 0).toFixed(2)}</td>
+                    <td class="text-right text-bold" style="${isGift ? 'color:#9ca3af;' : ''}">₹ ${lineTotal.toFixed(2)}</td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -897,7 +938,20 @@
                 }
 
                 lastRow.querySelector('.item-qty').value = item.quantity || 1;
-                lastRow.querySelector('.item-price').value = item.price || 0;
+                // Restore price: use selling_price if stored, fall back to legacy price field
+                const storedPrice = (item.selling_price !== undefined && item.selling_price !== null)
+                    ? item.selling_price : (item.price || 0);
+                lastRow.querySelector('.item-price').value = storedPrice;
+
+                // Restore free-gift state
+                if (item.is_free_gift) {
+                    const giftCb = lastRow.querySelector('.item-free-gift');
+                    if (giftCb) {
+                        giftCb._savedPrice = item.price || 0;  // keep RRP for reference
+                        giftCb.checked = true;
+                        toggleFreeGift(giftCb, 'edit');
+                    }
+                }
             });
         } else {
             addOrderItemRow('edit-order-items', 'edit');
@@ -967,11 +1021,15 @@
         let totalItemsPrice = 0;
         let form = document.querySelector(prefix === 'add' ? '#orderForm form' : '#editForm');
         if (form) {
-            let prices = form.querySelectorAll('.item-price');
-            let qtys = form.querySelectorAll('.item-qty');
-            for (let i = 0; i < prices.length; i++) {
-                totalItemsPrice += (parseFloat(prices[i].value) || 0) * (parseInt(qtys[i].value) || 1);
-            }
+            let rows = form.querySelectorAll('.order-item-row');
+            rows.forEach(row => {
+                const giftCb = row.querySelector('.item-free-gift');
+                // Skip gift rows — they contribute 0 to financial totals
+                if (giftCb && giftCb.checked) return;
+                const price = parseFloat(row.querySelector('.item-price')?.value || 0);
+                const qty = parseInt(row.querySelector('.item-qty')?.value || 1);
+                totalItemsPrice += price * qty;
+            });
             let spDisplay = document.getElementById(prefix + '-selling-price-display');
             if (spDisplay) {
                 spDisplay.textContent = '₹ ' + totalItemsPrice.toFixed(2);
@@ -987,7 +1045,7 @@
         const settlement = sp - sh - tx - mf - oc;
         const el = document.getElementById(prefix + '-settlement-display');
         if (el) el.textContent = '\u20b9 ' + settlement.toFixed(2);
-        
+
         if (prefix === 'add') validateOrderForm('add');
     }
 
@@ -1171,7 +1229,32 @@
         form.submit();
     }
 
+    // ── Free Gift: inject is_free_gift_idx[] hidden inputs just before form submit ──
+    // This lets the backend know which row indices are gifts, avoiding the
+    // HTML-checkbox-not-submitted-when-unchecked problem.
+    function injectFreeGiftIndices(formEl) {
+        // Remove any previously injected hidden inputs (e.g. if form is reused)
+        formEl.querySelectorAll('input[name="is_free_gift_idx[]"]').forEach(el => el.remove());
+        const rows = formEl.querySelectorAll('.order-item-row');
+        rows.forEach((row, idx) => {
+            const cb = row.querySelector('.item-free-gift');
+            if (cb && cb.checked) {
+                const hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = 'is_free_gift_idx[]';
+                hidden.value = String(idx);
+                formEl.appendChild(hidden);
+            }
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
+        // Attach free-gift index injector to both Add and Edit forms
+        const addForm = document.querySelector('#orderForm form');
+        if (addForm) addForm.addEventListener('submit', () => injectFreeGiftIndices(addForm));
+        const editForm = document.getElementById('editForm');
+        if (editForm) editForm.addEventListener('submit', () => injectFreeGiftIndices(editForm));
+
         addOrderItemRow('add-order-items', 'add');
         // Set default date to today
         const addDate = document.getElementById('add-date');

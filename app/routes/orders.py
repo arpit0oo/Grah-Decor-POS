@@ -15,7 +15,10 @@ def parse_order_items(form):
     colors = form.getlist('color[]')
     quantities = form.getlist('quantity[]')
     prices = form.getlist('price[]')
-    
+    # is_free_gift[] is a set of row-index strings submitted by checked checkboxes.
+    # Using an explicit index list avoids the HTML-checkbox-not-submitted-when-unchecked problem.
+    free_gift_indices = set(form.getlist('is_free_gift_idx[]'))
+
     order_items = []
     for i in range(len(products)):
         if products[i].strip() and products[i].strip() != '__other__':
@@ -28,11 +31,13 @@ def parse_order_items(form):
             color = colors[i].strip() if i < len(colors) else ''
             if color == '__other__':
                 color = ''
+            is_free_gift = str(i) in free_gift_indices
             order_items.append({
-                'product':  products[i].strip(),
-                'color':    color,
-                'quantity': qty,
-                'price':    price,
+                'product':      products[i].strip(),
+                'color':        color,
+                'quantity':     qty,
+                'price':        price,
+                'is_free_gift': is_free_gift,
             })
     return order_items
 
