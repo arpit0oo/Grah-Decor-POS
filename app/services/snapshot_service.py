@@ -639,9 +639,10 @@ def get_ready_stock_snapshot_live(year: int, month: int):
     """
     Calculate the current (open) month's report on-the-fly without caching.
 
-    Opening qty is read from the previous month's snapshot if available,
-    else from the live ready_stock collection quantities (best approximation
-    for the genesis case on a live month).
+    Opening qty is read from the previous month's snapshot if available.
+    If no previous snapshot exists (genesis case), opening = 0 for all SKUs.
+    All stock additions, sales, and returns within the period are captured by
+    inventory_log entries and accumulate to the correct closing quantity.
 
     Returns a dict with the same structure as a persisted snapshot.
     """
@@ -657,27 +658,22 @@ def get_ready_stock_snapshot_live(year: int, month: int):
     prev_key = f"{prev_year:04d}-{prev_month:02d}"
     prev_doc = db.collection('ready_stock_snapshots').document(prev_key).get()
 
-    # Fetch live ready_stock to build cost_price map and fallback opening
+    # Fetch live ready_stock to build cost_price map
     rs_docs = list(db.collection('ready_stock').stream())
     # Pass 1: build doc_id → cost_price map for parent cost inheritance
     parent_cp_map = {d.id: float(d.to_dict().get('cost_price', 0)) for d in rs_docs}
-    
+
     cost_price_map = {}
-    opening_map_fallback = {}
     for d in rs_docs:
         m = d.to_dict()
         name  = m.get('name', '')
         color = m.get('color', '') or ''
-        qty   = float(m.get('quantity', 0))
         cp    = float(m.get('cost_price', 0))
         if cp == 0 and m.get('parent_id'):
             cp = parent_cp_map.get(m.get('parent_id'), 0.0)
         # Always add to cost_price_map (needed for variant cost inheritance)
         key = f"{name}::{color}" if color else f"{name}::__none__"
         cost_price_map[key.lower()] = cp
-        # Only physical items belong in opening_map_fallback
-        if not m.get('has_variants', False):
-            opening_map_fallback[key] = qty
 
     if prev_doc.exists:
         prev_data   = prev_doc.to_dict()
@@ -685,8 +681,9 @@ def get_ready_stock_snapshot_live(year: int, month: int):
         for row in prev_data.get('products', []):
             opening_map[row['product_key']] = float(row.get('closing_qty', 0))
     else:
-        # Fall back to live ready_stock quantities as approximate opening
-        opening_map = opening_map_fallback
+        # Genesis: no previous snapshot — opening is 0 for all SKUs.
+        # inventory_log entries for this period accumulate to the correct closing.
+        opening_map = {}
 
     # ── This month's log aggregation ───────────────────────────────────────
     month_logs = _fetch_rs_logs(year, month)
